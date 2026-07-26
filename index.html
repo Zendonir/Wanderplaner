@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wanderplaner – Interaktive Routenplanung</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>🥾 Wanderplaner</h1>
+    <form id="search-form" class="search-form" autocomplete="off">
+      <input type="text" id="search-input" placeholder="Ort suchen (z. B. Zugspitze)">
+      <button type="submit" title="Ort suchen">🔍</button>
+    </form>
+  </header>
+
+  <main class="layout">
+    <div id="map" class="map-panel"></div>
+
+    <aside class="sidebar">
+      <div id="status" class="status hidden"></div>
+
+      <section class="stats">
+        <div class="stat">
+          <span class="stat-label">Länge</span>
+          <span class="stat-value" id="stat-distance">0,0 km</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Anstieg</span>
+          <span class="stat-value" id="stat-ascent">–</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Abstieg</span>
+          <span class="stat-value" id="stat-descent">–</span>
+        </div>
+        <div class="stat" title="Geschätzt nach DIN 33466: 4 km/h horizontal, 300 Hm/h bergauf, 500 Hm/h bergab">
+          <span class="stat-label">Gehzeit</span>
+          <span class="stat-value" id="stat-time">–</span>
+        </div>
+      </section>
+
+      <section class="mode-toggle">
+        <button id="mode-route" class="mode-btn active" title="Klick auf die Karte setzt einen Routenpunkt">📍 Route</button>
+        <button id="mode-poi" class="mode-btn" title="Klick auf die Karte setzt einen POI">⚑ POI</button>
+      </section>
+
+      <section class="actions">
+        <button id="btn-undo" disabled title="Letzte Aktion rückgängig machen">↩ Rückgängig</button>
+        <button id="btn-clear" disabled title="Alle Routenpunkte und POIs entfernen">🗑 Route leeren</button>
+      </section>
+
+      <section class="list-section">
+        <h2>Routenpunkte</h2>
+        <p class="hint">Klick auf die Karte setzt einen Punkt · Ziehen verschiebt ·
+          Rechtsklick auf einen Marker löscht · Liste per Drag&nbsp;&amp;&nbsp;Drop sortieren</p>
+        <ul id="point-list" class="point-list"></ul>
+      </section>
+
+      <section class="list-section">
+        <h2>POIs</h2>
+        <ul id="poi-list" class="poi-list"></ul>
+      </section>
+
+      <button id="btn-export" class="export-btn" disabled>⬇ Route exportieren (GPX)</button>
+    </aside>
+
+    <section class="profile-panel">
+      <div class="profile-header">
+        <h2>Höhenprofil</h2>
+        <span id="chart-empty" class="chart-empty">Noch keine Route berechnet</span>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="elevation-chart"></canvas>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/routing.js"></script>
+  <script src="js/elevation.js"></script>
+  <script src="js/gpx.js"></script>
+  <script src="js/mapview.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

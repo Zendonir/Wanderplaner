@@ -92,4 +92,72 @@ const Utils = {
   uid() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   },
+
+  /**
+   * Bringt Punkte in eine möglichst kurze Besuchsreihenfolge (offener Weg):
+   * Nearest-Neighbor-Start plus 2-Opt-Verbesserung auf Luftlinien-Basis.
+   * Für die typische Anzahl an Stempelstellen pro Tour völlig ausreichend.
+   * @param {Array<{lat:number, lng:number}>} points
+   * @returns {Array} dieselben Objekte in optimierter Reihenfolge
+   */
+  optimizeOrder(points) {
+    const n = points.length;
+    if (n <= 2) return points.slice();
+
+    const dist = [];
+    for (let i = 0; i < n; i++) {
+      dist.push([]);
+      for (let j = 0; j < n; j++) {
+        dist[i][j] = i === j ? 0 : this.haversine(points[i], points[j]);
+      }
+    }
+
+    // Nearest Neighbor ab dem ersten Punkt
+    const order = [0];
+    const used = new Array(n).fill(false);
+    used[0] = true;
+    while (order.length < n) {
+      const last = order[order.length - 1];
+      let best = -1;
+      let bestDist = Infinity;
+      for (let j = 0; j < n; j++) {
+        if (!used[j] && dist[last][j] < bestDist) {
+          bestDist = dist[last][j];
+          best = j;
+        }
+      }
+      used[best] = true;
+      order.push(best);
+    }
+
+    // 2-Opt: Teilstücke umdrehen, solange der Weg dadurch kürzer wird
+    let improved = true;
+    let passes = 0;
+    while (improved && passes < 50) {
+      improved = false;
+      passes++;
+      for (let i = 1; i < n - 1; i++) {
+        for (let j = i + 1; j < n; j++) {
+          const before =
+            dist[order[i - 1]][order[i]] +
+            (j + 1 < n ? dist[order[j]][order[j + 1]] : 0);
+          const after =
+            dist[order[i - 1]][order[j]] +
+            (j + 1 < n ? dist[order[i]][order[j + 1]] : 0);
+          if (after < before - 0.01) {
+            let lo = i;
+            let hi = j;
+            while (lo < hi) {
+              [order[lo], order[hi]] = [order[hi], order[lo]];
+              lo++;
+              hi--;
+            }
+            improved = true;
+          }
+        }
+      }
+    }
+
+    return order.map((i) => points[i]);
+  },
 };

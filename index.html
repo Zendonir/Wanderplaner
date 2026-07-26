@@ -63,6 +63,35 @@
         <ul id="poi-list" class="poi-list"></ul>
       </section>
 
+      <section class="list-section">
+        <h2>Stempelstellen</h2>
+        <div class="import-row">
+          <select id="import-type" title="Art des GPX-Imports">
+            <option value="stempel">Stempelstellen</option>
+            <option value="poi">POIs</option>
+          </select>
+          <button id="btn-import">⬆ GPX importieren</button>
+          <input type="file" id="import-file" accept=".gpx,application/gpx+xml" hidden>
+        </div>
+        <p class="hint">Wegpunkte aus der GPX-Datei werden als Stempelstellen dauerhaft
+          im Browser gespeichert und lassen sich einzeln als „erhalten“ abhaken.</p>
+        <p class="hint stamp-counter" id="stamp-counter">Noch keine Stempelstellen importiert</p>
+        <div class="stamp-tools">
+          <input type="text" id="stamp-search" placeholder="Stempelstelle suchen …">
+          <select id="stamp-filter">
+            <option value="all">Alle</option>
+            <option value="open">Offen</option>
+            <option value="collected">Erhalten</option>
+          </select>
+        </div>
+        <div class="tour-bar">
+          <span id="tour-count">0 für Tour ausgewählt</span>
+          <button id="btn-suggest" disabled title="Ausgewählte Stempelstellen in optimierter Reihenfolge zu einer Route verbinden">Route vorschlagen</button>
+          <button id="btn-tour-clear" disabled>Auswahl leeren</button>
+        </div>
+        <ul id="stamp-list" class="stamp-list"></ul>
+      </section>
+
       <button id="btn-export" class="export-btn" disabled>⬇ Route exportieren (GPX)</button>
     </aside>
 
@@ -83,6 +112,7 @@
   <script src="js/routing.js"></script>
   <script src="js/elevation.js"></script>
   <script src="js/gpx.js"></script>
+  <script src="js/stamps.js"></script>
   <script src="js/mapview.js"></script>
   <script src="js/app.js"></script>
 </body>

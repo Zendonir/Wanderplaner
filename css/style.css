@@ -370,6 +370,208 @@ body {
   font-size: 0.85rem;
 }
 
+/* ---------- Stempelstellen ---------- */
+
+.import-row,
+.stamp-tools,
+.tour-bar {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
+}
+
+.import-row select,
+.stamp-tools select,
+.stamp-tools input {
+  padding: 0.35rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.82rem;
+  background: var(--panel);
+  min-width: 0;
+}
+
+.stamp-tools input {
+  flex: 1;
+}
+
+.import-row button {
+  flex: 1;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--green);
+  border-radius: 6px;
+  background: var(--green);
+  color: #fff;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.import-row button:hover {
+  background: var(--green-dark);
+}
+
+.tour-bar {
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.tour-bar span {
+  flex: 1 1 auto;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.tour-bar button {
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.tour-bar button:hover:not(:disabled) {
+  background: #eef1ec;
+}
+
+.tour-bar button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+#btn-suggest:not(:disabled) {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+}
+
+#btn-suggest:not(:disabled):hover {
+  background: var(--green-dark);
+}
+
+.stamp-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.stamp-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  font-size: 0.82rem;
+}
+
+.stamp-list li.collected .item-label {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.stamp-list .item-label {
+  cursor: pointer;
+}
+
+.stamp-list input[type="checkbox"] {
+  accent-color: var(--green);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.stamp-tour {
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 0 0.15rem;
+}
+
+.stamp-tour:hover,
+.stamp-tour.active {
+  color: var(--green);
+}
+
+.stamp-tour.active {
+  font-weight: 700;
+}
+
+.stamp-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  background: #7b3fa0;
+  border: 2px solid #fff;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+.stamp-marker.collected {
+  background: var(--green);
+}
+
+.stamp-marker.selected {
+  outline: 3px solid #1d5fbf;
+  outline-offset: 1px;
+}
+
+.stamp-popup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 200px;
+}
+
+.stamp-popup .poi-popup-buttons {
+  flex-wrap: wrap;
+}
+
+.stamp-popup .poi-popup-buttons button {
+  flex: 1 1 45%;
+  padding: 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  background: var(--panel);
+}
+
+.stamp-popup .poi-popup-buttons button.primary {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+}
+
+.stamp-popup .poi-popup-buttons button.danger:hover {
+  background: #fbe4e1;
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.stamp-popup p {
+  font-size: 0.8rem;
+  margin: 0.25rem 0;
+}
+
+.stamp-popup .stamp-status {
+  color: var(--text-muted);
+}
+
 /* ---------- POI-Popup ---------- */
 
 .poi-popup {

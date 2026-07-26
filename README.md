@@ -19,6 +19,17 @@ Build-Schritt und ohne eigenes Backend.
   Open-Elevation abgefragt (Fallback: Open-Topo-Data) und als Diagramm
   angezeigt. Hovern über das Profil markiert die Stelle auf der Karte –
   und umgekehrt.
+- **Stempelstellen** – GPX-Dateien mit Wegpunkten (z. B. Harzer Wandernadel)
+  lassen sich als Stempelstellen importieren; beim Import ist die Art wählbar
+  (Stempelstellen oder POIs). Stempelstellen werden dauerhaft im Browser
+  gespeichert und können einzeln als „erhalten“ abgehakt werden – inklusive
+  Zähler, Suche und Filter (Alle / Offen / Erhalten). Ein erneuter Import
+  überspringt bereits vorhandene Einträge, die Markierungen bleiben erhalten.
+- **Routenvorschlag** – Stempelstellen für die nächste Tour auswählen
+  (⊕ in der Liste oder im Karten-Popup) und „Route vorschlagen“ klicken:
+  die Reihenfolge wird automatisch optimiert (Nearest-Neighbor + 2-Opt) und
+  die Route entlang echter Wege berechnet. Die ausgewählten Stempelstellen
+  landen beim GPX-Export als Wegpunkte mit in der Datei.
 - **Undo & Route leeren** – die letzte Aktion lässt sich rückgängig machen.
 - **GPX-Export** – berechnete Wegstrecke als `<trk>` (inkl. Höhenwerten,
   falls verfügbar) und POIs als `<wpt>`, Download mit Zeitstempel im Namen.
@@ -120,6 +131,7 @@ js/utils.js         – Hilfsfunktionen (Debounce, Distanz, Formatierung, …)
 js/routing.js       – OSRM-Anbindung
 js/elevation.js     – Höhen-Stützpunkte, Open-Elevation + Fallback, Hm-Berechnung
 js/gpx.js           – GPX-Erzeugung und Download
+js/stamps.js        – Stempelstellen: GPX-Import, localStorage, Duplikat-Erkennung
 js/mapview.js       – gesamte Leaflet-/Kartenlogik
 js/app.js           – Zustand, UI-Rendering, Orchestrierung
 Dockerfile          – nginx:alpine mit den statischen Dateien

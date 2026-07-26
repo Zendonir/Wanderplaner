@@ -12,6 +12,7 @@ const MapView = (function () {
   let hoverMarker = null;
   let pointMarkers = [];
   let poiMarkers = new Map();
+  let stampMarkers = new Map();
   let samples = null; // Höhen-Stützpunkte für die Hover-Zuordnung
 
   function init(callbacks) {
@@ -127,6 +128,102 @@ const MapView = (function () {
     if (marker) marker.openPopup();
   }
 
+  /* ---------- Stempelstellen ---------- */
+
+  function stampIcon(stamp, selected) {
+    const classes =
+      'stamp-marker' +
+      (stamp.collected ? ' collected' : '') +
+      (selected ? ' selected' : '');
+    return L.divIcon({
+      className: '',
+      html: `<div class="${classes}">${stamp.collected ? '✓' : 'S'}</div>`,
+      iconSize: [24, 24],
+      iconAnchor: [12, 12],
+      popupAnchor: [0, -14],
+    });
+  }
+
+  function stampPopupContent(stamp, selected) {
+    const div = document.createElement('div');
+    div.className = 'stamp-popup';
+
+    const title = document.createElement('strong');
+    title.textContent = stamp.name;
+    div.appendChild(title);
+
+    if (stamp.note) {
+      const note = document.createElement('p');
+      note.textContent = stamp.note;
+      div.appendChild(note);
+    }
+
+    const status = document.createElement('p');
+    status.className = 'stamp-status';
+    status.textContent = stamp.collected ? '✓ Stempel erhalten' : 'Noch offen';
+    div.appendChild(status);
+
+    const buttons = document.createElement('div');
+    buttons.className = 'poi-popup-buttons';
+
+    const collectedBtn = document.createElement('button');
+    collectedBtn.textContent = stamp.collected
+      ? '↺ Doch nicht erhalten'
+      : '✓ Als erhalten markieren';
+    collectedBtn.className = 'primary';
+    collectedBtn.addEventListener('click', () => {
+      map.closePopup();
+      cbs.onStampCollectedToggle(stamp.id);
+    });
+
+    const tourBtn = document.createElement('button');
+    tourBtn.textContent = selected ? '− Aus Tour entfernen' : '+ Für Tour auswählen';
+    tourBtn.addEventListener('click', () => {
+      map.closePopup();
+      cbs.onStampTourToggle(stamp.id);
+    });
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.textContent = 'Löschen';
+    deleteBtn.className = 'danger';
+    deleteBtn.addEventListener('click', () => {
+      map.closePopup();
+      cbs.onStampDelete(stamp.id);
+    });
+
+    buttons.append(collectedBtn, tourBtn, deleteBtn);
+    div.appendChild(buttons);
+    return div;
+  }
+
+  function renderStamps(stamps, selectedIds) {
+    stampMarkers.forEach((m) => map.removeLayer(m));
+    stampMarkers = new Map();
+
+    const selected = new Set(selectedIds);
+    stamps.forEach((stamp) => {
+      const isSelected = selected.has(stamp.id);
+      const marker = L.marker([stamp.lat, stamp.lng], {
+        icon: stampIcon(stamp, isSelected),
+      }).addTo(map);
+      marker.bindTooltip(stamp.name, { direction: 'top', offset: [0, -12] });
+      marker.bindPopup(() => stampPopupContent(stamp, isSelected));
+      stampMarkers.set(stamp.id, marker);
+    });
+  }
+
+  function openStampPopup(id) {
+    const marker = stampMarkers.get(id);
+    if (marker) marker.openPopup();
+  }
+
+  /** Karte auf eine Punktmenge zoomen (z. B. nach einem Import). */
+  function fitTo(points) {
+    if (!points || points.length === 0) return;
+    const bounds = L.latLngBounds(points.map((p) => [p.lat, p.lng]));
+    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 13 });
+  }
+
   /* ---------- Route ---------- */
 
   function renderRoute(coordinates) {
@@ -215,10 +312,13 @@ const MapView = (function () {
     renderPoints,
     renderPois,
     renderRoute,
+    renderStamps,
     setSamples,
     setHoverPoint,
     clearHoverPoint,
     openPoiPopup,
+    openStampPopup,
+    fitTo,
     setView,
   };
 })();

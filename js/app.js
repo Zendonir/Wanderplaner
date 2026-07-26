@@ -9,6 +9,8 @@
     mode: 'route',      // 'route' | 'poi'
     points: [],         // [{id, lat, lng}]
     pois: [],           // [{id, lat, lng, name, note}]
+    stamps: Stamps.load(), // [{id, lat, lng, name, note, collected}] – persistent
+    tourSelection: [],  // Stempel-IDs, die in den Routenvorschlag sollen
     geometry: null,     // [[lng, lat], ...] der berechneten Route
     distance: 0,        // Meter
     samples: null,      // [{lat, lng, dist, ele}] Höhen-Stützpunkte
@@ -35,6 +37,16 @@
     export: document.getElementById('btn-export'),
     pointList: document.getElementById('point-list'),
     poiList: document.getElementById('poi-list'),
+    importType: document.getElementById('import-type'),
+    importBtn: document.getElementById('btn-import'),
+    importFile: document.getElementById('import-file'),
+    stampCounter: document.getElementById('stamp-counter'),
+    stampSearch: document.getElementById('stamp-search'),
+    stampFilter: document.getElementById('stamp-filter'),
+    stampList: document.getElementById('stamp-list'),
+    tourCount: document.getElementById('tour-count'),
+    suggest: document.getElementById('btn-suggest'),
+    tourClear: document.getElementById('btn-tour-clear'),
     chartEmpty: document.getElementById('chart-empty'),
     searchForm: document.getElementById('search-form'),
     searchInput: document.getElementById('search-input'),
@@ -61,7 +73,12 @@
 
   function pushUndo() {
     state.undoStack.push(
-      JSON.stringify({ points: state.points, pois: state.pois })
+      JSON.stringify({
+        points: state.points,
+        pois: state.pois,
+        stamps: state.stamps,
+        tourSelection: state.tourSelection,
+      })
     );
     if (state.undoStack.length > 50) state.undoStack.shift();
     updateButtons();
@@ -73,6 +90,9 @@
     const parsed = JSON.parse(snapshot);
     state.points = parsed.points;
     state.pois = parsed.pois;
+    state.stamps = parsed.stamps || [];
+    state.tourSelection = parsed.tourSelection || [];
+    Stamps.save(state.stamps);
     renderAll();
     scheduleRecalc();
   }
@@ -332,11 +352,194 @@
     });
   }
 
+  /* ---------- Stempelstellen ---------- */
+
+  function renderStampList() {
+    const query = el.stampSearch.value.trim().toLowerCase();
+    const filter = el.stampFilter.value;
+    const selected = new Set(state.tourSelection);
+
+    const visible = state.stamps
+      .filter((s) => {
+        if (filter === 'open' && s.collected) return false;
+        if (filter === 'collected' && !s.collected) return false;
+        return !query || s.name.toLowerCase().includes(query);
+      })
+      .sort((a, b) => a.name.localeCompare(b.name, 'de'));
+
+    el.stampList.innerHTML = '';
+    if (state.stamps.length === 0) {
+      el.stampCounter.textContent = 'Noch keine Stempelstellen importiert';
+    } else {
+      const collected = state.stamps.filter((s) => s.collected).length;
+      el.stampCounter.textContent =
+        `${collected} von ${state.stamps.length} Stempeln erhalten` +
+        (visible.length !== state.stamps.length
+          ? ` · ${visible.length} angezeigt`
+          : '');
+    }
+
+    if (visible.length === 0) {
+      const li = document.createElement('li');
+      li.className = 'list-empty';
+      li.textContent = state.stamps.length === 0
+        ? 'GPX-Datei mit Wegpunkten importieren'
+        : 'Keine Treffer';
+      el.stampList.appendChild(li);
+      return;
+    }
+
+    visible.forEach((stamp) => {
+      const li = document.createElement('li');
+      if (stamp.collected) li.classList.add('collected');
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = stamp.collected;
+      checkbox.title = stamp.collected
+        ? 'Als noch offen markieren'
+        : 'Als erhalten markieren';
+      checkbox.addEventListener('change', () => toggleStampCollected(stamp.id));
+
+      const label = document.createElement('span');
+      label.className = 'item-label';
+      label.textContent = stamp.name;
+      label.title = stamp.note ? `${stamp.name} – ${stamp.note}` : stamp.name;
+      label.addEventListener('click', () => {
+        MapView.setView(stamp.lat, stamp.lng, 15);
+        MapView.openStampPopup(stamp.id);
+      });
+
+      const tourBtn = document.createElement('button');
+      tourBtn.className = 'stamp-tour' + (selected.has(stamp.id) ? ' active' : '');
+      tourBtn.textContent = selected.has(stamp.id) ? '⊖' : '⊕';
+      tourBtn.title = selected.has(stamp.id)
+        ? 'Aus der Tour-Auswahl entfernen'
+        : 'Für den Routenvorschlag auswählen';
+      tourBtn.addEventListener('click', () => toggleStampTour(stamp.id));
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'item-delete';
+      deleteBtn.textContent = '✕';
+      deleteBtn.title = 'Stempelstelle löschen';
+      deleteBtn.addEventListener('click', () => deleteStamp(stamp.id));
+
+      li.append(checkbox, label, tourBtn, deleteBtn);
+      el.stampList.appendChild(li);
+    });
+  }
+
+  function updateTourBar() {
+    const n = state.tourSelection.length;
+    el.tourCount.textContent = `${n} für Tour ausgewählt`;
+    el.suggest.disabled = n < 2;
+    el.tourClear.disabled = n === 0;
+  }
+
+  function importGpxFile(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const waypoints = Stamps.parseGpxWaypoints(reader.result);
+        if (waypoints.length === 0) {
+          showStatus('warn', 'Die GPX-Datei enthält keine Wegpunkte (<wpt>).', 6000);
+          return;
+        }
+        pushUndo();
+        if (el.importType.value === 'stempel') {
+          const result = Stamps.merge(state.stamps, waypoints);
+          state.stamps = result.stamps;
+          Stamps.save(state.stamps);
+          showStatus(
+            'info',
+            `${result.added} Stempelstelle(n) importiert` +
+              (result.skipped > 0
+                ? `, ${result.skipped} übersprungen (bereits vorhanden).`
+                : '.'),
+            6000
+          );
+          MapView.fitTo(state.stamps);
+        } else {
+          waypoints.forEach((w) => {
+            state.pois.push({
+              id: Utils.uid(),
+              lat: w.lat,
+              lng: w.lng,
+              name: w.name || `POI ${poiCounter++}`,
+              note: w.note,
+            });
+          });
+          showStatus('info', `${waypoints.length} POI(s) importiert.`, 6000);
+          MapView.fitTo(state.pois);
+        }
+        renderAll();
+      } catch (err) {
+        showStatus('error', err.message);
+      }
+    };
+    reader.onerror = () => showStatus('error', 'Die Datei konnte nicht gelesen werden.');
+    reader.readAsText(file);
+  }
+
+  function toggleStampCollected(id) {
+    const stamp = state.stamps.find((s) => s.id === id);
+    if (!stamp) return;
+    pushUndo();
+    stamp.collected = !stamp.collected;
+    Stamps.save(state.stamps);
+    renderAll();
+  }
+
+  function toggleStampTour(id) {
+    const index = state.tourSelection.indexOf(id);
+    if (index >= 0) state.tourSelection.splice(index, 1);
+    else state.tourSelection.push(id);
+    renderAll();
+  }
+
+  function deleteStamp(id) {
+    pushUndo();
+    state.stamps = state.stamps.filter((s) => s.id !== id);
+    state.tourSelection = state.tourSelection.filter((sid) => sid !== id);
+    Stamps.save(state.stamps);
+    renderAll();
+  }
+
+  function clearTourSelection() {
+    state.tourSelection = [];
+    renderAll();
+  }
+
+  /**
+   * Verbindet die für die Tour ausgewählten Stempelstellen in optimierter
+   * Reihenfolge zu Routenpunkten; die Route wird dann wie üblich entlang
+   * echter Wege berechnet.
+   */
+  function suggestRoute() {
+    const selected = state.tourSelection
+      .map((id) => state.stamps.find((s) => s.id === id))
+      .filter(Boolean);
+    if (selected.length < 2) {
+      showStatus('warn', 'Mindestens zwei Stempelstellen für die Tour auswählen.', 5000);
+      return;
+    }
+    pushUndo();
+    const ordered = Utils.optimizeOrder(selected);
+    state.points = ordered.map((s) => ({ id: Utils.uid(), lat: s.lat, lng: s.lng }));
+    renderAll();
+    MapView.fitTo(state.points);
+    scheduleRecalc();
+    showStatus('info', 'Reihenfolge optimiert – Route wird entlang der Wege berechnet …', 5000);
+  }
+
   function renderAll() {
     MapView.renderPoints(state.points);
     MapView.renderPois(state.pois);
+    MapView.renderStamps(state.stamps, state.tourSelection);
     renderPointList();
     renderPoiList();
+    renderStampList();
+    updateTourBar();
     updateButtons();
   }
 
@@ -424,7 +627,11 @@
     const trackPoints = state.samples && state.samples.some((s) => s.ele != null)
       ? state.samples
       : state.geometry.map((c) => ({ lat: c[1], lng: c[0] }));
-    Gpx.download(trackPoints, state.pois);
+    // POIs plus die für die Tour ausgewählten Stempelstellen als Wegpunkte
+    const tourStamps = state.tourSelection
+      .map((id) => state.stamps.find((s) => s.id === id))
+      .filter(Boolean);
+    Gpx.download(trackPoints, [...state.pois, ...tourStamps]);
     showStatus('info', 'GPX-Datei wurde heruntergeladen.', 4000);
   }
 
@@ -462,6 +669,9 @@
       onPoiMoved: movePoi,
       onPoiEdit: editPoi,
       onPoiDelete: deletePoi,
+      onStampCollectedToggle: toggleStampCollected,
+      onStampTourToggle: toggleStampTour,
+      onStampDelete: deleteStamp,
       onRouteHover: highlightChartIndex,
       onRouteHoverEnd: clearChartHighlight,
     });
@@ -479,8 +689,20 @@
       if (query) searchPlace(query);
     });
 
+    el.importBtn.addEventListener('click', () => el.importFile.click());
+    el.importFile.addEventListener('change', () => {
+      const file = el.importFile.files[0];
+      if (file) importGpxFile(file);
+      el.importFile.value = ''; // erneuter Import derselben Datei möglich
+    });
+    el.stampSearch.addEventListener('input', renderStampList);
+    el.stampFilter.addEventListener('change', renderStampList);
+    el.suggest.addEventListener('click', suggestRoute);
+    el.tourClear.addEventListener('click', clearTourSelection);
+
     renderAll();
     updateStats();
+    if (state.stamps.length > 0) MapView.fitTo(state.stamps);
   }
 
   document.addEventListener('DOMContentLoaded', init);

@@ -1,15 +1,25 @@
 name: Release
 
-# Baut bei jedem Versions-Tag (v1.0.0, v1.1.0, …) das Docker-Image,
-# veröffentlicht es auf GHCR und legt ein GitHub-Release an.
+# Baut das Docker-Image, veröffentlicht es auf GHCR und legt ein
+# GitHub-Release an. Auslösbar auf zwei Wegen:
+#   - Push eines Versions-Tags (v1.0.0, v1.1.0, …)
+#   - manuell über "Run workflow" mit Angabe der Version
 on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version (z. B. 1.0.0)"
+        required: true
 
 permissions:
   contents: write
   packages: write
+
+env:
+  IMAGE: ghcr.io/zendonir/wanderplaner
 
 jobs:
   build-and-release:
@@ -17,6 +27,27 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Version und Image-Tags bestimmen
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME}"
+          fi
+          VERSION="${VERSION#v}"
+          MAJOR="${VERSION%%.*}"
+          MINOR="${VERSION#*.}"; MINOR="${MINOR%%.*}"
+          {
+            echo "version=${VERSION}"
+            echo "tags<<EOF"
+            echo "${IMAGE}:${VERSION}"
+            echo "${IMAGE}:${MAJOR}.${MINOR}"
+            echo "${IMAGE}:${MAJOR}"
+            echo "${IMAGE}:latest"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: QEMU einrichten (für arm64-Build)
         uses: docker/setup-qemu-action@v3
@@ -31,43 +62,34 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Image-Tags ableiten
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-
       - name: Image bauen und pushen
         uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.version.outputs.tags }}
 
       - name: GitHub-Release anlegen
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Wanderplaner v${{ steps.version.outputs.version }}
           generate_release_notes: true
           body: |
-            ## 🥾 Wanderplaner ${{ github.ref_name }}
+            ## 🥾 Wanderplaner v${{ steps.version.outputs.version }}
 
             Fertiges Docker-Image (amd64 + arm64):
 
             ```
-            ghcr.io/zendonir/wanderplaner:${{ github.ref_name }}
+            ghcr.io/zendonir/wanderplaner:${{ steps.version.outputs.version }}
             ```
 
             (alternativ `:latest` für die jeweils neueste Version)
 
             ### Installation auf TrueNAS SCALE
 
-            1. **Apps → Discover Apps → ⋮ → Install via YAML** (oder *Custom App*)
+            1. **Apps → Discover Apps → Custom App** (bzw. **⋮ → Install via YAML**)
             2. Bei *Custom App*:
                - **Image Repository:** `ghcr.io/zendonir/wanderplaner`
                - **Image Tag:** `latest`

@@ -10,6 +10,10 @@
     points: [],         // [{id, lat, lng}]
     pois: [],           // [{id, lat, lng, name, note}]
     stamps: Stamps.load(), // [{id, lat, lng, name, note, collected}] – persistent
+    parking: Parking.load(), // Parkplätze – persistent
+    tracks: Tracks.load(),   // abgeschlossene Touren als Spur – persistent
+    savedTours: Tours.load(), // benannte Planungen – persistent
+    tourName: '',
     tourSelection: [],  // Stempel-IDs, die in den Routenvorschlag sollen
     routing: loadRoutingSettings(), // Gewichtung der Wegetypen
     preset: localStorage.getItem('wanderplaner.preset') || 'wander',
@@ -74,6 +78,13 @@
     tourCount: document.getElementById('tour-count'),
     suggest: document.getElementById('btn-suggest'),
     tourClear: document.getElementById('btn-tour-clear'),
+    importHint: document.getElementById('import-hint'),
+    parkingList: document.getElementById('parking-list'),
+    trackList: document.getElementById('track-list'),
+    tourList: document.getElementById('tour-list'),
+    tourNameInput: document.getElementById('tour-name'),
+    saveTour: document.getElementById('btn-save-tour'),
+    roundTrip: document.getElementById('opt-roundtrip'),
     preset: document.getElementById('rs-preset'),
     presetBadge: document.getElementById('preset-badge'),
     presetDescription: document.getElementById('preset-description'),
@@ -110,6 +121,8 @@
         points: state.points,
         pois: state.pois,
         stamps: state.stamps,
+        parking: state.parking,
+        tracks: state.tracks,
         tourSelection: state.tourSelection,
       })
     );
@@ -124,8 +137,12 @@
     state.points = parsed.points;
     state.pois = parsed.pois;
     state.stamps = parsed.stamps || [];
+    state.parking = parsed.parking || [];
+    state.tracks = parsed.tracks || [];
     state.tourSelection = parsed.tourSelection || [];
     Stamps.save(state.stamps);
+    Parking.save(state.parking);
+    Tracks.save(state.tracks);
     renderAll();
     scheduleRecalc();
   }
@@ -488,49 +505,360 @@
     el.tourClear.disabled = n === 0;
   }
 
-  function importGpxFile(file) {
-    const reader = new FileReader();
-    reader.onload = () => {
+  const IMPORT_HINTS = {
+    stempel: 'Wegpunkte (<wpt>) werden als Stempelstellen dauerhaft gespeichert ' +
+             'und lassen sich einzeln als „erhalten“ abhaken.',
+    parkplatz: 'Wegpunkte (<wpt>) werden als Parkplätze gespeichert. Ein Klick auf ' +
+               'den Marker zeigt den QR-Code für die Anfahrt.',
+    track: 'Spuren (<trk>) werden als abgeschlossene Tour dauerhaft auf der Karte hinterlegt.',
+    poi: 'Wegpunkte (<wpt>) werden als POIs der aktuellen Planung hinzugefügt.',
+  };
+
+  function readFile(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error(`„${file.name}“ konnte nicht gelesen werden.`));
+      reader.readAsText(file);
+    });
+  }
+
+  async function importGpxFiles(files) {
+    const kind = el.importType.value;
+    const messages = [];
+    let hadError = false;
+
+    for (const file of files) {
       try {
-        const waypoints = Stamps.parseGpxWaypoints(reader.result);
-        if (waypoints.length === 0) {
-          showStatus('warn', 'Die GPX-Datei enthält keine Wegpunkte (<wpt>).', 6000);
-          return;
-        }
-        pushUndo();
-        if (el.importType.value === 'stempel') {
-          const result = Stamps.merge(state.stamps, waypoints);
-          state.stamps = result.stamps;
-          Stamps.save(state.stamps);
-          showStatus(
-            'info',
-            `${result.added} Stempelstelle(n) importiert` +
-              (result.skipped > 0
-                ? `, ${result.skipped} übersprungen (bereits vorhanden).`
-                : '.'),
-            6000
-          );
-          MapView.fitTo(state.stamps);
-        } else {
-          waypoints.forEach((w) => {
-            state.pois.push({
-              id: Utils.uid(),
-              lat: w.lat,
-              lng: w.lng,
-              name: w.name || `POI ${poiCounter++}`,
-              note: w.note,
-            });
-          });
-          showStatus('info', `${waypoints.length} POI(s) importiert.`, 6000);
-          MapView.fitTo(state.pois);
-        }
-        renderAll();
+        const text = await readFile(file);
+        messages.push(importOne(text, kind, file.name));
       } catch (err) {
-        showStatus('error', err.message);
+        hadError = true;
+        messages.push(err.message);
       }
-    };
-    reader.onerror = () => showStatus('error', 'Die Datei konnte nicht gelesen werden.');
-    reader.readAsText(file);
+    }
+
+    renderAll();
+    showStatus(hadError ? 'warn' : 'info', messages.join(' '), 9000);
+  }
+
+  /** Importiert eine Datei und liefert die Meldung dazu. */
+  function importOne(text, kind, fileName) {
+    if (kind === 'track') {
+      const tracks = Tracks.parseGpxTracks(text);
+      if (tracks.length === 0) {
+        return `„${fileName}“ enthält keine Spur (<trk>).`;
+      }
+      pushUndo();
+      tracks.forEach((track) => {
+        const prepared = Tracks.prepare(
+          { ...track, name: track.name || fileName.replace(/\.gpx$/i, '') },
+          state.tracks.length
+        );
+        state.tracks.push(prepared);
+      });
+      if (!Tracks.save(state.tracks)) {
+        return 'Der Browser-Speicher ist voll – die Tour wurde angezeigt, aber nicht dauerhaft gesichert.';
+      }
+      MapView.fitTo(Tracks.toLatLngs(state.tracks[state.tracks.length - 1]));
+      return `${tracks.length} abgeschlossene Tour(en) hinterlegt.`;
+    }
+
+    const waypoints = PointStore.parseGpxWaypoints(text);
+    if (waypoints.length === 0) {
+      return `„${fileName}“ enthält keine Wegpunkte (<wpt>).`;
+    }
+    pushUndo();
+
+    if (kind === 'stempel' || kind === 'parkplatz') {
+      const isStamp = kind === 'stempel';
+      const store = isStamp ? Stamps : Parking;
+      const current = isStamp ? state.stamps : state.parking;
+      const result = store.merge(current, waypoints);
+      if (isStamp) state.stamps = result.items;
+      else state.parking = result.items;
+      store.save(result.items);
+      MapView.fitTo(result.items);
+      const label = isStamp ? 'Stempelstelle(n)' : 'Parkplatz/Parkplätze';
+      return `${result.added} ${label} importiert` +
+        (result.skipped > 0 ? `, ${result.skipped} bereits vorhanden.` : '.');
+    }
+
+    waypoints.forEach((w) => {
+      state.pois.push({
+        id: Utils.uid(),
+        lat: w.lat,
+        lng: w.lng,
+        name: w.name || `POI ${poiCounter++}`,
+        note: w.note,
+      });
+    });
+    MapView.fitTo(state.pois);
+    return `${waypoints.length} POI(s) importiert.`;
+  }
+
+  /* ---------- Parkplätze ---------- */
+
+  function renderParkingList() {
+    el.parkingList.innerHTML = '';
+    if (state.parking.length === 0) {
+      const li = document.createElement('li');
+      li.className = 'list-empty';
+      li.textContent = 'Noch keine Parkplätze importiert';
+      el.parkingList.appendChild(li);
+      return;
+    }
+
+    state.parking
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name, 'de'))
+      .forEach((place) => {
+        const li = document.createElement('li');
+
+        const icon = document.createElement('span');
+        icon.className = 'parking-badge';
+        icon.textContent = 'P';
+
+        const label = document.createElement('span');
+        label.className = 'item-label';
+        label.textContent = place.name;
+        label.title = 'Auf der Karte zeigen und QR-Code öffnen';
+        label.addEventListener('click', () => {
+          MapView.setView(place.lat, place.lng, 15);
+          MapView.openParkingPopup(place.id);
+        });
+
+        const startBtn = document.createElement('button');
+        startBtn.className = 'item-action';
+        startBtn.textContent = '▶';
+        startBtn.title = 'Als Startpunkt der Route setzen';
+        startBtn.addEventListener('click', () => parkingAsStart(place.id));
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'item-delete';
+        deleteBtn.textContent = '✕';
+        deleteBtn.title = 'Parkplatz löschen';
+        deleteBtn.addEventListener('click', () => deleteParking(place.id));
+
+        li.append(icon, label, startBtn, deleteBtn);
+        el.parkingList.appendChild(li);
+      });
+  }
+
+  /** Setzt den Parkplatz als ersten Routenpunkt. */
+  function parkingAsStart(id) {
+    const place = state.parking.find((p) => p.id === id);
+    if (!place) return;
+    pushUndo();
+    state.points.unshift({ id: Utils.uid(), lat: place.lat, lng: place.lng });
+    if (!state.tourName) {
+      el.tourNameInput.value = `Tour ab ${place.name}`;
+      state.tourName = el.tourNameInput.value;
+    }
+    renderAll();
+    scheduleRecalc();
+    showStatus('info', `„${place.name}“ ist jetzt Startpunkt der Route.`, 5000);
+  }
+
+  function deleteParking(id) {
+    pushUndo();
+    state.parking = state.parking.filter((p) => p.id !== id);
+    Parking.save(state.parking);
+    renderAll();
+  }
+
+  /* ---------- Hinterlegte (abgeschlossene) Touren ---------- */
+
+  function renderTrackList() {
+    el.trackList.innerHTML = '';
+    if (state.tracks.length === 0) {
+      const li = document.createElement('li');
+      li.className = 'list-empty';
+      li.textContent = 'Noch keine Touren hinterlegt';
+      el.trackList.appendChild(li);
+      return;
+    }
+
+    state.tracks.forEach((track) => {
+      const li = document.createElement('li');
+
+      const visible = document.createElement('input');
+      visible.type = 'checkbox';
+      visible.checked = track.visible !== false;
+      visible.title = 'Auf der Karte anzeigen';
+      visible.addEventListener('change', () => {
+        track.visible = visible.checked;
+        Tracks.save(state.tracks);
+        renderAll();
+      });
+
+      const swatch = document.createElement('span');
+      swatch.className = 'track-swatch';
+      swatch.style.background = track.color;
+
+      const label = document.createElement('span');
+      label.className = 'item-label';
+      label.textContent = `${track.name} · ${Utils.formatDistance(track.length)}`;
+      label.title = 'Auf der Karte zeigen · Doppelklick zum Umbenennen';
+      label.addEventListener('click', () => MapView.fitTo(Tracks.toLatLngs(track)));
+      label.addEventListener('dblclick', () => renameTrack(track.id));
+
+      const renameBtn = document.createElement('button');
+      renameBtn.className = 'item-action';
+      renameBtn.textContent = '✎';
+      renameBtn.title = 'Umbenennen';
+      renameBtn.addEventListener('click', () => renameTrack(track.id));
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'item-delete';
+      deleteBtn.textContent = '✕';
+      deleteBtn.title = 'Hinterlegte Tour löschen';
+      deleteBtn.addEventListener('click', () => deleteTrack(track.id));
+
+      li.append(visible, swatch, label, renameBtn, deleteBtn);
+      el.trackList.appendChild(li);
+    });
+  }
+
+  function renameTrack(id) {
+    const track = state.tracks.find((t) => t.id === id);
+    if (!track) return;
+    const name = window.prompt('Name der hinterlegten Tour:', track.name);
+    if (name === null) return;
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    track.name = trimmed;
+    Tracks.save(state.tracks);
+    renderAll();
+  }
+
+  function deleteTrack(id) {
+    const track = state.tracks.find((t) => t.id === id);
+    if (!track) return;
+    if (!window.confirm(`„${track.name}“ wirklich löschen?`)) return;
+    pushUndo();
+    state.tracks = state.tracks.filter((t) => t.id !== id);
+    Tracks.save(state.tracks);
+    renderAll();
+  }
+
+  /* ---------- Gespeicherte Planungen ---------- */
+
+  function renderTourList() {
+    el.tourList.innerHTML = '';
+    if (state.savedTours.length === 0) {
+      const li = document.createElement('li');
+      li.className = 'list-empty';
+      li.textContent = 'Noch keine Tour gespeichert';
+      el.tourList.appendChild(li);
+      return;
+    }
+
+    state.savedTours.forEach((tour) => {
+      const li = document.createElement('li');
+
+      const label = document.createElement('span');
+      label.className = 'item-label';
+      const distance = tour.distance ? ` · ${Utils.formatDistance(tour.distance)}` : '';
+      label.textContent = `${tour.name}${distance}`;
+      label.title = `Gespeichert am ${Tours.formatSavedAt(tour.savedAt)} · klicken zum Laden`;
+      label.addEventListener('click', () => loadTour(tour.id));
+
+      const renameBtn = document.createElement('button');
+      renameBtn.className = 'item-action';
+      renameBtn.textContent = '✎';
+      renameBtn.title = 'Umbenennen';
+      renameBtn.addEventListener('click', () => renameTour(tour.id));
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'item-delete';
+      deleteBtn.textContent = '✕';
+      deleteBtn.title = 'Tour löschen';
+      deleteBtn.addEventListener('click', () => deleteTour(tour.id));
+
+      li.append(label, renameBtn, deleteBtn);
+      el.tourList.appendChild(li);
+    });
+  }
+
+  function saveCurrentTour() {
+    const name = el.tourNameInput.value.trim();
+    if (!name) {
+      showStatus('warn', 'Bitte zuerst einen Namen für die Tour eingeben.', 5000);
+      el.tourNameInput.focus();
+      return;
+    }
+    if (state.points.length === 0) {
+      showStatus('warn', 'Die Tour enthält noch keine Routenpunkte.', 5000);
+      return;
+    }
+
+    state.tourName = name;
+    const entry = Tours.fromState(name, state);
+
+    // Gleicher Name überschreibt den bestehenden Eintrag.
+    const existing = state.savedTours.findIndex((t) => t.name === name);
+    if (existing >= 0) {
+      entry.id = state.savedTours[existing].id;
+      state.savedTours[existing] = entry;
+    } else {
+      state.savedTours.push(entry);
+    }
+
+    if (Tours.save(state.savedTours)) {
+      showStatus('info', `Tour „${name}“ gespeichert.`, 5000);
+    } else {
+      showStatus('error', 'Die Tour konnte nicht gespeichert werden (Speicher voll).');
+    }
+    renderAll();
+  }
+
+  function loadTour(id) {
+    const tour = state.savedTours.find((t) => t.id === id);
+    if (!tour) return;
+    pushUndo();
+
+    state.points = tour.points.map((p) => ({ id: Utils.uid(), lat: p.lat, lng: p.lng }));
+    state.pois = (tour.pois || []).map((p) => ({
+      id: Utils.uid(), lat: p.lat, lng: p.lng, name: p.name, note: p.note,
+    }));
+    if (tour.routing) state.routing = { ...Profiles.defaultSettings(), ...tour.routing };
+    if (tour.preset) state.preset = tour.preset;
+    state.tourName = tour.name;
+    el.tourNameInput.value = tour.name;
+
+    syncRoutingUi();
+    el.roundTrip.checked = Boolean(state.routing.roundTrip);
+    renderAll();
+    if (state.points.length > 0) MapView.fitTo(state.points);
+    scheduleRecalc();
+    showStatus('info', `Tour „${tour.name}“ geladen.`, 5000);
+  }
+
+  function renameTour(id) {
+    const tour = state.savedTours.find((t) => t.id === id);
+    if (!tour) return;
+    const name = window.prompt('Name der Tour:', tour.name);
+    if (name === null) return;
+    const trimmed = name.trim();
+    if (!trimmed) return;
+
+    if (state.tourName === tour.name) {
+      state.tourName = trimmed;
+      el.tourNameInput.value = trimmed;
+    }
+    tour.name = trimmed;
+    Tours.save(state.savedTours);
+    renderAll();
+  }
+
+  function deleteTour(id) {
+    const tour = state.savedTours.find((t) => t.id === id);
+    if (!tour) return;
+    if (!window.confirm(`Tour „${tour.name}“ wirklich löschen?`)) return;
+    state.savedTours = state.savedTours.filter((t) => t.id !== id);
+    Tours.save(state.savedTours);
+    renderAll();
   }
 
   function toggleStampCollected(id) {
@@ -585,12 +913,17 @@
   }
 
   function renderAll() {
+    MapView.renderTracks(state.tracks); // zuerst, damit sie unter der Route liegen
     MapView.renderPoints(state.points);
     MapView.renderPois(state.pois);
     MapView.renderStamps(state.stamps, state.tourSelection);
+    MapView.renderParking(state.parking);
     renderPointList();
     renderPoiList();
     renderStampList();
+    renderParkingList();
+    renderTrackList();
+    renderTourList();
     updateTourBar();
     updateButtons();
   }
@@ -705,7 +1038,9 @@
       const preset = Profiles.PRESETS[el.preset.value];
       if (preset) {
         state.preset = el.preset.value;
-        state.routing = { ...preset.settings };
+        // Der Rundkurs gehört zur Tour, nicht zur Wegegewichtung – er bleibt
+        // beim Wechsel der Voreinstellung erhalten.
+        state.routing = { ...preset.settings, roundTrip: state.routing.roundTrip };
         syncRoutingUi();
         saveRoutingSettings();
         scheduleRecalc();
@@ -779,6 +1114,10 @@
     el.allowSteps.disabled = disabled;
   }
 
+  function updateImportHint() {
+    el.importHint.textContent = IMPORT_HINTS[el.importType.value] || '';
+  }
+
   function updateEngineNote(engine) {
     if (engine === 'brouter') {
       el.engineNote.className = 'engine-note ok';
@@ -831,6 +1170,9 @@
       onStampCollectedToggle: toggleStampCollected,
       onStampTourToggle: toggleStampTour,
       onStampDelete: deleteStamp,
+      onParkingAsStart: parkingAsStart,
+      onParkingDelete: deleteParking,
+      getStartName: () => state.tourName || 'Startpunkt der Wanderung',
       onRouteHover: highlightChartIndex,
       onRouteHoverEnd: clearChartHighlight,
     });
@@ -851,10 +1193,29 @@
 
     el.importBtn.addEventListener('click', () => el.importFile.click());
     el.importFile.addEventListener('change', () => {
-      const file = el.importFile.files[0];
-      if (file) importGpxFile(file);
+      const files = [...el.importFile.files];
+      if (files.length > 0) importGpxFiles(files);
       el.importFile.value = ''; // erneuter Import derselben Datei möglich
     });
+    el.importType.addEventListener('change', updateImportHint);
+    updateImportHint();
+
+    el.tourNameInput.addEventListener('input', () => {
+      state.tourName = el.tourNameInput.value.trim();
+      // Der Startpunkt-QR trägt den Tournamen – Marker neu zeichnen.
+      MapView.renderPoints(state.points);
+    });
+    el.tourNameInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') saveCurrentTour();
+    });
+    el.saveTour.addEventListener('click', saveCurrentTour);
+
+    el.roundTrip.addEventListener('change', () => {
+      state.routing.roundTrip = el.roundTrip.checked;
+      saveRoutingSettings();
+      scheduleRecalc();
+    });
+    el.roundTrip.checked = Boolean(state.routing.roundTrip);
     el.stampSearch.addEventListener('input', renderStampList);
     el.stampFilter.addEventListener('change', renderStampList);
     el.suggest.addEventListener('click', suggestRoute);

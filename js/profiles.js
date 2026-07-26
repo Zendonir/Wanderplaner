@@ -73,7 +73,9 @@ const Profiles = {
   },
 
   defaultSettings() {
-    return { ...this.PRESETS.wander.settings };
+    // roundTrip gehört zur Tour, nicht zur Wegegewichtung, wirkt also nicht
+    // auf den Profiltext – steht aber der Einfachheit halber mit im Objekt.
+    return { ...this.PRESETS.wander.settings, roundTrip: false };
   },
 
   /**

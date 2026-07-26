@@ -23,12 +23,33 @@ Build-Schritt und ohne eigenes Backend.
   Open-Elevation abgefragt (Fallback: Open-Topo-Data) und als Diagramm
   angezeigt. Hovern über das Profil markiert die Stelle auf der Karte –
   und umgekehrt.
-- **Stempelstellen** – GPX-Dateien mit Wegpunkten (z. B. Harzer Wandernadel)
-  lassen sich als Stempelstellen importieren; beim Import ist die Art wählbar
-  (Stempelstellen oder POIs). Stempelstellen werden dauerhaft im Browser
-  gespeichert und können einzeln als „erhalten“ abgehakt werden – inklusive
-  Zähler, Suche und Filter (Alle / Offen / Erhalten). Ein erneuter Import
-  überspringt bereits vorhandene Einträge, die Markierungen bleiben erhalten.
+- **GPX-Import mit Art-Auswahl** – beim Import wird gewählt, was die Datei
+  enthält: Stempelstellen, Parkplätze, eine abgeschlossene Tour oder POIs.
+  Mehrere Dateien auf einmal sind möglich.
+- **Stempelstellen** – Wegpunkte (z. B. Harzer Wandernadel) werden dauerhaft
+  im Browser gespeichert und können einzeln als „erhalten“ abgehakt werden –
+  inklusive Zähler, Suche und Filter (Alle / Offen / Erhalten). Ein erneuter
+  Import überspringt bereits vorhandene Einträge, die Markierungen bleiben
+  erhalten.
+- **Parkplätze mit QR-Code** – importierte Parkplätze bleiben dauerhaft
+  gespeichert. Ein Klick auf den Marker zeigt einen QR-Code: mit der
+  Handy-Kamera gescannt öffnet sich die Karten-App am Parkplatz. Wählbar sind
+  Apple Karten (iPhone), Google Maps oder ein `geo:`-Link, jeweils als
+  „Ort anzeigen“ oder „Route dorthin“. Ein Parkplatz lässt sich mit einem
+  Klick als Startpunkt der Route setzen.
+- **Startpunkt-QR** – auch der Startpunkt der geplanten Route zeigt beim
+  Anklicken denselben QR-Code, beschriftet mit dem Namen der Tour.
+- **Abgeschlossene Touren hinterlegen** – GPX-Spuren (`<trk>`) werden dauerhaft
+  auf der Karte hinterlegt, je Tour in eigener Farbe, einzeln ein- und
+  ausblendbar, umbenennbar und löschbar. Die Geometrie wird beim Import
+  ausgedünnt, damit auch viele Touren in den Browser-Speicher passen.
+- **Touren benennen und speichern** – die aktuelle Planung lässt sich unter
+  einem Namen sichern (inklusive POIs und Routing-Einstellungen), später
+  wieder laden, umbenennen und löschen.
+- **Rundkurs** – auf Wunsch kehrt die Route zum Start zurück. Für den Rückweg
+  werden entlang des Hinwegs Sperrbereiche gesetzt, damit ein anderer Weg
+  gewählt wird statt derselben Strecke zurück. Findet sich kein eigenständiger
+  Parallelweg, wird der Rückweg ohne Sperren berechnet und darauf hingewiesen.
 - **Routenvorschlag** – Stempelstellen für die nächste Tour auswählen
   (⊕ in der Liste oder im Karten-Popup) und „Route vorschlagen“ klicken:
   die Reihenfolge wird automatisch optimiert (Nearest-Neighbor + 2-Opt) und
@@ -189,7 +210,11 @@ js/profiles.js      – Wanderprofil für BRouter, Voreinstellungen und Gewichtu
 js/routing.js       – BRouter-Anbindung mit OSRM-Fallback
 js/elevation.js     – Höhen-Stützpunkte, Open-Elevation + Fallback, Hm-Berechnung
 js/gpx.js           – GPX-Erzeugung und Download
-js/stamps.js        – Stempelstellen: GPX-Import, localStorage, Duplikat-Erkennung
+js/qrcode.js        – eigener QR-Encoder (Byte-Modus, Level M, Versionen 1–10)
+js/maplinks.js      – Links für Apple Karten / Google Maps / geo:
+js/places.js        – Stempelstellen und Parkplätze: GPX-Import, localStorage
+js/tracks.js        – hinterlegte Touren: GPX-Spuren, Ausdünnung, Speicherung
+js/tours.js         – benannte Planungen speichern und laden
 js/mapview.js       – gesamte Leaflet-/Kartenlogik
 js/app.js           – Zustand, UI-Rendering, Orchestrierung
 Dockerfile          – nginx:alpine mit den statischen Dateien
@@ -200,3 +225,12 @@ docker-compose.yml  – Betrieb inkl. Healthcheck und Restart-Policy
 
 - Vanilla JavaScript, HTML und CSS – kein Build-Schritt, keine npm-Abhängigkeiten
 - [Leaflet](https://leafletjs.com/) für die Karte, [Chart.js](https://www.chartjs.org/) für das Höhenprofil (beide via CDN)
+- QR-Codes werden ohne Bibliothek erzeugt, damit sie auch offline funktionieren
+
+## Wo die Daten liegen
+
+Stempelstellen, Parkplätze, hinterlegte Touren, gespeicherte Planungen und die
+Routing-Einstellungen liegen im `localStorage` des Browsers – also auf dem
+Gerät, mit dem die App geöffnet wird, nicht auf dem Server. Ein anderer Browser
+oder ein anderes Gerät sieht sie nicht, und wer die Browserdaten löscht,
+verliert sie. Der Container selbst speichert nichts und braucht kein Volume.

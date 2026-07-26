@@ -46,6 +46,16 @@
         <button id="mode-poi" class="mode-btn" title="Klick auf die Karte setzt einen POI">⚑ POI</button>
       </section>
 
+      <section class="tour-name-row">
+        <input type="text" id="tour-name" placeholder="Name der Tour" aria-label="Name der Tour">
+        <button id="btn-save-tour" title="Tour unter diesem Namen speichern">💾</button>
+      </section>
+
+      <label class="checkbox round-trip" title="Route kehrt zum Start zurück und sucht für den Rückweg einen anderen Weg.">
+        <input type="checkbox" id="opt-roundtrip">
+        <span>Rundkurs (Rückweg auf anderem Weg)</span>
+      </label>
+
       <section class="actions">
         <button id="btn-undo" disabled title="Letzte Aktion rückgängig machen">↩ Rückgängig</button>
         <button id="btn-clear" disabled title="Alle Routenpunkte und POIs entfernen">🗑 Route leeren</button>
@@ -141,17 +151,39 @@
       </section>
 
       <section class="list-section">
-        <h2>Stempelstellen</h2>
+        <h2>GPX importieren</h2>
         <div class="import-row">
           <select id="import-type" title="Art des GPX-Imports">
             <option value="stempel">Stempelstellen</option>
+            <option value="parkplatz">Parkplätze</option>
+            <option value="track">Abgeschlossene Tour</option>
             <option value="poi">POIs</option>
           </select>
-          <button id="btn-import">⬆ GPX importieren</button>
-          <input type="file" id="import-file" accept=".gpx,application/gpx+xml" hidden>
+          <button id="btn-import">⬆ Datei wählen</button>
+          <input type="file" id="import-file" accept=".gpx,application/gpx+xml" hidden multiple>
         </div>
-        <p class="hint">Wegpunkte aus der GPX-Datei werden als Stempelstellen dauerhaft
-          im Browser gespeichert und lassen sich einzeln als „erhalten“ abhaken.</p>
+        <p class="hint" id="import-hint"></p>
+      </section>
+
+      <section class="list-section" id="section-tours">
+        <h2>Gespeicherte Touren</h2>
+        <ul id="tour-list" class="tour-list"></ul>
+      </section>
+
+      <section class="list-section" id="section-tracks">
+        <h2>Hinterlegte Touren</h2>
+        <ul id="track-list" class="track-list"></ul>
+      </section>
+
+      <section class="list-section" id="section-parking">
+        <h2>Parkplätze</h2>
+        <p class="hint">Klick auf einen Parkplatz-Marker zeigt einen QR-Code –
+          abgescannt öffnet sich die Karten-App des Handys an dieser Stelle.</p>
+        <ul id="parking-list" class="parking-list"></ul>
+      </section>
+
+      <section class="list-section">
+        <h2>Stempelstellen</h2>
         <p class="hint stamp-counter" id="stamp-counter">Noch keine Stempelstellen importiert</p>
         <div class="stamp-tools">
           <input type="text" id="stamp-search" placeholder="Stempelstelle suchen …">
@@ -190,7 +222,11 @@
   <script src="js/routing.js"></script>
   <script src="js/elevation.js"></script>
   <script src="js/gpx.js"></script>
-  <script src="js/stamps.js"></script>
+  <script src="js/qrcode.js"></script>
+  <script src="js/maplinks.js"></script>
+  <script src="js/places.js"></script>
+  <script src="js/tracks.js"></script>
+  <script src="js/tours.js"></script>
   <script src="js/mapview.js"></script>
   <script src="js/app.js"></script>
 </body>

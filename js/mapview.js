@@ -13,6 +13,8 @@ const MapView = (function () {
   let pointMarkers = [];
   let poiMarkers = new Map();
   let stampMarkers = new Map();
+  let parkingMarkers = new Map();
+  let trackLines = new Map();
   let samples = null; // Höhen-Stützpunkte für die Hover-Zuordnung
 
   function init(callbacks) {
@@ -31,12 +33,13 @@ const MapView = (function () {
 
   /* ---------- Routenpunkte ---------- */
 
-  function routeIcon(number) {
+  function routeIcon(number, isStart) {
     return L.divIcon({
       className: '',
-      html: `<div class="route-marker">${number}</div>`,
+      html: `<div class="route-marker${isStart ? ' start' : ''}">${isStart ? '▶' : number}</div>`,
       iconSize: [26, 26],
       iconAnchor: [13, 13],
+      popupAnchor: [0, -14],
     });
   }
 
@@ -45,14 +48,24 @@ const MapView = (function () {
     pointMarkers = [];
 
     points.forEach((p, i) => {
+      const isStart = i === 0;
       const marker = L.marker([p.lat, p.lng], {
         draggable: true,
-        icon: routeIcon(i + 1),
+        icon: routeIcon(i + 1, isStart),
       }).addTo(map);
-      marker.bindTooltip(`Punkt ${i + 1} · ziehen zum Verschieben, Rechtsklick löscht`, {
-        direction: 'top',
-        offset: [0, -12],
-      });
+      marker.bindTooltip(
+        isStart
+          ? 'Startpunkt · klicken für QR-Code zur Anfahrt'
+          : `Punkt ${i + 1} · ziehen zum Verschieben, Rechtsklick löscht`,
+        { direction: 'top', offset: [0, -12] }
+      );
+      // Der Startpunkt zeigt beim Anklicken den QR-Code für die Anfahrt.
+      if (isStart) {
+        marker.bindPopup(
+          () => qrPopupContent({ ...p, name: cbs.getStartName() }, 'start'),
+          { maxWidth: 260 }
+        );
+      }
       marker.on('dragend', (e) => cbs.onPointMoved(p.id, e.target.getLatLng()));
       marker.on('contextmenu', () => cbs.onPointDelete(p.id));
       pointMarkers.push(marker);
@@ -217,6 +230,174 @@ const MapView = (function () {
     if (marker) marker.openPopup();
   }
 
+  /* ---------- Parkplätze mit QR-Code ---------- */
+
+  function parkingIcon() {
+    return L.divIcon({
+      className: '',
+      html: '<div class="parking-marker">P</div>',
+      iconSize: [26, 26],
+      iconAnchor: [13, 13],
+      popupAnchor: [0, -14],
+    });
+  }
+
+  /**
+   * Popup mit QR-Code: abgescannt öffnet sich die Karten-App des Handys
+   * an genau dieser Stelle.
+   */
+  function qrPopupContent(place, kind) {
+    const div = document.createElement('div');
+    div.className = 'qr-popup';
+
+    const title = document.createElement('strong');
+    title.textContent = place.name;
+    div.appendChild(title);
+
+    if (place.note) {
+      const note = document.createElement('p');
+      note.textContent = place.note;
+      div.appendChild(note);
+    }
+
+    const coords = document.createElement('p');
+    coords.className = 'qr-coords';
+    coords.textContent = `${place.lat.toFixed(5)}, ${place.lng.toFixed(5)}`;
+    div.appendChild(coords);
+
+    const controls = document.createElement('div');
+    controls.className = 'qr-controls';
+
+    const serviceSelect = document.createElement('select');
+    Object.entries(MapLinks.SERVICES).forEach(([key, s]) => {
+      const option = document.createElement('option');
+      option.value = key;
+      option.textContent = s.label;
+      serviceSelect.appendChild(option);
+    });
+
+    const modeSelect = document.createElement('select');
+    Object.entries(MapLinks.MODES).forEach(([key, m]) => {
+      const option = document.createElement('option');
+      option.value = key;
+      option.textContent = m.label;
+      modeSelect.appendChild(option);
+    });
+
+    controls.append(serviceSelect, modeSelect);
+    div.appendChild(controls);
+
+    const qrBox = document.createElement('div');
+    qrBox.className = 'qr-box';
+    div.appendChild(qrBox);
+
+    const hint = document.createElement('p');
+    hint.className = 'qr-hint';
+    hint.textContent = 'Mit der Handy-Kamera scannen, um die Karten-App zu öffnen.';
+    div.appendChild(hint);
+
+    const link = document.createElement('a');
+    link.className = 'qr-link';
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.textContent = 'Link hier öffnen';
+    div.appendChild(link);
+
+    const render = () => {
+      const url = MapLinks.build(place, serviceSelect.value, modeSelect.value);
+      qrBox.innerHTML = '';
+      try {
+        qrBox.appendChild(QRCode.toSvg(url, 170));
+      } catch (err) {
+        qrBox.textContent = 'QR-Code konnte nicht erzeugt werden.';
+      }
+      link.href = url;
+      // geo:-Links kann der Desktop-Browser meist nicht öffnen.
+      link.style.display = serviceSelect.value === 'geo' ? 'none' : '';
+      modeSelect.disabled = serviceSelect.value === 'geo';
+    };
+    serviceSelect.addEventListener('change', render);
+    modeSelect.addEventListener('change', render);
+    render();
+
+    const buttons = document.createElement('div');
+    buttons.className = 'poi-popup-buttons';
+
+    if (kind === 'parking') {
+      const startBtn = document.createElement('button');
+      startBtn.textContent = '▶ Als Startpunkt';
+      startBtn.className = 'primary';
+      startBtn.addEventListener('click', () => {
+        map.closePopup();
+        cbs.onParkingAsStart(place.id);
+      });
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.textContent = 'Löschen';
+      deleteBtn.className = 'danger';
+      deleteBtn.addEventListener('click', () => {
+        map.closePopup();
+        cbs.onParkingDelete(place.id);
+      });
+      buttons.append(startBtn, deleteBtn);
+    }
+
+    if (buttons.children.length > 0) div.appendChild(buttons);
+    return div;
+  }
+
+  function renderParking(places) {
+    parkingMarkers.forEach((m) => map.removeLayer(m));
+    parkingMarkers = new Map();
+
+    places.forEach((place) => {
+      const marker = L.marker([place.lat, place.lng], { icon: parkingIcon() }).addTo(map);
+      marker.bindTooltip(place.name, { direction: 'top', offset: [0, -12] });
+      marker.bindPopup(() => qrPopupContent(place, 'parking'), { maxWidth: 260 });
+      parkingMarkers.set(place.id, marker);
+    });
+  }
+
+  function openParkingPopup(id) {
+    const marker = parkingMarkers.get(id);
+    if (marker) marker.openPopup();
+  }
+
+  /** QR-Popup für den Startpunkt der geplanten Route. */
+  function openStartQr(point) {
+    L.popup({ maxWidth: 260 })
+      .setLatLng([point.lat, point.lng])
+      .setContent(qrPopupContent(point, 'start'))
+      .openOn(map);
+  }
+
+  /* ---------- Hinterlegte (abgeschlossene) Touren ---------- */
+
+  function renderTracks(tracks) {
+    trackLines.forEach((l) => map.removeLayer(l));
+    trackLines = new Map();
+
+    tracks.forEach((track) => {
+      if (!track.visible) return;
+      const line = L.polyline(Tracks.toLatLngs(track).map((p) => [p.lat, p.lng]), {
+        color: track.color,
+        weight: 3,
+        opacity: 0.65,
+        dashArray: '6 4',
+      }).addTo(map);
+      line.bindTooltip(
+        `${track.name} · ${Utils.formatDistance(track.length)}`,
+        { sticky: true }
+      );
+      // Hinterlegte Touren sollen das Setzen von Punkten nicht blockieren.
+      line.on('click', (e) => {
+        L.DomEvent.stop(e);
+        cbs.onMapClick(e.latlng);
+      });
+      trackLines.set(track.id, line);
+    });
+  }
+
   /** Karte auf eine Punktmenge zoomen (z. B. nach einem Import). */
   function fitTo(points) {
     if (!points || points.length === 0) return;
@@ -313,11 +494,15 @@ const MapView = (function () {
     renderPois,
     renderRoute,
     renderStamps,
+    renderParking,
+    renderTracks,
     setSamples,
     setHoverPoint,
     clearHoverPoint,
     openPoiPopup,
     openStampPopup,
+    openParkingPopup,
+    openStartQr,
     fitTo,
     setView,
   };

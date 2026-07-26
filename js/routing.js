@@ -60,6 +60,9 @@ const Routing = {
    */
   async fetchRoute(points, settings) {
     try {
+      if (settings && settings.roundTrip && points.length >= 2) {
+        return await this._roundTrip(points, settings);
+      }
       return await this._viaBRouter(points, settings);
     } catch (brouterError) {
       console.warn('BRouter fehlgeschlagen, weiche auf OSRM aus:', brouterError);
@@ -79,16 +82,112 @@ const Routing = {
     }
   },
 
-  async _viaBRouter(points, settings) {
+  /**
+   * Rundkurs: Hinweg wie gewohnt, für den Rückweg werden entlang des Hinwegs
+   * Sperrbereiche gesetzt, damit ein anderer (paralleler) Weg gewählt wird.
+   * Findet sich keiner, wird der Rückweg ohne Sperren berechnet – lieber ein
+   * Rundkurs auf gleichem Weg als gar keine Route.
+   */
+  async _roundTrip(points, settings) {
+    const outbound = await this._viaBRouter(points, settings);
+
+    const back = [points[points.length - 1], points[0]];
+    const nogos = this._nogosAlong(outbound.coordinates);
+
+    let inbound;
+    let sameWayBack = false;
+    try {
+      inbound = await this._viaBRouter(back, settings, nogos);
+    } catch (err) {
+      console.warn('Kein Parallelweg gefunden, Rückweg ohne Sperren:', err);
+      inbound = await this._viaBRouter(back, settings);
+      sameWayBack = true;
+    }
+
+    const coordinates = outbound.coordinates.concat(inbound.coordinates.slice(1));
+    const elevations =
+      outbound.elevations && inbound.elevations
+        ? outbound.elevations.concat(inbound.elevations.slice(1))
+        : null;
+
+    return {
+      coordinates,
+      elevations,
+      distance: outbound.distance + inbound.distance,
+      engine: 'brouter',
+      warning: sameWayBack
+        ? 'Für den Rückweg wurde kein ausreichend eigenständiger Parallelweg ' +
+          'gefunden – die Route führt streckenweise über den Hinweg zurück.'
+        : undefined,
+    };
+  },
+
+  /**
+   * Legt Sperrkreise entlang einer Route an, lässt aber Anfang und Ende frei,
+   * damit Start- und Zielpunkt erreichbar bleiben. Die Anzahl ist begrenzt,
+   * weil alle Kreise in die Anfrage-URL passen müssen.
+   */
+  _nogosAlong(coordinates, maxCount = 40, radius = 40) {
+    if (coordinates.length < 2) return [];
+
+    // Etwa 250 m an beiden Enden aussparen, damit Start und Ziel erreichbar
+    // bleiben – ein Sperrkreis über dem Startpunkt macht die Route unmöglich.
+    const FREE_END_M = 250;
+
+    const cum = [0];
+    for (let i = 1; i < coordinates.length; i++) {
+      cum.push(cum[i - 1] + Utils.haversine(
+        { lat: coordinates[i - 1][1], lng: coordinates[i - 1][0] },
+        { lat: coordinates[i][1], lng: coordinates[i][0] }
+      ));
+    }
+    const total = cum[cum.length - 1];
+    if (total <= FREE_END_M * 2.5) return [];
+
+    const from = FREE_END_M;
+    const to = total - FREE_END_M;
+    const count = Math.min(maxCount, Math.max(2, Math.round((to - from) / 150)));
+
+    // Positionen werden entlang der Strecke interpoliert, nicht aus den
+    // vorhandenen Stützpunkten gewählt: eine gerade Route kann aus sehr
+    // wenigen Punkten bestehen und bekäme sonst kaum Sperren.
+    const nogos = [];
+    let seg = 1;
+    for (let k = 0; k < count; k++) {
+      const target = from + ((to - from) * k) / (count - 1);
+      while (seg < cum.length - 1 && cum[seg] < target) seg++;
+      const segLen = cum[seg] - cum[seg - 1] || 1;
+      const t = (target - cum[seg - 1]) / segLen;
+      const a = coordinates[seg - 1];
+      const b = coordinates[seg];
+      nogos.push({
+        lng: a[0] + (b[0] - a[0]) * t,
+        lat: a[1] + (b[1] - a[1]) * t,
+        radius,
+      });
+    }
+    return nogos;
+  },
+
+  async _viaBRouter(points, settings, nogos = null) {
     const profileText = Profiles.build(settings);
     const profileId = await this._uploadProfile(profileText);
 
     const lonlats = points
       .map((p) => `${p.lng.toFixed(6)},${p.lat.toFixed(6)}`)
       .join('|');
-    const url =
+    let url =
       `${this.BROUTER_URL}?lonlats=${lonlats}` +
       `&profile=${encodeURIComponent(profileId)}&alternativeidx=0&format=geojson`;
+
+    if (nogos && nogos.length > 0) {
+      // Gewichtete Sperren: hohe Kosten statt hartem Verbot, damit BRouter
+      // im Notfall doch hindurchführt, statt die Route aufzugeben.
+      const list = nogos
+        .map((n) => `${n.lng.toFixed(5)},${n.lat.toFixed(5)},${n.radius}`)
+        .join('|');
+      url += `&nogos=${list}`;
+    }
 
     let response;
     try {

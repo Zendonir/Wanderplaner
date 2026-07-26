@@ -684,6 +684,208 @@ body {
   color: var(--text-muted);
 }
 
+/* ---------- Tourname, Rundkurs ---------- */
+
+.tour-name-row {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.tour-name-row input {
+  flex: 1;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  min-width: 0;
+}
+
+.tour-name-row button {
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--green);
+  border-radius: 6px;
+  background: var(--green);
+  color: #fff;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.tour-name-row button:hover {
+  background: var(--green-dark);
+}
+
+.round-trip {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.82rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  cursor: pointer;
+}
+
+.round-trip input {
+  accent-color: var(--green);
+  cursor: pointer;
+}
+
+/* ---------- Parkplätze, Tracks, gespeicherte Touren ---------- */
+
+.parking-list,
+.track-list,
+.tour-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.parking-list li,
+.track-list li,
+.tour-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  font-size: 0.82rem;
+}
+
+.parking-list .item-label,
+.track-list .item-label,
+.tour-list .item-label {
+  cursor: pointer;
+}
+
+.parking-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.3rem;
+  height: 1.3rem;
+  border-radius: 4px;
+  background: #1d5fbf;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  flex: 0 0 auto;
+}
+
+.track-swatch {
+  width: 0.85rem;
+  height: 0.3rem;
+  border-radius: 2px;
+  flex: 0 0 auto;
+}
+
+.track-list input[type="checkbox"] {
+  accent-color: var(--green);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.item-action {
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0 0.15rem;
+}
+
+.item-action:hover {
+  color: var(--green);
+}
+
+/* ---------- Parkplatz-Marker ---------- */
+
+.parking-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 5px;
+  background: #1d5fbf;
+  border: 2px solid #fff;
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 700;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+.route-marker.start {
+  background: #b31212;
+  font-size: 0.7rem;
+}
+
+/* ---------- QR-Popup ---------- */
+
+.qr-popup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 200px;
+  text-align: center;
+}
+
+.qr-popup strong { text-align: left; }
+
+.qr-popup p {
+  margin: 0;
+  font-size: 0.78rem;
+  text-align: left;
+}
+
+.qr-coords {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.qr-controls {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.qr-controls select {
+  flex: 1;
+  min-width: 0;
+  padding: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.75rem;
+  background: var(--panel);
+}
+
+.qr-box {
+  display: flex;
+  justify-content: center;
+  padding: 0.3rem 0;
+}
+
+.qr-box svg {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.qr-hint {
+  color: var(--text-muted);
+  font-size: 0.72rem !important;
+  line-height: 1.3;
+}
+
+.qr-link {
+  font-size: 0.75rem;
+  color: var(--green-dark);
+}
+
 /* ---------- POI-Popup ---------- */
 
 .poi-popup {

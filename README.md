@@ -7,9 +7,13 @@ Build-Schritt und ohne eigenes Backend.
 ## Funktionen
 
 - **Interaktive Tourenplanung** – Klick auf die Karte setzt Routenpunkte,
-  die Route wird automatisch entlang echter Wege berechnet (OSRM,
-  Fußgänger-Profil). Punkte lassen sich auf der Karte verschieben, in der
-  Seitenleiste per Drag & Drop umsortieren und per Rechtsklick bzw. ✕ löschen.
+  die Route wird automatisch entlang echter Wanderwege berechnet (BRouter).
+  Punkte lassen sich auf der Karte verschieben, in der Seitenleiste per
+  Drag & Drop umsortieren und per Rechtsklick bzw. ✕ löschen.
+- **Wander-Routing mit einstellbarer Gewichtung** – Pfade, Fußwege, Forstwege,
+  Treppen und markierte Wanderwege werden bevorzugt, Straßen nur genutzt, wenn
+  sie sinnvoll verbinden. Die Gewichtung ist über Voreinstellungen und neun
+  Regler steuerbar (siehe unten).
 - **POIs** – eigener Modus zum Setzen von Markierungen mit Name und Notiz,
   verschiebbar und löschbar.
 - **Live-Statistiken** – Streckenlänge (echte Wegstrecke, keine Luftlinie),
@@ -38,6 +42,58 @@ Build-Schritt und ohne eigenes Backend.
 
 Alle API-Aufrufe laufen clientseitig im Browser; die App braucht keinen
 eigenen Server außer zum Ausliefern der statischen Dateien.
+
+## Wander-Routing und Gewichtung
+
+Die Route wird über **BRouter** berechnet. Anders als bei OSRM lässt sich dort
+ein eigenes Profil übergeben, sodass die Einstellungen der App tatsächlich die
+Wegekosten verändern und nicht nur die Anzeige filtern.
+
+**Kostenmodell:** Ein Weg mit Faktor 1,0 kostet genau seine Länge. Ein idealer
+Weg (bevorzugte Wegart, markiert, guter Untergrund) liegt bei 1,0; alles andere
+wird teurer. Gesperrte Wege bekommen sehr hohe Kosten statt eines harten
+Verbots – sie bleiben als letzte Verbindung nutzbar, werden aber praktisch nie
+gewählt.
+
+Typische Faktoren mit der Voreinstellung „Wanderfreundlich“:
+
+| Wegetyp | Faktor |
+| --- | --- |
+| markierter Pfad (`route=hiking`) | 1,0 |
+| Pfad / Fußweg / Forstweg | 1,5 |
+| Treppen, Fußgängerzone | 1,65 |
+| Wohnstraße / Servicestraße | 3,3–3,7 |
+| Landstraße (`tertiary`) | 5,8 |
+| `secondary` / `primary` | 8,5 / 12,8 |
+| `foot=no`, `access=no`, zu schwierig | 10 000 |
+| Autobahn / Schnellstraße | 100 000 |
+
+**Berücksichtigte OSM-Tags:** `highway`, `surface`, `tracktype`, `smoothness`,
+`sac_scale`, `trail_visibility`, `incline`, `foot`, `access` sowie die
+Wanderweg-Relationen `route=hiking` bzw. `route_hiking_iwn/nwn/rwn/lwn` und
+`route_foot_*`. Zusätzlich fließen echte Höhenmeter über BRouters SRTM-Daten in
+die Kosten ein, sobald „Steile Wege meiden“ aktiv ist.
+
+**Voreinstellungen:** Wanderfreundlich (Standard), Markierte Wanderwege,
+Schmale Pfade, Forst- und Feldwege, Leicht und sicher, Kürzeste Route.
+Sobald ein Regler von Hand verändert wird, wechselt die Auswahl auf
+„Eigene Einstellung“. Die Einstellungen bleiben im Browser gespeichert.
+
+**Regler (jeweils aus / leicht / mittel / stark):** Straßen meiden,
+Wanderwege bevorzugen, Markierte Wanderwege, Pfade bevorzugen, Forstwege
+bevorzugen, Asphalt meiden, Schlechte Oberfläche meiden, Steile Wege meiden,
+Schlecht sichtbare Pfade meiden. Dazu die maximale Schwierigkeit nach
+`sac_scale` (T1–T6) und ein Schalter für Treppen.
+
+**Falls BRouter ausfällt** weicht die App auf OSRM aus und weist deutlich
+darauf hin: Dieser Dienst folgt überwiegend Straßen und ignoriert die
+Gewichtung. Der Hinweis erscheint als Warnung und im Einstellungs-Panel.
+
+Ein Hinweis zur Vollständigkeit: Das ebenfalls gewünschte Tag `width`
+(Wegbreite) wertet BRouter nicht aus – es steht in seinem Tag-Katalog nicht zur
+Verfügung und kann deshalb nicht in die Kosten einfließen. Die Wegbreite wird
+indirekt über `highway=path` gegenüber `highway=track` und über `tracktype`
+abgebildet.
 
 ## Lokal starten
 
@@ -114,8 +170,9 @@ selbst braucht keine ausgehenden Verbindungen.
 | Dienst | Zweck |
 | --- | --- |
 | [OpenTopoMap](https://opentopomap.org) | Kartenkacheln |
-| [OSRM Demo-Server](https://project-osrm.org) | Routing entlang echter Wege (Foot-Profil) |
-| [Open-Elevation](https://open-elevation.com) | Höhendaten (primär) |
+| [BRouter](https://brouter.de) | Wander-Routing mit eigenem Profil (primär) |
+| [OSRM Demo-Server](https://project-osrm.org) | Routing-Fallback (folgt Straßen) |
+| [Open-Elevation](https://open-elevation.com) | Höhendaten, wenn der Router keine liefert |
 | [Open-Topo-Data](https://www.opentopodata.org) | Höhendaten (Fallback) |
 | [Nominatim](https://nominatim.org) | Ortssuche |
 
@@ -128,7 +185,8 @@ intensive Nutzung ggf. eigene Instanzen betreiben.
 index.html          – Markup und Layout
 css/style.css       – Gestaltung
 js/utils.js         – Hilfsfunktionen (Debounce, Distanz, Formatierung, …)
-js/routing.js       – OSRM-Anbindung
+js/profiles.js      – Wanderprofil für BRouter, Voreinstellungen und Gewichtung
+js/routing.js       – BRouter-Anbindung mit OSRM-Fallback
 js/elevation.js     – Höhen-Stützpunkte, Open-Elevation + Fallback, Hm-Berechnung
 js/gpx.js           – GPX-Erzeugung und Download
 js/stamps.js        – Stempelstellen: GPX-Import, localStorage, Duplikat-Erkennung

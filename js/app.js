@@ -11,6 +11,8 @@
     pois: [],           // [{id, lat, lng, name, note}]
     stamps: Stamps.load(), // [{id, lat, lng, name, note, collected}] – persistent
     tourSelection: [],  // Stempel-IDs, die in den Routenvorschlag sollen
+    routing: loadRoutingSettings(), // Gewichtung der Wegetypen
+    preset: localStorage.getItem('wanderplaner.preset') || 'wander',
     geometry: null,     // [[lng, lat], ...] der berechneten Route
     distance: 0,        // Meter
     samples: null,      // [{lat, lng, dist, ele}] Höhen-Stützpunkte
@@ -23,6 +25,31 @@
   let requestId = 0; // verwirft veraltete API-Antworten
   let chart = null;
   let dragIndex = null;
+
+  const SLIDER_KEYS = [
+    'avoidRoads', 'preferHiking', 'preferMarked', 'preferPaths', 'preferTracks',
+    'avoidPaved', 'avoidRoughSurface', 'avoidSteep', 'avoidBadVisibility',
+  ];
+  const SLIDER_LABELS = ['aus', 'leicht', 'mittel', 'stark'];
+
+  function loadRoutingSettings() {
+    try {
+      const raw = localStorage.getItem('wanderplaner.routing');
+      if (raw) return { ...Profiles.defaultSettings(), ...JSON.parse(raw) };
+    } catch (err) {
+      console.warn('Routing-Einstellungen konnten nicht geladen werden:', err);
+    }
+    return Profiles.defaultSettings();
+  }
+
+  function saveRoutingSettings() {
+    try {
+      localStorage.setItem('wanderplaner.routing', JSON.stringify(state.routing));
+      localStorage.setItem('wanderplaner.preset', state.preset);
+    } catch (err) {
+      console.warn('Routing-Einstellungen konnten nicht gespeichert werden:', err);
+    }
+  }
 
   const el = {
     status: document.getElementById('status'),
@@ -47,6 +74,12 @@
     tourCount: document.getElementById('tour-count'),
     suggest: document.getElementById('btn-suggest'),
     tourClear: document.getElementById('btn-tour-clear'),
+    preset: document.getElementById('rs-preset'),
+    presetBadge: document.getElementById('preset-badge'),
+    presetDescription: document.getElementById('preset-description'),
+    sacLimit: document.getElementById('rs-sacLimit'),
+    allowSteps: document.getElementById('rs-allowSteps'),
+    engineNote: document.getElementById('engine-note'),
     chartEmpty: document.getElementById('chart-empty'),
     searchForm: document.getElementById('search-form'),
     searchInput: document.getElementById('search-input'),
@@ -125,7 +158,7 @@
 
     showStatus('info', 'Berechne Route …');
     try {
-      const route = await Routing.fetchRoute(state.points);
+      const route = await Routing.fetchRoute(state.points, state.routing);
       if (id !== requestId) return; // inzwischen gab es eine neuere Änderung
 
       state.geometry = route.coordinates;
@@ -133,13 +166,32 @@
       MapView.renderRoute(state.geometry);
       updateStats();
       updateButtons();
-      hideStatus();
+      updateEngineNote(route.engine);
 
-      await loadElevation(id);
+      if (route.warning) showStatus('warn', route.warning, 10000);
+      else hideStatus();
+
+      if (route.elevations) {
+        // BRouter liefert die Höhen bereits mit – keine Extra-Abfrage nötig.
+        useRouteElevations(route.elevations);
+      } else {
+        await loadElevation(id);
+      }
     } catch (err) {
       if (id !== requestId) return;
       showStatus('error', `${err.message} Die Route wurde nicht aktualisiert.`);
     }
+  }
+
+  function useRouteElevations(elevations) {
+    const samples = Elevation.sampleAlongWithElevation(state.geometry, elevations);
+    state.samples = samples;
+    const { ascent, descent } = Elevation.computeAscentDescent(elevations);
+    state.ascent = ascent;
+    state.descent = descent;
+    MapView.setSamples(samples);
+    updateChart();
+    updateStats();
   }
 
   async function loadElevation(id) {
@@ -635,6 +687,113 @@
     showStatus('info', 'GPX-Datei wurde heruntergeladen.', 4000);
   }
 
+  /* ---------- Routing-Einstellungen ---------- */
+
+  function initRoutingUi() {
+    Object.entries(Profiles.PRESETS).forEach(([key, preset]) => {
+      const option = document.createElement('option');
+      option.value = key;
+      option.textContent = preset.label;
+      el.preset.appendChild(option);
+    });
+    const custom = document.createElement('option');
+    custom.value = 'custom';
+    custom.textContent = 'Eigene Einstellung';
+    el.preset.appendChild(custom);
+
+    el.preset.addEventListener('change', () => {
+      const preset = Profiles.PRESETS[el.preset.value];
+      if (preset) {
+        state.preset = el.preset.value;
+        state.routing = { ...preset.settings };
+        syncRoutingUi();
+        saveRoutingSettings();
+        scheduleRecalc();
+      }
+    });
+
+    SLIDER_KEYS.forEach((key) => {
+      const input = document.getElementById(`rs-${key}`);
+      input.addEventListener('input', () => {
+        state.routing[key] = Number(input.value);
+        markCustomPreset();
+        syncRoutingUi();
+      });
+      input.addEventListener('change', () => {
+        saveRoutingSettings();
+        scheduleRecalc();
+      });
+    });
+
+    el.sacLimit.addEventListener('change', () => {
+      state.routing.sacLimit = Number(el.sacLimit.value);
+      markCustomPreset();
+      syncRoutingUi();
+      saveRoutingSettings();
+      scheduleRecalc();
+    });
+
+    el.allowSteps.addEventListener('change', () => {
+      state.routing.allowSteps = el.allowSteps.checked;
+      markCustomPreset();
+      syncRoutingUi();
+      saveRoutingSettings();
+      scheduleRecalc();
+    });
+
+    syncRoutingUi();
+  }
+
+  /** Wechselt auf "Eigene Einstellung", sobald von einer Vorgabe abgewichen wird. */
+  function markCustomPreset() {
+    const preset = Profiles.PRESETS[state.preset];
+    if (!preset) return;
+    const matches = Object.entries(preset.settings).every(
+      ([key, value]) => state.routing[key] === value
+    );
+    if (!matches) state.preset = 'custom';
+  }
+
+  function syncRoutingUi() {
+    el.preset.value = state.preset;
+    const preset = Profiles.PRESETS[state.preset];
+    el.presetBadge.textContent = preset ? preset.label : 'Eigene Einstellung';
+    el.presetDescription.textContent = preset
+      ? preset.description
+      : 'Von Hand angepasste Gewichtung.';
+
+    SLIDER_KEYS.forEach((key) => {
+      const input = document.getElementById(`rs-${key}`);
+      input.value = state.routing[key];
+      input.parentElement.querySelector('output').textContent =
+        SLIDER_LABELS[state.routing[key]] || state.routing[key];
+    });
+    el.sacLimit.value = state.routing.sacLimit;
+    el.allowSteps.checked = Boolean(state.routing.allowSteps);
+
+    // Bei "Kürzeste Route" wirken die Gewichtungen bewusst nicht.
+    const disabled = Boolean(state.routing.shortest);
+    SLIDER_KEYS.forEach((key) => {
+      document.getElementById(`rs-${key}`).disabled = disabled;
+    });
+    el.allowSteps.disabled = disabled;
+  }
+
+  function updateEngineNote(engine) {
+    if (engine === 'brouter') {
+      el.engineNote.className = 'engine-note ok';
+      el.engineNote.textContent =
+        'Routing über BRouter – die Einstellungen wirken direkt auf die Wegekosten.';
+    } else if (engine === 'osrm') {
+      el.engineNote.className = 'engine-note warn';
+      el.engineNote.textContent =
+        'Ersatz-Routing über OSRM: folgt überwiegend Straßen, Einstellungen wirken nicht.';
+    } else {
+      el.engineNote.className = 'engine-note';
+      el.engineNote.textContent = '';
+    }
+  }
+
   /* ---------- Ortssuche (Nominatim) ---------- */
 
   async function searchPlace(query) {
@@ -677,6 +836,7 @@
     });
 
     initChart();
+    initRoutingUi();
 
     el.modeRoute.addEventListener('click', () => setMode('route'));
     el.modePoi.addEventListener('click', () => setMode('poi'));

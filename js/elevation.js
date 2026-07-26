@@ -49,6 +49,61 @@ const Elevation = {
   },
 
   /**
+   * Wie sampleAlong, nutzt aber Höhenwerte, die der Router bereits
+   * mitgeliefert hat (BRouter gibt je Stützpunkt eine Höhe zurück).
+   * Damit entfällt der Umweg über eine Elevation-API.
+   * @param {Array<[number,number]>} coordinates [lng, lat]-Paare
+   * @param {number[]} elevations Höhe je Koordinate
+   * @returns {Array<{lat:number, lng:number, dist:number, ele:number}>}
+   */
+  sampleAlongWithElevation(coordinates, elevations) {
+    const pts = coordinates.map((c, i) => ({
+      lat: c[1],
+      lng: c[0],
+      ele: elevations[i],
+    }));
+    if (pts.length === 0) return [];
+
+    const cum = [0];
+    for (let i = 1; i < pts.length; i++) {
+      cum.push(cum[i - 1] + Utils.haversine(pts[i - 1], pts[i]));
+    }
+    const total = cum[cum.length - 1];
+    if (total === 0) return [{ ...pts[0], dist: 0 }];
+
+    const n = Math.min(
+      this.MAX_SAMPLES,
+      Math.max(2, Math.floor(total / this.MIN_SPACING_M) + 1)
+    );
+
+    const samples = [];
+    let seg = 1;
+    for (let k = 0; k < n; k++) {
+      const target = (total * k) / (n - 1);
+      while (seg < cum.length - 1 && cum[seg] < target) seg++;
+      const segLen = cum[seg] - cum[seg - 1] || 1;
+      const t = (target - cum[seg - 1]) / segLen;
+      const a = pts[seg - 1];
+      const b = pts[seg];
+      samples.push({
+        lat: a.lat + (b.lat - a.lat) * t,
+        lng: a.lng + (b.lng - a.lng) * t,
+        ele: a.ele + (b.ele - a.ele) * t,
+        dist: target,
+      });
+    }
+    return samples;
+  },
+
+  /**
+   * Anstieg/Abstieg direkt aus der vollen Routengeometrie – genauer als
+   * über die ausgedünnten Stützpunkte des Diagramms.
+   */
+  ascentDescentFromRoute(elevations) {
+    return this.computeAscentDescent(elevations);
+  },
+
+  /**
    * Fragt Höhenwerte für alle Stützpunkte ab. Erst Open-Elevation,
    * bei Fehler/Timeout Open-Topo-Data als Fallback.
    * @returns {Promise<number[]>} Höhen in Metern, gleiche Länge wie samples

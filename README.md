@@ -39,12 +39,47 @@ python3 -m http.server 8000
 # dann http://localhost:8000 öffnen
 ```
 
+## Installation auf TrueNAS SCALE
+
+Zu jedem Release wird ein fertiges Docker-Image auf GHCR veröffentlicht
+(amd64 und arm64) – es muss nichts selbst gebaut werden:
+
+```
+ghcr.io/zendonir/wanderplaner:latest
+```
+
+**Als Custom App:**
+
+1. **Apps → Discover Apps → Custom App** (bzw. **⋮ → Install via YAML**)
+2. Einstellungen:
+   - **Image Repository:** `ghcr.io/zendonir/wanderplaner`
+   - **Image Tag:** `latest` (oder eine feste Version wie `1.0.0`)
+   - **Ports:** Container-Port `80` → Host-Port z. B. `8080`
+3. App starten – danach ist der Wanderplaner unter
+   `http://<truenas-ip>:8080` erreichbar.
+
+**Als YAML (Install via YAML / Dockge / Portainer):**
+
+```yaml
+services:
+  wanderplaner:
+    image: ghcr.io/zendonir/wanderplaner:latest
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+```
+
+Die App speichert nichts auf dem Server – es sind keine Volumes oder
+Datasets nötig. Updates: einfach das neue Image ziehen und den Container
+neu starten.
+
 ## Mit Docker betreiben
 
 Für den Dauerbetrieb (z. B. auf einem Heimserver/NAS):
 
 ```bash
-docker compose up -d
+docker compose up -d          # nutzt das fertige Image von GHCR
+docker compose up -d --build  # oder: lokal aus dem Repo bauen
 ```
 
 Die App ist dann unter `http://<host>:8080` erreichbar.

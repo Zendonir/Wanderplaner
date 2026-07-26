@@ -1,5 +1,8 @@
 services:
   wanderplaner:
+    # Fertiges Image von GHCR; wer das Repo ausgecheckt hat, kann mit
+    # `docker compose up -d --build` stattdessen lokal bauen.
+    image: ghcr.io/zendonir/wanderplaner:latest
     build: .
     container_name: wanderplaner
     ports:

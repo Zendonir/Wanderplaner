@@ -1,0 +1,88 @@
+name: Release
+
+# Baut bei jedem Versions-Tag (v1.0.0, v1.1.0, …) das Docker-Image,
+# veröffentlicht es auf GHCR und legt ein GitHub-Release an.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: QEMU einrichten (für arm64-Build)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Docker Buildx einrichten
+        uses: docker/setup-buildx-action@v3
+
+      - name: Bei GHCR anmelden
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image-Tags ableiten
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+
+      - name: Image bauen und pushen
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: GitHub-Release anlegen
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          body: |
+            ## 🥾 Wanderplaner ${{ github.ref_name }}
+
+            Fertiges Docker-Image (amd64 + arm64):
+
+            ```
+            ghcr.io/zendonir/wanderplaner:${{ github.ref_name }}
+            ```
+
+            (alternativ `:latest` für die jeweils neueste Version)
+
+            ### Installation auf TrueNAS SCALE
+
+            1. **Apps → Discover Apps → ⋮ → Install via YAML** (oder *Custom App*)
+            2. Bei *Custom App*:
+               - **Image Repository:** `ghcr.io/zendonir/wanderplaner`
+               - **Image Tag:** `latest`
+               - **Port:** Container-Port `80` → Host-Port z. B. `8080`
+            3. Danach ist die App unter `http://<truenas-ip>:8080` erreichbar.
+
+            Als YAML/Compose:
+
+            ```yaml
+            services:
+              wanderplaner:
+                image: ghcr.io/zendonir/wanderplaner:latest
+                ports:
+                  - "8080:80"
+                restart: unless-stopped
+            ```
+
+            Details und weitere Optionen: siehe README.

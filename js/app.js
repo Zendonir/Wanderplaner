@@ -103,6 +103,14 @@
     backupBtn: document.getElementById('btn-backup'),
     restoreBtn: document.getElementById('btn-restore'),
     restoreFile: document.getElementById('restore-file'),
+    startTime: document.getElementById('start-time'),
+    nowBtn: document.getElementById('btn-now'),
+    daylightNote: document.getElementById('daylight-note'),
+    alongSection: document.getElementById('section-along'),
+    alongRadius: document.getElementById('along-radius'),
+    alongCount: document.getElementById('along-count'),
+    alongList: document.getElementById('along-list'),
+    locate: document.getElementById('btn-locate'),
   };
 
   /* ---------- Sammlungen: speichern, löschen, abgleichen ---------- */
@@ -374,6 +382,8 @@
     el.time.textContent = state.distance > 0
       ? Utils.formatDuration(Utils.estimateWalkTime(state.distance, state.ascent, state.descent))
       : '–';
+    updateDaylight();
+    updateAlongRoute();
   }
 
   function updateButtons() {
@@ -1003,6 +1013,8 @@
     Sync.touch(stamp);
     persist('stamps');
     renderAll();
+    updateAlongRoute();
+    if (Geo.position) renderNearbyPrompt(Geo.position);
   }
 
   function toggleStampTour(id) {
@@ -1252,6 +1264,164 @@
     el.importHint.textContent = IMPORT_HINTS[el.importType.value] || '';
   }
 
+  /* ---------- Offline-Betrieb ---------- */
+
+  /**
+   * Meldet den Service Worker an, der Programmdateien und Kartenkacheln
+   * vorhält. Nur bei HTTPS oder localhost möglich; beim Öffnen der Datei
+   * per file:// entfällt er ersatzlos.
+   */
+  function registerServiceWorker() {
+    if (!('serviceWorker' in navigator)) return;
+    if (window.location.protocol === 'file:') return;
+
+    navigator.serviceWorker.register('sw.js').catch((err) => {
+      console.warn('Offline-Betrieb nicht verfügbar:', err);
+    });
+  }
+
+  /* ---------- Tageslicht ---------- */
+
+  /** Liest die eingestellte Startzeit; ohne Eingabe „jetzt“. */
+  function plannedStart() {
+    const value = el.startTime.value;
+    if (!value) return new Date();
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? new Date() : date;
+  }
+
+  function setStartTime(date) {
+    // datetime-local erwartet lokale Zeit ohne Zeitzone.
+    const pad = (n) => String(n).padStart(2, '0');
+    el.startTime.value =
+      `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+      `T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  }
+
+  function updateDaylight() {
+    const note = el.daylightNote;
+
+    if (state.points.length === 0 || state.distance === 0) {
+      note.className = 'daylight-note';
+      note.textContent = 'Route zeichnen, um die Gehzeit gegen den Sonnenuntergang zu prüfen.';
+      return;
+    }
+
+    const hours = Utils.estimateWalkTime(state.distance, state.ascent, state.descent);
+    const result = Daylight.check(plannedStart(), hours, state.points[0]);
+
+    note.className = `daylight-note ${result.level}`;
+    const icons = { ok: '☀', tight: '⚠', dark: '🌙', unknown: 'ℹ' };
+    note.textContent = `${icons[result.level] || ''} ${result.message}`;
+  }
+
+  /* ---------- Stempelstellen entlang der Route ---------- */
+
+  function updateAlongRoute() {
+    const section = el.alongSection;
+
+    if (!state.geometry) {
+      section.hidden = true;
+      MapView.highlightStamps([]);
+      return;
+    }
+
+    const radius = Number(el.alongRadius.value);
+    const found = Nearby.alongRoute(items('stamps'), state.geometry, radius);
+
+    section.hidden = false;
+    el.alongList.innerHTML = '';
+
+    const open = found.filter((s) => !s.collected).length;
+    el.alongCount.textContent = found.length === 0
+      ? 'keine gefunden'
+      : `${found.length} gefunden, davon ${open} offen`;
+
+    if (found.length === 0) {
+      const li = document.createElement('li');
+      li.className = 'list-empty';
+      li.textContent = 'Keine Stempelstelle in diesem Umkreis';
+      el.alongList.appendChild(li);
+      MapView.highlightStamps([]);
+      return;
+    }
+
+    found.forEach((stamp) => {
+      const li = document.createElement('li');
+      if (stamp.collected) li.classList.add('collected');
+
+      const check = document.createElement('input');
+      check.type = 'checkbox';
+      check.checked = Boolean(stamp.collected);
+      check.title = stamp.collected ? 'Als offen markieren' : 'Als erhalten markieren';
+      check.addEventListener('change', () => toggleStampCollected(stamp.id));
+
+      const label = document.createElement('span');
+      label.className = 'item-label';
+      label.textContent = stamp.name;
+      label.title = 'Auf der Karte zeigen';
+      label.addEventListener('click', () => {
+        MapView.setView(stamp.lat, stamp.lng, 15);
+        MapView.openStampPopup(stamp.id);
+      });
+
+      const detour = document.createElement('span');
+      detour.className = 'along-detour';
+      // Abstand zur Route und Position entlang der Strecke.
+      detour.textContent = stamp.detour < 30
+        ? 'direkt am Weg'
+        : `${Math.round(stamp.detour)} m ab`;
+      detour.title = `bei km ${(stamp.at / 1000).toFixed(1)} der Route`;
+
+      li.append(check, label, detour);
+      el.alongList.appendChild(li);
+    });
+
+    MapView.highlightStamps(found.map((s) => s.id));
+  }
+
+  /* ---------- Standort ---------- */
+
+  function toggleLocate() {
+    if (Geo.running) {
+      Geo.stop();
+      MapView.clearPosition();
+      el.locate.classList.remove('active');
+      el.locate.textContent = '📍 Standort';
+      renderNearbyPrompt(null);
+      return;
+    }
+
+    const started = Geo.start(
+      (pos) => {
+        MapView.showPosition(pos);
+        el.locate.classList.add('active');
+        el.locate.textContent = '📍 aktiv';
+        renderNearbyPrompt(pos);
+      },
+      (message) => {
+        showStatus('warn', message, 8000);
+        el.locate.classList.remove('active');
+        el.locate.textContent = '📍 Standort';
+      }
+    );
+    if (started) el.locate.textContent = '📍 suche …';
+  }
+
+  /**
+   * Zeigt Stempelstellen in Reichweite des aktuellen Standorts als
+   * Kartenmeldung mit direktem Haken.
+   */
+  function renderNearbyPrompt(position) {
+    if (!position) {
+      MapView.setNearbyPanel(null);
+      return;
+    }
+    const near = Nearby.aroundPosition(items('stamps'), position, 250)
+      .filter((s) => !s.collected);
+    MapView.setNearbyPanel(near, (id) => toggleStampCollected(id));
+  }
+
   /* ---------- Linke Seitenleiste ---------- */
 
   function setLibraryOpen(open) {
@@ -1408,6 +1578,16 @@
     el.suggest.addEventListener('click', suggestRoute);
     el.tourClear.addEventListener('click', clearTourSelection);
 
+    setStartTime(new Date());
+    el.startTime.addEventListener('change', updateDaylight);
+    el.nowBtn.addEventListener('click', () => {
+      setStartTime(new Date());
+      updateDaylight();
+    });
+    el.alongRadius.addEventListener('change', updateAlongRoute);
+    el.locate.addEventListener('click', toggleLocate);
+    if (!Geo.supported) el.locate.hidden = true;
+
     el.libraryToggle.addEventListener('click', toggleLibrary);
     setLibraryOpen(localStorage.getItem('wanderplaner.library') !== 'closed');
 
@@ -1430,6 +1610,7 @@
 
     // Abgleich im Hintergrund starten – die App ist sofort bedienbar.
     initSync();
+    registerServiceWorker();
   }
 
   document.addEventListener('DOMContentLoaded', init);

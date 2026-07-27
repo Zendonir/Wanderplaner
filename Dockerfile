@@ -13,6 +13,9 @@ WORKDIR /app
 COPY index.html /app/public/
 COPY css /app/public/css
 COPY js /app/public/js
+COPY vendor /app/public/vendor
+COPY icons /app/public/icons
+COPY manifest.webmanifest sw.js /app/public/
 
 # Sync-Dienst
 COPY server /app/server

@@ -738,6 +738,198 @@ body {
   color: var(--text-muted);
 }
 
+/* ---------- Tageslicht ---------- */
+
+.daylight-row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  margin-bottom: 0.4rem;
+}
+
+.field-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  flex: 1;
+  min-width: 0;
+}
+
+.field-inline input,
+.field-inline select {
+  flex: 1;
+  min-width: 0;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font-size: 0.8rem;
+  font-family: inherit;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.daylight-row button {
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--panel);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.daylight-row button:hover {
+  background: #eef1ec;
+}
+
+.daylight-note {
+  font-size: 0.78rem;
+  line-height: 1.4;
+  padding: 0.4rem 0.55rem;
+  border-radius: 5px;
+  background: var(--bg);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.daylight-note.ok    { background: #e7f0e9; color: var(--green-dark); border-color: #c3dbc9; }
+.daylight-note.tight { background: #fdf3dd; color: #8a6100; border-color: #e8d6a8; }
+.daylight-note.dark  { background: #fbe4e1; color: var(--red); border-color: #f0c4bd; }
+
+/* ---------- Stempelstellen an der Route ---------- */
+
+.along-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.along-count {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.along-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.along-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  font-size: 0.8rem;
+}
+
+.along-list li.collected .item-label {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.along-list input[type="checkbox"] {
+  accent-color: var(--green);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.along-list .item-label { cursor: pointer; }
+
+.along-detour {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* Stempel an der geplanten Route hervorheben. */
+.stamp-marker.along {
+  box-shadow: 0 0 0 3px rgba(192, 57, 43, 0.85), 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+/* ---------- Standort ---------- */
+
+.locate-toggle {
+  padding: 0.3rem 0.6rem;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 5px;
+  background: transparent;
+  color: #fff;
+  font-size: 0.78rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.locate-toggle:hover { background: rgba(255, 255, 255, 0.15); }
+
+.locate-toggle.active {
+  background: #fff;
+  color: var(--green-dark);
+  border-color: #fff;
+  font-weight: 600;
+}
+
+.position-marker {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #1d5fbf;
+  border: 3px solid #fff;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.5);
+}
+
+.nearby-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 0.6rem;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+  font-size: 0.82rem;
+  max-width: 300px;
+}
+
+.nearby-panel strong {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.8rem;
+}
+
+.nearby-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.nearby-row span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nearby-row button {
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--green);
+  border-radius: 5px;
+  background: var(--green);
+  color: #fff;
+  font-size: 0.75rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.nearby-row button:hover { background: var(--green-dark); }
+
 /* ---------- Abgleich und Sicherung ---------- */
 
 .sync-section {

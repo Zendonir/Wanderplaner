@@ -15,6 +15,12 @@ const MapView = (function () {
   let stampMarkers = new Map();
   let parkingMarkers = new Map();
   let trackLines = new Map();
+  let highlighted = new Set(); // Stempel an der aktuellen Route
+  let positionMarker = null;
+  let accuracyCircle = null;
+  let nearbyControl = null;
+  let lastStamps = [];
+  let lastSelection = [];
   let samples = null; // Höhen-Stützpunkte für die Hover-Zuordnung
 
   function init(callbacks) {
@@ -147,7 +153,8 @@ const MapView = (function () {
     const classes =
       'stamp-marker' +
       (stamp.collected ? ' collected' : '') +
-      (selected ? ' selected' : '');
+      (selected ? ' selected' : '') +
+      (highlighted.has(stamp.id) ? ' along' : '');
     return L.divIcon({
       className: '',
       html: `<div class="${classes}">${stamp.collected ? '✓' : 'S'}</div>`,
@@ -210,6 +217,8 @@ const MapView = (function () {
   }
 
   function renderStamps(stamps, selectedIds) {
+    lastStamps = stamps;
+    lastSelection = selectedIds;
     stampMarkers.forEach((m) => map.removeLayer(m));
     stampMarkers = new Map();
 
@@ -228,6 +237,94 @@ const MapView = (function () {
   function openStampPopup(id) {
     const marker = stampMarkers.get(id);
     if (marker) marker.openPopup();
+  }
+
+  /** Hebt die Stempelstellen an der aktuellen Route hervor. */
+  function highlightStamps(ids) {
+    const next = new Set(ids);
+    // Nur neu zeichnen, wenn sich die Menge wirklich geändert hat.
+    if (next.size === highlighted.size && [...next].every((id) => highlighted.has(id))) {
+      return;
+    }
+    highlighted = next;
+    if (lastStamps.length > 0) renderStamps(lastStamps, lastSelection);
+  }
+
+  /* ---------- Eigener Standort ---------- */
+
+  function showPosition(pos) {
+    const latlng = [pos.lat, pos.lng];
+    if (!positionMarker) {
+      positionMarker = L.marker(latlng, {
+        icon: L.divIcon({
+          className: '',
+          html: '<div class="position-marker"></div>',
+          iconSize: [18, 18],
+          iconAnchor: [9, 9],
+        }),
+        interactive: false,
+        zIndexOffset: 1000,
+      }).addTo(map);
+      accuracyCircle = L.circle(latlng, {
+        radius: pos.accuracy,
+        color: '#1d5fbf',
+        weight: 1,
+        fillColor: '#1d5fbf',
+        fillOpacity: 0.12,
+        interactive: false,
+      }).addTo(map);
+      map.setView(latlng, Math.max(map.getZoom(), 15));
+    } else {
+      positionMarker.setLatLng(latlng);
+      accuracyCircle.setLatLng(latlng).setRadius(pos.accuracy);
+    }
+  }
+
+  function clearPosition() {
+    if (positionMarker) { map.removeLayer(positionMarker); positionMarker = null; }
+    if (accuracyCircle) { map.removeLayer(accuracyCircle); accuracyCircle = null; }
+  }
+
+  /**
+   * Feld über der Karte mit Stempelstellen in Reichweite – gedacht für
+   * unterwegs am Handy, wo die Seitenleiste zu weit weg ist.
+   */
+  function setNearbyPanel(stamps, onCollect) {
+    if (nearbyControl) {
+      map.removeControl(nearbyControl);
+      nearbyControl = null;
+    }
+    if (!stamps || stamps.length === 0) return;
+
+    const control = L.control({ position: 'bottomleft' });
+    control.onAdd = () => {
+      const div = L.DomUtil.create('div', 'nearby-panel');
+      L.DomEvent.disableClickPropagation(div);
+
+      const title = document.createElement('strong');
+      title.textContent = stamps.length === 1
+        ? 'Eine Stempelstelle in der Nähe'
+        : `${stamps.length} Stempelstellen in der Nähe`;
+      div.appendChild(title);
+
+      stamps.slice(0, 4).forEach((stamp) => {
+        const row = document.createElement('div');
+        row.className = 'nearby-row';
+
+        const name = document.createElement('span');
+        name.textContent = `${stamp.name} · ${Math.round(stamp.distance)} m`;
+
+        const button = document.createElement('button');
+        button.textContent = '✓ erhalten';
+        button.addEventListener('click', () => onCollect(stamp.id));
+
+        row.append(name, button);
+        div.appendChild(row);
+      });
+      return div;
+    };
+    control.addTo(map);
+    nearbyControl = control;
   }
 
   /* ---------- Parkplätze mit QR-Code ---------- */
@@ -508,6 +605,10 @@ const MapView = (function () {
     openStampPopup,
     openParkingPopup,
     openStartQr,
+    highlightStamps,
+    showPosition,
+    clearPosition,
+    setNearbyPanel,
     fitTo,
     setView,
     invalidateSize,

@@ -62,6 +62,20 @@ denselben Datenstand sehen.
 - **Ortssuche** – Sprung zu einem Ort über Nominatim/OpenStreetMap.
 - **Karte** – OpenTopoMap-Kacheln, ideal für Wanderungen.
 
+- **Stempelstellen an der Route** – sobald eine Route berechnet ist, listet
+  die App alle Stempelstellen im wählbaren Umkreis (200 m bis 2 km) auf,
+  sortiert in Gehrichtung und mit Abstand zum Weg. Sie lassen sich direkt
+  dort abhaken und sind auf der Karte hervorgehoben.
+- **Standort und Abhaken vor Ort** – der eigene Standort erscheint mit
+  Genauigkeitskreis auf der Karte; Stempelstellen in Reichweite werden über
+  der Karte eingeblendet und lassen sich mit einem Tipp als erhalten
+  markieren. Gedacht für unterwegs am Handy.
+- **Tageslicht-Warnung** – aus Startzeit, Gehzeit und Sonnenuntergang am
+  Startpunkt wird berechnet, ob die Tour im Hellen zu schaffen ist. Die
+  Berechnung läuft ohne Netz.
+- **Offline nutzbar (PWA)** – die App lässt sich auf dem Homescreen
+  installieren und startet ohne Netz. Programmdateien und bereits
+  betrachtete Kartenkacheln bleiben gespeichert.
 - **Geräteübergreifender Abgleich** – die Sammlung liegt im Container und ist
   auf Laptop, Handy und Tablet gleich. Zusätzlich lässt sich alles als Datei
   sichern und wieder einlesen (siehe unten).
@@ -231,6 +245,14 @@ js/places.js        – Stempelstellen und Parkplätze: GPX-Import, localStorage
 js/tracks.js        – hinterlegte Touren: GPX-Spuren, Ausdünnung, Speicherung
 js/tours.js         – benannte Planungen speichern und laden
 js/sync.js          – Abgleich mit dem Server, Sicherung als Datei
+js/daylight.js      – Sonnenauf-/untergang (NOAA), Tageslicht-Prüfung
+js/nearby.js        – Punkte entlang einer Route bzw. um eine Position
+js/geo.js           – eigener Standort über die Geolocation-Schnittstelle
+sw.js               – Service Worker für den Offline-Betrieb
+manifest.webmanifest– Angaben zur Installation als App
+vendor/             – Leaflet und Chart.js (lokal, damit offline nutzbar)
+icons/              – App-Symbole
+tools/make-icons.js – erzeugt die Symbole neu (nur bei Änderungen nötig)
 server/server.js    – Sync-Dienst und Auslieferung der Dateien (ohne Abhängigkeiten)
 js/mapview.js       – gesamte Leaflet-/Kartenlogik
 js/app.js           – Zustand, UI-Rendering, Orchestrierung
@@ -241,8 +263,27 @@ docker-compose.yml  – Betrieb inkl. Healthcheck und Restart-Policy
 ## Technik
 
 - Vanilla JavaScript, HTML und CSS – kein Build-Schritt, keine npm-Abhängigkeiten
-- [Leaflet](https://leafletjs.com/) für die Karte, [Chart.js](https://www.chartjs.org/) für das Höhenprofil (beide via CDN)
-- QR-Codes werden ohne Bibliothek erzeugt, damit sie auch offline funktionieren
+- [Leaflet](https://leafletjs.com/) für die Karte, [Chart.js](https://www.chartjs.org/) für
+  das Höhenprofil – beide liegen unter `vendor/` im Repository statt bei einem CDN,
+  damit die App auch ohne Internetzugang startet
+- QR-Codes und Sonnenzeiten werden ohne Bibliothek berechnet
+
+## Unterwegs nutzen
+
+**Als App installieren:** Die Seite im Browser öffnen und „Zum Home-Bildschirm“
+(iPhone: Teilen-Menü) bzw. „App installieren“ (Android/Chrome) wählen. Danach
+startet der Wanderplaner wie eine eigene App im Vollbild.
+
+**Offline:** Programmdateien und bereits angezeigte Kartenkacheln bleiben
+gespeichert – wer die Tourgegend vorher einmal auf der Karte betrachtet hat,
+sieht sie später auch ohne Empfang. Neue Routen berechnen und Höhenprofile
+abrufen geht offline naturgemäß nicht; die gespeicherten Stempelstellen lassen
+sich aber abhaken, und der Abgleich holt das nach, sobald wieder Netz da ist.
+
+**Standort:** Der Knopf „📍 Standort“ zeigt die eigene Position. Das setzt eine
+verschlüsselte Verbindung voraus (HTTPS) – hinter einem Reverse Proxy mit
+Zertifikat ist das gegeben, bei direktem Zugriff über `http://<ip>:8080`
+verweigern die Browser den Zugriff. Die App sagt es, wenn das der Fall ist.
 
 ## Geräteübergreifender Abgleich
 

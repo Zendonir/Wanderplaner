@@ -279,6 +279,30 @@ Für eine Custom App führen drei Wege zum Ziel:
    Verzeichnis der App, oder `docker pull ghcr.io/zendonir/wanderplaner:latest`
    und die App danach in der Oberfläche neu starten.
 
+### Wenn TrueNAS „Failed 'up' action" meldet
+
+Die Meldung kommt von `docker compose up` und sagt für sich genommen wenig.
+Der eigentliche Grund steht im Log:
+
+```bash
+tail -n 40 /var/log/app_lifecycle.log
+```
+
+Die beiden häufigsten Ursachen:
+
+- **Das Image-Tag gibt es (noch) nicht.** Ein Tippfehler in der Version oder
+  eine Version, die gerade erst gebaut wird, führt zu `manifest unknown`.
+  Welche Versionen es gibt, steht unter
+  [Releases](https://github.com/Zendonir/Wanderplaner/releases); zur Not
+  `:latest` eintragen.
+- **Der Docker-Socket wird abgelehnt.** Je nach TrueNAS-Version sind
+  Host-Pfade außerhalb der Pools nicht erlaubt, dann scheitert die Zeile
+  `- /var/run/docker.sock:/var/run/docker.sock`. Sie ist nur für den
+  Update-Knopf nötig – ohne sie läuft alles andere unverändert.
+
+Im Zweifel erst die abgespeckte Fassung deployen (nur Image, Port, Volume)
+und die Zusätze einzeln wieder hinzunehmen.
+
 ### Aktualisieren – warum ein Neustart nicht reicht
 
 Ein Neustart startet **dasselbe Image** noch einmal. Damit eine neue Version

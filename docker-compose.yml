@@ -6,11 +6,17 @@ services:
     build: .
     container_name: wanderplaner
     ports:
-      - "${WANDERPLANER_PORT:-8080}:80"
+      - "${WANDERPLANER_PORT:-8080}:8080"
+    volumes:
+      # Stempelstellen, Parkplätze und Touren – geräteübergreifend.
+      - wanderplaner-data:/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/api/health"]
       interval: 30s
       timeout: 5s
       start_period: 5s
       retries: 3
+
+volumes:
+  wanderplaner-data:

@@ -14,7 +14,7 @@ const Tours = {
       if (!raw) return [];
       const data = JSON.parse(raw);
       if (!Array.isArray(data.items)) return [];
-      return data.items.filter((t) => Array.isArray(t.points));
+      return data.items.filter((t) => t.deletedAt || Array.isArray(t.points));
     } catch (err) {
       console.warn('Gespeicherte Touren konnten nicht geladen werden:', err);
       return [];
@@ -37,6 +37,7 @@ const Tours = {
       id: Utils.uid(),
       name,
       savedAt: new Date().toISOString(),
+      updatedAt: Date.now(),
       distance: Math.round(state.distance || 0),
       points: state.points.map((p) => ({ lat: p.lat, lng: p.lng })),
       pois: state.pois.map((p) => ({

@@ -14,6 +14,7 @@
   --text: #26302a;
   --text-muted: #6b7568;
   --sidebar-width: 350px;
+  --library-width: 320px;
   --profile-height: 230px;
 }
 
@@ -46,6 +47,32 @@ body {
   font-weight: 600;
   white-space: nowrap;
 }
+
+.library-toggle {
+  padding: 0.3rem 0.6rem;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 5px;
+  background: transparent;
+  color: #fff;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.library-toggle:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.sync-badge {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.16);
+  white-space: nowrap;
+}
+
+.sync-badge.offline { background: rgba(0, 0, 0, 0.28); }
+.sync-badge.busy    { background: rgba(255, 255, 255, 0.3); }
 
 .search-form {
   display: flex;
@@ -80,16 +107,41 @@ body {
   flex: 1 1 auto;
   min-height: 0;
   display: grid;
-  grid-template-columns: 1fr var(--sidebar-width);
+  grid-template-columns: var(--library-width) 1fr var(--sidebar-width);
   grid-template-rows: 1fr var(--profile-height);
   grid-template-areas:
-    "map sidebar"
-    "profile sidebar";
+    "library map sidebar"
+    "library profile sidebar";
+  transition: grid-template-columns 0.2s ease;
+}
+
+/* Eingeklappte Sammlung: Spalte auf null, Inhalt ausgeblendet. */
+.layout.library-collapsed {
+  grid-template-columns: 0 1fr var(--sidebar-width);
+}
+
+.layout.library-collapsed .library {
+  display: none;
+}
+
+.library {
+  grid-area: library;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  padding: 0.75rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
 }
 
 .map-panel {
   grid-area: map;
   min-height: 200px;
+  /* Ohne min-width:0 wächst die 1fr-Spalte mit ihrem Inhalt und schiebt die
+     rechte Seitenleiste aus dem Fenster. */
+  min-width: 0;
 }
 
 .sidebar {
@@ -101,6 +153,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  min-width: 0;
 }
 
 .profile-panel {
@@ -111,6 +164,7 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
 }
 
 /* ---------- Statusmeldungen ---------- */
@@ -684,6 +738,50 @@ body {
   color: var(--text-muted);
 }
 
+/* ---------- Abgleich und Sicherung ---------- */
+
+.sync-section {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem;
+  background: var(--bg);
+}
+
+.sync-status {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+  margin-bottom: 0.45rem;
+}
+
+.sync-status.ok      { color: var(--green-dark); }
+.sync-status.offline { color: #8a6100; }
+
+.sync-actions {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.sync-actions button {
+  flex: 1;
+  padding: 0.3rem 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--panel);
+  font-size: 0.75rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.sync-actions button:hover:not(:disabled) {
+  background: #eef1ec;
+}
+
+.sync-actions button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 /* ---------- Tourname, Rundkurs ---------- */
 
 .tour-name-row {
@@ -935,8 +1033,41 @@ body {
 
 /* ---------- Responsive ---------- */
 
-@media (max-width: 900px) {
+/* Auf schmaleren Laptops zuerst die Sammlung schmaler machen. */
+@media (max-width: 1400px) {
+  :root {
+    --library-width: 280px;
+    --sidebar-width: 320px;
+  }
+}
+
+@media (max-width: 1100px) {
   .layout {
+    grid-template-columns: 1fr var(--sidebar-width);
+    grid-template-areas:
+      "map sidebar"
+      "profile sidebar";
+  }
+
+  /* Die Sammlung legt sich als Überlagerung über die Karte. */
+  .library {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 300px;
+    z-index: 1200;
+    box-shadow: 2px 0 12px rgba(0, 0, 0, 0.2);
+  }
+
+  .layout {
+    position: relative;
+  }
+}
+
+@media (max-width: 900px) {
+  .layout,
+  .layout.library-collapsed {
     grid-template-columns: 1fr;
     grid-template-rows: 55vh var(--profile-height) auto;
     grid-template-areas:
@@ -952,5 +1083,9 @@ body {
 
   .search-form input {
     width: 150px;
+  }
+
+  .topbar h1 {
+    font-size: 1rem;
   }
 }

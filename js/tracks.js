@@ -18,7 +18,10 @@ const Tracks = {
       if (!raw) return [];
       const data = JSON.parse(raw);
       if (!Array.isArray(data.items)) return [];
-      return data.items.filter((t) => Array.isArray(t.points) && t.points.length > 1);
+      // Grabsteine mitführen, damit gelöschte Touren nicht zurückkehren.
+      return data.items.filter(
+        (t) => t.deletedAt || (Array.isArray(t.points) && t.points.length > 1)
+      );
     } catch (err) {
       console.warn('Hinterlegte Touren konnten nicht geladen werden:', err);
       return [];
@@ -148,6 +151,7 @@ const Tracks = {
       date: new Date().toISOString().slice(0, 10),
       color: this.COLORS[existingCount % this.COLORS.length],
       visible: true,
+      updatedAt: Date.now(),
       length: Math.round(this.length(track.points)),
       points: simplified.map((p) => [round(p.lat), round(p.lng)]),
     };

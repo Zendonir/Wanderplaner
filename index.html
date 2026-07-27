@@ -9,16 +9,84 @@
 </head>
 <body>
   <header class="topbar">
+    <button id="btn-library" class="library-toggle" title="Sammlung ein-/ausblenden" aria-expanded="true">☰</button>
     <h1>🥾 Wanderplaner</h1>
+    <span id="sync-badge" class="sync-badge" title="Abgleich mit dem Server"></span>
     <form id="search-form" class="search-form" autocomplete="off">
       <input type="text" id="search-input" placeholder="Ort suchen (z. B. Zugspitze)">
       <button type="submit" title="Ort suchen">🔍</button>
     </form>
   </header>
 
-  <main class="layout">
+  <main class="layout" id="layout">
+    <!-- Linke Seitenleiste: alles, was zur Sammlung gehört und nicht direkt
+         zur aktuellen Routenplanung. -->
+    <aside class="library" id="library">
+      <section class="sync-section">
+        <div class="sync-status" id="sync-status">Abgleich wird geprüft …</div>
+        <div class="sync-actions">
+          <button id="btn-sync" title="Jetzt mit dem Server abgleichen">⟳ Abgleichen</button>
+          <button id="btn-backup" title="Gesamte Sammlung als Datei sichern">⬇ Sichern</button>
+          <button id="btn-restore" title="Sicherung einlesen">⬆ Laden</button>
+          <input type="file" id="restore-file" accept=".json,application/json" hidden>
+        </div>
+      </section>
+
+      <section class="list-section">
+        <h2>GPX importieren</h2>
+        <div class="import-row">
+          <select id="import-type" title="Art des GPX-Imports">
+            <option value="stempel">Stempelstellen</option>
+            <option value="parkplatz">Parkplätze</option>
+            <option value="track">Abgeschlossene Tour</option>
+            <option value="poi">POIs</option>
+          </select>
+          <button id="btn-import">⬆ Datei wählen</button>
+          <input type="file" id="import-file" accept=".gpx,application/gpx+xml" hidden multiple>
+        </div>
+        <p class="hint" id="import-hint"></p>
+      </section>
+
+      <section class="list-section" id="section-tours">
+        <h2>Gespeicherte Touren</h2>
+        <ul id="tour-list" class="tour-list"></ul>
+      </section>
+
+      <section class="list-section" id="section-tracks">
+        <h2>Hinterlegte Touren</h2>
+        <ul id="track-list" class="track-list"></ul>
+      </section>
+
+      <section class="list-section" id="section-parking">
+        <h2>Parkplätze</h2>
+        <p class="hint">Klick auf einen Parkplatz-Marker zeigt einen QR-Code –
+          abgescannt öffnet sich die Karten-App des Handys an dieser Stelle.</p>
+        <ul id="parking-list" class="parking-list"></ul>
+      </section>
+
+      <section class="list-section">
+        <h2>Stempelstellen</h2>
+        <p class="hint stamp-counter" id="stamp-counter">Noch keine Stempelstellen importiert</p>
+        <div class="stamp-tools">
+          <input type="text" id="stamp-search" placeholder="Stempelstelle suchen …">
+          <select id="stamp-filter">
+            <option value="all">Alle</option>
+            <option value="open">Offen</option>
+            <option value="collected">Erhalten</option>
+          </select>
+        </div>
+        <div class="tour-bar">
+          <span id="tour-count">0 für Tour ausgewählt</span>
+          <button id="btn-suggest" disabled title="Ausgewählte Stempelstellen in optimierter Reihenfolge zu einer Route verbinden">Route vorschlagen</button>
+          <button id="btn-tour-clear" disabled>Auswahl leeren</button>
+        </div>
+        <ul id="stamp-list" class="stamp-list"></ul>
+      </section>
+    </aside>
+
     <div id="map" class="map-panel"></div>
 
+    <!-- Rechte Seitenleiste: die aktuelle Routenplanung. -->
     <aside class="sidebar">
       <div id="status" class="status hidden"></div>
 
@@ -150,57 +218,6 @@
         <ul id="poi-list" class="poi-list"></ul>
       </section>
 
-      <section class="list-section">
-        <h2>GPX importieren</h2>
-        <div class="import-row">
-          <select id="import-type" title="Art des GPX-Imports">
-            <option value="stempel">Stempelstellen</option>
-            <option value="parkplatz">Parkplätze</option>
-            <option value="track">Abgeschlossene Tour</option>
-            <option value="poi">POIs</option>
-          </select>
-          <button id="btn-import">⬆ Datei wählen</button>
-          <input type="file" id="import-file" accept=".gpx,application/gpx+xml" hidden multiple>
-        </div>
-        <p class="hint" id="import-hint"></p>
-      </section>
-
-      <section class="list-section" id="section-tours">
-        <h2>Gespeicherte Touren</h2>
-        <ul id="tour-list" class="tour-list"></ul>
-      </section>
-
-      <section class="list-section" id="section-tracks">
-        <h2>Hinterlegte Touren</h2>
-        <ul id="track-list" class="track-list"></ul>
-      </section>
-
-      <section class="list-section" id="section-parking">
-        <h2>Parkplätze</h2>
-        <p class="hint">Klick auf einen Parkplatz-Marker zeigt einen QR-Code –
-          abgescannt öffnet sich die Karten-App des Handys an dieser Stelle.</p>
-        <ul id="parking-list" class="parking-list"></ul>
-      </section>
-
-      <section class="list-section">
-        <h2>Stempelstellen</h2>
-        <p class="hint stamp-counter" id="stamp-counter">Noch keine Stempelstellen importiert</p>
-        <div class="stamp-tools">
-          <input type="text" id="stamp-search" placeholder="Stempelstelle suchen …">
-          <select id="stamp-filter">
-            <option value="all">Alle</option>
-            <option value="open">Offen</option>
-            <option value="collected">Erhalten</option>
-          </select>
-        </div>
-        <div class="tour-bar">
-          <span id="tour-count">0 für Tour ausgewählt</span>
-          <button id="btn-suggest" disabled title="Ausgewählte Stempelstellen in optimierter Reihenfolge zu einer Route verbinden">Route vorschlagen</button>
-          <button id="btn-tour-clear" disabled>Auswahl leeren</button>
-        </div>
-        <ul id="stamp-list" class="stamp-list"></ul>
-      </section>
-
       <button id="btn-export" class="export-btn" disabled>⬇ Route exportieren (GPX)</button>
     </aside>
 
@@ -224,6 +241,7 @@
   <script src="js/gpx.js"></script>
   <script src="js/qrcode.js"></script>
   <script src="js/maplinks.js"></script>
+  <script src="js/sync.js"></script>
   <script src="js/places.js"></script>
   <script src="js/tracks.js"></script>
   <script src="js/tours.js"></script>

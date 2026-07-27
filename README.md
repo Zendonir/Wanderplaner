@@ -1,8 +1,9 @@
 # 🥾 Wanderplaner
 
 Interaktive Web-App zur Planung von Wanderrouten – mit Routing entlang echter
-Wege, Live-Höhenprofil, POIs und GPX-Export. Läuft komplett im Browser, ohne
-Build-Schritt und ohne eigenes Backend.
+Wanderwege, Live-Höhenprofil, Stempelstellen, POIs und GPX-Export. Kein
+Build-Schritt; im Container sorgt ein schlanker Dienst dafür, dass alle Geräte
+denselben Datenstand sehen.
 
 ## Funktionen
 
@@ -61,8 +62,15 @@ Build-Schritt und ohne eigenes Backend.
 - **Ortssuche** – Sprung zu einem Ort über Nominatim/OpenStreetMap.
 - **Karte** – OpenTopoMap-Kacheln, ideal für Wanderungen.
 
-Alle API-Aufrufe laufen clientseitig im Browser; die App braucht keinen
-eigenen Server außer zum Ausliefern der statischen Dateien.
+- **Geräteübergreifender Abgleich** – die Sammlung liegt im Container und ist
+  auf Laptop, Handy und Tablet gleich. Zusätzlich lässt sich alles als Datei
+  sichern und wieder einlesen (siehe unten).
+- **Einklappbare Sammlung** – links liegen Import, Touren, Parkplätze und
+  Stempelstellen, rechts die aktuelle Planung. Über ☰ oben links lässt sich
+  die linke Leiste ausblenden, wenn die Karte mehr Platz braucht.
+
+Alle Karten-, Routing- und Höhenabfragen laufen clientseitig im Browser – der
+Container braucht dafür keine ausgehenden Verbindungen.
 
 ## Wander-Routing und Gewichtung
 
@@ -142,7 +150,8 @@ ghcr.io/zendonir/wanderplaner:latest
 2. Einstellungen:
    - **Image Repository:** `ghcr.io/zendonir/wanderplaner`
    - **Image Tag:** `latest` (oder eine feste Version wie `1.0.0`)
-   - **Ports:** Container-Port `80` → Host-Port z. B. `8080`
+   - **Ports:** Container-Port `8080` → Host-Port z. B. `8080`
+   - **Storage:** Host-Pfad oder Dataset auf `/data` einhängen
 3. App starten – danach ist der Wanderplaner unter
    `http://<truenas-ip>:8080` erreichbar.
 
@@ -153,13 +162,19 @@ services:
   wanderplaner:
     image: ghcr.io/zendonir/wanderplaner:latest
     ports:
-      - "8080:80"
+      - "8080:8080"
+    volumes:
+      # Ohne dieses Volume gehen Stempelstellen und Touren beim Neustart verloren.
+      - /mnt/tank/wanderplaner:/data
     restart: unless-stopped
 ```
 
-Die App speichert nichts auf dem Server – es sind keine Volumes oder
-Datasets nötig. Updates: einfach das neue Image ziehen und den Container
-neu starten.
+**Wichtig:** Ab Version 2.0 braucht die App ein Volume für den
+geräteübergreifenden Abgleich. Bei *Custom App* unter **Storage** einen
+Host-Pfad oder ein Dataset auf **`/data`** einhängen – sonst gehen die
+Daten beim Neustart des Containers verloren.
+
+Updates: das neue Image ziehen und den Container neu starten.
 
 ## Mit Docker betreiben
 
@@ -215,6 +230,8 @@ js/maplinks.js      – Links für Apple Karten / Google Maps / geo:
 js/places.js        – Stempelstellen und Parkplätze: GPX-Import, localStorage
 js/tracks.js        – hinterlegte Touren: GPX-Spuren, Ausdünnung, Speicherung
 js/tours.js         – benannte Planungen speichern und laden
+js/sync.js          – Abgleich mit dem Server, Sicherung als Datei
+server/server.js    – Sync-Dienst und Auslieferung der Dateien (ohne Abhängigkeiten)
 js/mapview.js       – gesamte Leaflet-/Kartenlogik
 js/app.js           – Zustand, UI-Rendering, Orchestrierung
 Dockerfile          – nginx:alpine mit den statischen Dateien
@@ -227,10 +244,33 @@ docker-compose.yml  – Betrieb inkl. Healthcheck und Restart-Policy
 - [Leaflet](https://leafletjs.com/) für die Karte, [Chart.js](https://www.chartjs.org/) für das Höhenprofil (beide via CDN)
 - QR-Codes werden ohne Bibliothek erzeugt, damit sie auch offline funktionieren
 
-## Wo die Daten liegen
+## Geräteübergreifender Abgleich
 
-Stempelstellen, Parkplätze, hinterlegte Touren, gespeicherte Planungen und die
-Routing-Einstellungen liegen im `localStorage` des Browsers – also auf dem
-Gerät, mit dem die App geöffnet wird, nicht auf dem Server. Ein anderer Browser
-oder ein anderes Gerät sieht sie nicht, und wer die Browserdaten löscht,
-verliert sie. Der Container selbst speichert nichts und braucht kein Volume.
+Läuft die App im Container, hält ein schlanker Dienst die Sammlung
+(Stempelstellen, Parkplätze, hinterlegte und gespeicherte Touren) in einer
+JSON-Datei im Volume `/data`. Alle Geräte, die dieselbe Adresse aufrufen,
+sehen denselben Stand: Laptop, Handy und Tablet.
+
+- Änderungen werden kurz nach jeder Aktion übertragen, zusätzlich alle
+  30 Sekunden und beim Zurückwechseln auf den Tab.
+- Zusammengeführt wird **eintragsweise**: hakst du unterwegs am Handy einen
+  Stempel ab, während am Laptop eine Tour gespeichert wird, bleibt beides
+  erhalten. Bei gleichzeitiger Änderung desselben Eintrags gewinnt die
+  jüngere.
+- Gelöschte Einträge bleiben als Markierung erhalten, damit sie nicht vom
+  nächsten Gerät wieder eingespielt werden.
+- Oben rechts zeigt ein Abzeichen den Zustand: **☁ synchron** oder
+  **⌂ nur dieses Gerät**.
+
+Die Routing-Einstellungen und die aktuell offene Planung bleiben absichtlich
+lokal – sie gehören zum Gerät, an dem gerade geplant wird.
+
+**Ohne Server** (Datei direkt im Browser geöffnet) arbeitet die App
+unverändert weiter, dann eben nur mit dem Speicher des jeweiligen Browsers.
+
+### Sicherung
+
+Über **Sichern** lädst du die gesamte Sammlung als JSON-Datei herunter,
+über **Laden** spielst du sie wieder ein. Beim Einlesen wird zusammengeführt,
+nicht ersetzt – vorhandene Einträge bleiben also erhalten. Das eignet sich
+als Backup und um Daten auf ein Gerät außerhalb des Heimnetzes zu bringen.

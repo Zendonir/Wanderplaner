@@ -50,8 +50,10 @@ const PointStore = {
           const data = JSON.parse(raw);
           const items = Array.isArray(data.items) ? data.items : data.stamps;
           if (!Array.isArray(items)) return [];
+          // Grabsteine (gelöschte Einträge) haben keine Koordinaten, müssen
+          // aber erhalten bleiben, damit der Abgleich sie nicht zurückholt.
           return items.filter(
-            (s) => Number.isFinite(s.lat) && Number.isFinite(s.lng)
+            (s) => s.deletedAt || (Number.isFinite(s.lat) && Number.isFinite(s.lng))
           );
         } catch (err) {
           console.warn(`${namePrefix} konnten nicht geladen werden:`, err);
@@ -79,10 +81,13 @@ const PointStore = {
         let skipped = 0;
 
         for (const w of imported) {
+          // Nur gegen sichtbare Einträge prüfen: ein früher gelöschter Eintrag
+          // soll durch erneuten Import zurückkommen können.
           const duplicate = items.some(
             (s) =>
-              (w.name && s.name === w.name) ||
-              Utils.haversine(s, w) < PointStore.DUPLICATE_RADIUS_M
+              !s.deletedAt &&
+              ((w.name && s.name === w.name) ||
+                Utils.haversine(s, w) < PointStore.DUPLICATE_RADIUS_M)
           );
           if (duplicate) {
             skipped++;
@@ -95,6 +100,7 @@ const PointStore = {
             name: w.name || `${namePrefix} ${items.length + 1}`,
             note: w.note,
             collected: false,
+            updatedAt: Date.now(),
           });
           added++;
         }

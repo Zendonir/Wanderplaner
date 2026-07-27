@@ -94,7 +94,136 @@
     chartEmpty: document.getElementById('chart-empty'),
     searchForm: document.getElementById('search-form'),
     searchInput: document.getElementById('search-input'),
+    layout: document.getElementById('layout'),
+    library: document.getElementById('library'),
+    libraryToggle: document.getElementById('btn-library'),
+    syncBadge: document.getElementById('sync-badge'),
+    syncStatus: document.getElementById('sync-status'),
+    syncBtn: document.getElementById('btn-sync'),
+    backupBtn: document.getElementById('btn-backup'),
+    restoreBtn: document.getElementById('btn-restore'),
+    restoreFile: document.getElementById('restore-file'),
   };
+
+  /* ---------- Sammlungen: speichern, löschen, abgleichen ---------- */
+
+  // Verbindet die vier Sammlungen mit ihrem Speicher und dem Feld im state.
+  const STORES = {
+    stamps: { store: Stamps, key: 'stamps' },
+    parking: { store: Parking, key: 'parking' },
+    tracks: { store: Tracks, key: 'tracks' },
+    tours: { store: Tours, key: 'savedTours' },
+  };
+
+  /** Sichtbare Einträge einer Sammlung (ohne gelöschte). */
+  function items(name) {
+    return Sync.visible(state[STORES[name].key]);
+  }
+
+  /** Lokal speichern und den Abgleich mit dem Server anstoßen. */
+  function persist(name) {
+    const { store, key } = STORES[name];
+    const ok = store.save(state[key]);
+    scheduleSync();
+    return ok !== false;
+  }
+
+  /**
+   * Löscht einen Eintrag als Grabstein: der Eintrag bleibt mit `deletedAt`
+   * erhalten, damit der Abgleich ihn nicht von einem anderen Gerät zurückholt.
+   */
+  function removeItem(name, id) {
+    const { key } = STORES[name];
+    const index = state[key].findIndex((i) => i.id === id);
+    if (index < 0) return;
+    state[key][index] = Sync.tombstone(state[key][index]);
+    persist(name);
+  }
+
+  /** Übernimmt den vom Server vereinigten Stand. */
+  function applyMerged(merged) {
+    if (!merged) return;
+    Object.entries(STORES).forEach(([name, { store, key }]) => {
+      if (!Array.isArray(merged[name])) return;
+      state[key] = Sync.mergeList(state[key], merged[name]);
+      store.save(state[key]);
+    });
+    renderAll();
+    updateSyncStatus();
+  }
+
+  const scheduleSync = Utils.debounce(runSync, 1500);
+
+  async function runSync() {
+    if (!Sync.available) {
+      updateSyncStatus();
+      return;
+    }
+    updateSyncStatus('busy');
+    const merged = await Sync.push({
+      stamps: state.stamps,
+      parking: state.parking,
+      tracks: state.tracks,
+      tours: state.savedTours,
+    });
+    if (merged) applyMerged(merged);
+    else updateSyncStatus();
+  }
+
+  /**
+   * Sucht den Server, gleicht einmal ab und holt danach regelmäßig
+   * Änderungen anderer Geräte.
+   */
+  async function initSync() {
+    updateSyncStatus();
+    await Sync.probe();
+    if (!Sync.available) {
+      updateSyncStatus();
+      return;
+    }
+    await runSync();
+
+    // Änderungen von anderen Geräten übernehmen, solange das Fenster sichtbar ist.
+    setInterval(async () => {
+      if (document.hidden || Sync.pending || !Sync.available) return;
+      applyMerged(await Sync.pull());
+    }, 30000);
+
+    // Beim Zurückkehren auf den Tab sofort nachschauen.
+    document.addEventListener('visibilitychange', async () => {
+      if (!document.hidden && Sync.available && !Sync.pending) {
+        applyMerged(await Sync.pull());
+      }
+    });
+  }
+
+  function updateSyncStatus(mode) {
+    const badge = el.syncBadge;
+    const status = el.syncStatus;
+
+    if (mode === 'busy') {
+      badge.textContent = '⟳ Abgleich …';
+      badge.className = 'sync-badge busy';
+      status.textContent = 'Abgleich läuft …';
+      status.className = 'sync-status';
+      return;
+    }
+
+    if (Sync.available) {
+      badge.textContent = '☁ synchron';
+      badge.className = 'sync-badge';
+      status.textContent = `Abgleich mit dem Server aktiv – ${Sync.formatLastSync()}. ` +
+        'Alle Geräte im Netz sehen denselben Stand.';
+      status.className = 'sync-status ok';
+    } else {
+      badge.textContent = '⌂ nur dieses Gerät';
+      badge.className = 'sync-badge offline';
+      status.textContent = 'Kein Server erreichbar – die Daten liegen nur in diesem ' +
+        'Browser. Zum Übertragen die Sicherung nutzen.';
+      status.className = 'sync-status offline';
+    }
+    el.syncBtn.disabled = !Sync.available;
+  }
 
   /* ---------- Statusmeldungen ---------- */
 
@@ -140,9 +269,9 @@
     state.parking = parsed.parking || [];
     state.tracks = parsed.tracks || [];
     state.tourSelection = parsed.tourSelection || [];
-    Stamps.save(state.stamps);
-    Parking.save(state.parking);
-    Tracks.save(state.tracks);
+    persist('stamps');
+    persist('parking');
+    persist('tracks');
     renderAll();
     scheduleRecalc();
   }
@@ -428,7 +557,8 @@
     const filter = el.stampFilter.value;
     const selected = new Set(state.tourSelection);
 
-    const visible = state.stamps
+    const all = items('stamps');
+    const visible = all
       .filter((s) => {
         if (filter === 'open' && s.collected) return false;
         if (filter === 'collected' && !s.collected) return false;
@@ -437,13 +567,13 @@
       .sort((a, b) => a.name.localeCompare(b.name, 'de'));
 
     el.stampList.innerHTML = '';
-    if (state.stamps.length === 0) {
+    if (all.length === 0) {
       el.stampCounter.textContent = 'Noch keine Stempelstellen importiert';
     } else {
-      const collected = state.stamps.filter((s) => s.collected).length;
+      const collected = all.filter((s) => s.collected).length;
       el.stampCounter.textContent =
-        `${collected} von ${state.stamps.length} Stempeln erhalten` +
-        (visible.length !== state.stamps.length
+        `${collected} von ${all.length} Stempeln erhalten` +
+        (visible.length !== all.length
           ? ` · ${visible.length} angezeigt`
           : '');
     }
@@ -451,7 +581,7 @@
     if (visible.length === 0) {
       const li = document.createElement('li');
       li.className = 'list-empty';
-      li.textContent = state.stamps.length === 0
+      li.textContent = all.length === 0
         ? 'GPX-Datei mit Wegpunkten importieren'
         : 'Keine Treffer';
       el.stampList.appendChild(li);
@@ -553,14 +683,15 @@
       tracks.forEach((track) => {
         const prepared = Tracks.prepare(
           { ...track, name: track.name || fileName.replace(/\.gpx$/i, '') },
-          state.tracks.length
+          items('tracks').length
         );
         state.tracks.push(prepared);
       });
-      if (!Tracks.save(state.tracks)) {
+      if (!persist('tracks')) {
         return 'Der Browser-Speicher ist voll – die Tour wurde angezeigt, aber nicht dauerhaft gesichert.';
       }
       MapView.fitTo(Tracks.toLatLngs(state.tracks[state.tracks.length - 1]));
+      renderAll();
       return `${tracks.length} abgeschlossene Tour(en) hinterlegt.`;
     }
 
@@ -577,8 +708,8 @@
       const result = store.merge(current, waypoints);
       if (isStamp) state.stamps = result.items;
       else state.parking = result.items;
-      store.save(result.items);
-      MapView.fitTo(result.items);
+      persist(isStamp ? 'stamps' : 'parking');
+      MapView.fitTo(Sync.visible(result.items));
       const label = isStamp ? 'Stempelstelle(n)' : 'Parkplatz/Parkplätze';
       return `${result.added} ${label} importiert` +
         (result.skipped > 0 ? `, ${result.skipped} bereits vorhanden.` : '.');
@@ -601,7 +732,8 @@
 
   function renderParkingList() {
     el.parkingList.innerHTML = '';
-    if (state.parking.length === 0) {
+    const parking = items('parking');
+    if (parking.length === 0) {
       const li = document.createElement('li');
       li.className = 'list-empty';
       li.textContent = 'Noch keine Parkplätze importiert';
@@ -609,7 +741,7 @@
       return;
     }
 
-    state.parking
+    parking
       .slice()
       .sort((a, b) => a.name.localeCompare(b.name, 'de'))
       .forEach((place) => {
@@ -647,7 +779,7 @@
 
   /** Setzt den Parkplatz als ersten Routenpunkt. */
   function parkingAsStart(id) {
-    const place = state.parking.find((p) => p.id === id);
+    const place = state.parking.find((p) => p.id === id && !p.deletedAt);
     if (!place) return;
     pushUndo();
     state.points.unshift({ id: Utils.uid(), lat: place.lat, lng: place.lng });
@@ -662,8 +794,7 @@
 
   function deleteParking(id) {
     pushUndo();
-    state.parking = state.parking.filter((p) => p.id !== id);
-    Parking.save(state.parking);
+    removeItem('parking', id);
     renderAll();
   }
 
@@ -671,7 +802,8 @@
 
   function renderTrackList() {
     el.trackList.innerHTML = '';
-    if (state.tracks.length === 0) {
+    const tracks = items('tracks');
+    if (tracks.length === 0) {
       const li = document.createElement('li');
       li.className = 'list-empty';
       li.textContent = 'Noch keine Touren hinterlegt';
@@ -679,7 +811,7 @@
       return;
     }
 
-    state.tracks.forEach((track) => {
+    tracks.forEach((track) => {
       const li = document.createElement('li');
 
       const visible = document.createElement('input');
@@ -688,7 +820,8 @@
       visible.title = 'Auf der Karte anzeigen';
       visible.addEventListener('change', () => {
         track.visible = visible.checked;
-        Tracks.save(state.tracks);
+        Sync.touch(track);
+        persist('tracks');
         renderAll();
       });
 
@@ -721,24 +854,24 @@
   }
 
   function renameTrack(id) {
-    const track = state.tracks.find((t) => t.id === id);
+    const track = state.tracks.find((t) => t.id === id && !t.deletedAt);
     if (!track) return;
     const name = window.prompt('Name der hinterlegten Tour:', track.name);
     if (name === null) return;
     const trimmed = name.trim();
     if (!trimmed) return;
     track.name = trimmed;
-    Tracks.save(state.tracks);
+    Sync.touch(track);
+    persist('tracks');
     renderAll();
   }
 
   function deleteTrack(id) {
-    const track = state.tracks.find((t) => t.id === id);
+    const track = state.tracks.find((t) => t.id === id && !t.deletedAt);
     if (!track) return;
     if (!window.confirm(`„${track.name}“ wirklich löschen?`)) return;
     pushUndo();
-    state.tracks = state.tracks.filter((t) => t.id !== id);
-    Tracks.save(state.tracks);
+    removeItem('tracks', id);
     renderAll();
   }
 
@@ -746,7 +879,8 @@
 
   function renderTourList() {
     el.tourList.innerHTML = '';
-    if (state.savedTours.length === 0) {
+    const tours = items('tours');
+    if (tours.length === 0) {
       const li = document.createElement('li');
       li.className = 'list-empty';
       li.textContent = 'Noch keine Tour gespeichert';
@@ -754,7 +888,7 @@
       return;
     }
 
-    state.savedTours.forEach((tour) => {
+    tours.forEach((tour) => {
       const li = document.createElement('li');
 
       const label = document.createElement('span');
@@ -797,7 +931,7 @@
     const entry = Tours.fromState(name, state);
 
     // Gleicher Name überschreibt den bestehenden Eintrag.
-    const existing = state.savedTours.findIndex((t) => t.name === name);
+    const existing = state.savedTours.findIndex((t) => !t.deletedAt && t.name === name);
     if (existing >= 0) {
       entry.id = state.savedTours[existing].id;
       state.savedTours[existing] = entry;
@@ -805,7 +939,7 @@
       state.savedTours.push(entry);
     }
 
-    if (Tours.save(state.savedTours)) {
+    if (persist('tours')) {
       showStatus('info', `Tour „${name}“ gespeichert.`, 5000);
     } else {
       showStatus('error', 'Die Tour konnte nicht gespeichert werden (Speicher voll).');
@@ -814,7 +948,7 @@
   }
 
   function loadTour(id) {
-    const tour = state.savedTours.find((t) => t.id === id);
+    const tour = state.savedTours.find((t) => t.id === id && !t.deletedAt);
     if (!tour) return;
     pushUndo();
 
@@ -836,7 +970,7 @@
   }
 
   function renameTour(id) {
-    const tour = state.savedTours.find((t) => t.id === id);
+    const tour = state.savedTours.find((t) => t.id === id && !t.deletedAt);
     if (!tour) return;
     const name = window.prompt('Name der Tour:', tour.name);
     if (name === null) return;
@@ -848,25 +982,26 @@
       el.tourNameInput.value = trimmed;
     }
     tour.name = trimmed;
-    Tours.save(state.savedTours);
+    Sync.touch(tour);
+    persist('tours');
     renderAll();
   }
 
   function deleteTour(id) {
-    const tour = state.savedTours.find((t) => t.id === id);
+    const tour = state.savedTours.find((t) => t.id === id && !t.deletedAt);
     if (!tour) return;
     if (!window.confirm(`Tour „${tour.name}“ wirklich löschen?`)) return;
-    state.savedTours = state.savedTours.filter((t) => t.id !== id);
-    Tours.save(state.savedTours);
+    removeItem('tours', id);
     renderAll();
   }
 
   function toggleStampCollected(id) {
-    const stamp = state.stamps.find((s) => s.id === id);
+    const stamp = state.stamps.find((s) => s.id === id && !s.deletedAt);
     if (!stamp) return;
     pushUndo();
     stamp.collected = !stamp.collected;
-    Stamps.save(state.stamps);
+    Sync.touch(stamp);
+    persist('stamps');
     renderAll();
   }
 
@@ -879,9 +1014,8 @@
 
   function deleteStamp(id) {
     pushUndo();
-    state.stamps = state.stamps.filter((s) => s.id !== id);
+    removeItem('stamps', id);
     state.tourSelection = state.tourSelection.filter((sid) => sid !== id);
-    Stamps.save(state.stamps);
     renderAll();
   }
 
@@ -897,7 +1031,7 @@
    */
   function suggestRoute() {
     const selected = state.tourSelection
-      .map((id) => state.stamps.find((s) => s.id === id))
+      .map((id) => items('stamps').find((s) => s.id === id))
       .filter(Boolean);
     if (selected.length < 2) {
       showStatus('warn', 'Mindestens zwei Stempelstellen für die Tour auswählen.', 5000);
@@ -913,11 +1047,11 @@
   }
 
   function renderAll() {
-    MapView.renderTracks(state.tracks); // zuerst, damit sie unter der Route liegen
+    MapView.renderTracks(items('tracks')); // zuerst, damit sie unter der Route liegen
     MapView.renderPoints(state.points);
     MapView.renderPois(state.pois);
-    MapView.renderStamps(state.stamps, state.tourSelection);
-    MapView.renderParking(state.parking);
+    MapView.renderStamps(items('stamps'), state.tourSelection);
+    MapView.renderParking(items('parking'));
     renderPointList();
     renderPoiList();
     renderStampList();
@@ -1014,7 +1148,7 @@
       : state.geometry.map((c) => ({ lat: c[1], lng: c[0] }));
     // POIs plus die für die Tour ausgewählten Stempelstellen als Wegpunkte
     const tourStamps = state.tourSelection
-      .map((id) => state.stamps.find((s) => s.id === id))
+      .map((id) => items('stamps').find((s) => s.id === id))
       .filter(Boolean);
     Gpx.download(trackPoints, [...state.pois, ...tourStamps]);
     showStatus('info', 'GPX-Datei wurde heruntergeladen.', 4000);
@@ -1116,6 +1250,59 @@
 
   function updateImportHint() {
     el.importHint.textContent = IMPORT_HINTS[el.importType.value] || '';
+  }
+
+  /* ---------- Linke Seitenleiste ---------- */
+
+  function setLibraryOpen(open) {
+    el.layout.classList.toggle('library-collapsed', !open);
+    el.libraryToggle.setAttribute('aria-expanded', String(open));
+    localStorage.setItem('wanderplaner.library', open ? 'open' : 'closed');
+    // Leaflet muss die neue Kartengröße erfahren, sonst bleibt sie verzerrt.
+    setTimeout(() => MapView.invalidateSize(), 220);
+  }
+
+  function toggleLibrary() {
+    setLibraryOpen(el.layout.classList.contains('library-collapsed'));
+  }
+
+  /* ---------- Sicherung als Datei ---------- */
+
+  function downloadBackup() {
+    Backup.download({
+      stamps: state.stamps,
+      parking: state.parking,
+      tracks: state.tracks,
+      savedTours: state.savedTours,
+    });
+    showStatus('info', 'Sicherung heruntergeladen.', 5000);
+  }
+
+  async function restoreBackup(file) {
+    try {
+      const text = await readFile(file);
+      const data = Backup.parse(text);
+
+      pushUndo();
+      // Zusammenführen statt ersetzen: vorhandene Einträge bleiben erhalten,
+      // bei gleicher id gewinnt der neuere Stand.
+      state.stamps = Sync.mergeList(state.stamps, data.stamps);
+      state.parking = Sync.mergeList(state.parking, data.parking);
+      state.tracks = Sync.mergeList(state.tracks, data.tracks);
+      state.savedTours = Sync.mergeList(state.savedTours, data.tours);
+
+      ['stamps', 'parking', 'tracks', 'tours'].forEach(persist);
+      renderAll();
+      showStatus(
+        'info',
+        `Sicherung eingelesen: ${items('stamps').length} Stempelstellen, ` +
+          `${items('parking').length} Parkplätze, ${items('tracks').length} hinterlegte ` +
+          `und ${items('tours').length} gespeicherte Touren.`,
+        9000
+      );
+    } catch (err) {
+      showStatus('error', err.message || 'Die Sicherung konnte nicht gelesen werden.');
+    }
   }
 
   function updateEngineNote(engine) {
@@ -1221,9 +1408,28 @@
     el.suggest.addEventListener('click', suggestRoute);
     el.tourClear.addEventListener('click', clearTourSelection);
 
+    el.libraryToggle.addEventListener('click', toggleLibrary);
+    setLibraryOpen(localStorage.getItem('wanderplaner.library') !== 'closed');
+
+    el.syncBtn.addEventListener('click', async () => {
+      // Der Knopf prüft auch erneut, ob der Server inzwischen da ist.
+      if (!Sync.available) await Sync.probe();
+      await runSync();
+    });
+    el.backupBtn.addEventListener('click', downloadBackup);
+    el.restoreBtn.addEventListener('click', () => el.restoreFile.click());
+    el.restoreFile.addEventListener('change', () => {
+      const file = el.restoreFile.files[0];
+      if (file) restoreBackup(file);
+      el.restoreFile.value = '';
+    });
+
     renderAll();
     updateStats();
-    if (state.stamps.length > 0) MapView.fitTo(state.stamps);
+    if (items('stamps').length > 0) MapView.fitTo(items('stamps'));
+
+    // Abgleich im Hintergrund starten – die App ist sofort bedienbar.
+    initSync();
   }
 
   document.addEventListener('DOMContentLoaded', init);

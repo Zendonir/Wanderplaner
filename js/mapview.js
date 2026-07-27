@@ -488,6 +488,11 @@ const MapView = (function () {
     map.setView([lat, lng], zoom);
   }
 
+  /** Nach Größenänderung des Kartenbereichs (z. B. Seitenleiste ein-/ausklappen). */
+  function invalidateSize() {
+    map.invalidateSize();
+  }
+
   return {
     init,
     renderPoints,
@@ -505,5 +510,6 @@ const MapView = (function () {
     openStartQr,
     fitTo,
     setView,
+    invalidateSize,
   };
 })();

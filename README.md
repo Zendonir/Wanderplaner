@@ -240,7 +240,45 @@ geräteübergreifenden Abgleich. Bei *Custom App* unter **Storage** einen
 Host-Pfad oder ein Dataset auf **`/data`** einhängen – sonst gehen die
 Daten beim Neustart des Containers verloren.
 
-Updates: das neue Image ziehen und den Container neu starten.
+### Aktualisieren – warum ein Neustart nicht reicht
+
+Ein Neustart startet **dasselbe Image** noch einmal. Damit eine neue Version
+ankommt, muss das Image neu **gezogen** und der Container **neu erstellt**
+werden:
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+Auf TrueNAS SCALE:
+
+- **Apps → Installed → Wanderplaner → Update** – erscheint, sobald zum
+  eingetragenen Tag ein neues Image vorliegt. Bei `latest` sieht TrueNAS die
+  Änderung nicht immer sofort; dann hilft **⋮ → Edit → Update** (speichern
+  erstellt den Container neu) oder unter **Apps → Installed → ⋮ → Pull
+  images**.
+- Bei *Install via YAML* / Dockge / Portainer: erst **Pull**, dann
+  **Re-deploy** bzw. **Recreate**.
+
+Danach im Browser einmal neu laden. Die App bringt einen Service Worker mit,
+der die neue Fassung selbst übernimmt (`skipWaiting`); bleibt trotzdem die
+alte Oberfläche stehen, hilft ein harter Reload (Strg+Umschalt+R) oder – auf
+dem Homescreen-Symbol am Handy – die App einmal ganz schließen.
+
+**Automatisch aktualisieren** geht mit Watchtower, wenn das gewünscht ist:
+
+```yaml
+  watchtower:
+    image: containrrr/watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --cleanup --interval 86400 wanderplaner
+    restart: unless-stopped
+```
+
+Watchtower braucht Zugriff auf den Docker-Socket – das ist eine bewusste
+Entscheidung, denn wer den Socket erreicht, hat faktisch Rootrechte auf dem
+Host. Der Wanderplaner selbst bekommt diesen Zugriff absichtlich nicht.
 
 ## Mit Docker betreiben
 
@@ -419,14 +457,51 @@ sehen denselben Stand: Laptop, Handy und Tablet.
   jüngere.
 - Gelöschte Einträge bleiben als Markierung erhalten, damit sie nicht vom
   nächsten Gerät wieder eingespielt werden.
-- Oben rechts zeigt ein Abzeichen den Zustand: **☁ synchron** oder
-  **⌂ nur dieses Gerät**.
+- Oben rechts zeigt ein Abzeichen den Zustand: **☁ synchron**,
+  **⚠ Abgleich gestört** oder **⌂ nur dieses Gerät**.
 
 Die Routing-Einstellungen und die aktuell offene Planung bleiben absichtlich
 lokal – sie gehören zum Gerät, an dem gerade geplant wird.
 
 **Ohne Server** (Datei direkt im Browser geöffnet) arbeitet die App
 unverändert weiter, dann eben nur mit dem Speicher des jeweiligen Browsers.
+
+### Abgleich repariert sich nicht
+
+Zeigt das Abzeichen **⚠ Abgleich gestört**, antwortet der Server zwar, kann
+seine Datei aber nicht schreiben. In aller Regel gehört das Verzeichnis unter
+`/data` dem falschen Nutzer: Der Dienst läuft als `node` (UID 1000), das
+Volume aber root.
+
+Nachsehen:
+
+```bash
+curl http://<truenas-ip>:8080/api/health
+# {"status":"readonly","storage":{"path":"/data","writable":false,"reason":"EACCES"}}
+
+docker compose logs wanderplaner | grep -i speichern
+```
+
+Geradeziehen:
+
+```bash
+docker compose exec -u root wanderplaner chown -R node:node /data
+# oder direkt am Host-Pfad:
+chown -R 1000:1000 /mnt/tank/wanderplaner
+```
+
+Ab Version 2.7.1 erledigt das der Container beim Start selbst – er startet als
+root, korrigiert die Rechte am Datenverzeichnis und gibt sie dann ab. Wer den
+Container mit einer festen Nutzer-ID startet (`user:` in der YAML, bei TrueNAS
+auch über die Oberfläche einstellbar), muss die Rechte am Host-Pfad passend
+setzen; der Server sagt dann über `/api/health`, woran es liegt.
+
+> Hintergrund für den Fall, dass es jemanden interessiert: Bis 2.7.0 stand das
+> `chown` im Dockerfile **hinter** der `VOLUME`-Anweisung. Docker verwirft
+> Änderungen an einem bereits deklarierten Volume beim Bauen – das Verzeichnis
+> blieb dadurch root, und der Dienst konnte nie schreiben. Weil der Server den
+> Schreibfehler nur ins Log geschrieben und trotzdem `200 OK` geantwortet hat,
+> sah es in der App nach einem gelungenen Abgleich aus.
 
 ### Sicherung
 

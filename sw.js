@@ -11,7 +11,7 @@
  * Der Datenabgleich (/api/…) wird bewusst nie zwischengespeichert – dort
  * zählt immer der aktuelle Stand.
  */
-const VERSION = 'v8';
+const VERSION = 'v9';
 const SHELL_CACHE = `wanderplaner-shell-${VERSION}`;
 const TILE_CACHE = `wanderplaner-tiles-${VERSION}`;
 const MAX_TILES = 1200;
@@ -125,8 +125,15 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url);
 
-  // Abgleich und Statusabfrage immer direkt ans Netz.
-  if (url.pathname.startsWith('/api/')) return;
+  // Abgleich und Statusabfrage immer direkt ans Netz. Der Pfad wird relativ
+  // zum Geltungsbereich geprüft: Hinter einem Reverse Proxy in einem
+  // Unterverzeichnis heißt er /wanderplaner/api/… und nicht /api/…, sonst
+  // landete der Abgleich im Zwischenspeicher.
+  const scope = new URL(self.registration.scope).pathname;
+  const relative = url.pathname.startsWith(scope)
+    ? url.pathname.slice(scope.length)
+    : url.pathname.replace(/^\//, '');
+  if (relative.startsWith('api/')) return;
 
   // Routing- und Höhendienste nie zwischenspeichern.
   if (/brouter\.de|project-osrm\.org|open-elevation\.com|opentopodata\.org|nominatim|overpass|open-meteo/.test(url.hostname)) {

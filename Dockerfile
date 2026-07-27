@@ -34,13 +34,23 @@ ENV NODE_ENV=production \
     DATA_DIR=/data \
     APP_VERSION=${APP_VERSION}
 
+# su-exec, um im Startskript die Rechte abzugeben.
+RUN apk add --no-cache su-exec
+
+# Rechte VOR der VOLUME-Anweisung setzen: Änderungen an einem bereits
+# deklarierten Volume verwirft Docker beim Bauen.
+RUN mkdir -p /data && chown -R node:node /data /app
+
 # Die Sammlung liegt im Volume, damit sie Updates des Containers übersteht.
 VOLUME ["/data"]
 EXPOSE 8080
 
-# Als unprivilegierter Nutzer laufen; /data muss ihm gehören.
-RUN mkdir -p /data && chown -R node:node /data /app
-USER node
+# Der Container startet als root, zieht die Rechte am Datenverzeichnis gerade
+# und gibt sie dann ab. Nur so lässt sich auch ein schon vorhandenes, root
+# gehörendes Volume noch retten.
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+ENTRYPOINT ["docker-entrypoint.sh"]
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
   CMD wget -q --spider http://localhost:8080/api/health || exit 1

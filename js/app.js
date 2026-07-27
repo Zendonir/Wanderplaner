@@ -267,7 +267,15 @@
       return;
     }
 
-    if (Sync.available) {
+    if (Sync.available && Sync.problem) {
+      // Der Server antwortet, speichert aber nicht – das darf nicht wie ein
+      // gelungener Abgleich aussehen.
+      badge.textContent = '⚠ Abgleich gestört';
+      badge.className = 'sync-badge offline';
+      status.textContent = `${Sync.problem} Die Sammlung bleibt vorerst nur in diesem ` +
+        'Browser. Hinweise dazu stehen in der README unter „Abgleich repariert sich nicht“.';
+      status.className = 'sync-status offline';
+    } else if (Sync.available) {
       badge.textContent = '☁ synchron';
       badge.className = 'sync-badge';
       status.textContent = `Abgleich mit dem Server aktiv – ${Sync.formatLastSync()}. ` +
@@ -1594,9 +1602,20 @@
 
       if (diff > 0) {
         el.updateNote.className = 'about-note update';
-        el.updateNote.textContent =
+        // Ein Neustart allein genügt nicht – dabei läuft dasselbe Image
+        // weiter. Der Befehl steht deshalb wörtlich da, zum Kopieren.
+        el.updateNote.innerHTML = '';
+        const text = document.createElement('span');
+        text.textContent =
           `Version ${latest} ist verfügbar (installiert: ${running}). ` +
-          'Auf dem Server das Image neu ziehen und den Container neu starten.';
+          'Ein Neustart des Containers genügt nicht – das Image muss neu ' +
+          'gezogen werden:';
+        const command = document.createElement('code');
+        command.className = 'update-command';
+        command.textContent = 'docker compose pull && docker compose up -d';
+        const hint = document.createElement('span');
+        hint.textContent = 'Auf TrueNAS: bei der App „Update“ bzw. „Pull image“ auslösen.';
+        el.updateNote.append(text, command, hint);
       } else {
         el.updateNote.className = 'about-note ok';
         el.updateNote.textContent = `Aktuell – ${running} ist die neueste Version.`;

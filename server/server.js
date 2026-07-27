@@ -78,15 +78,34 @@ async function readStore() {
 let writeChain = Promise.resolve();
 
 function writeStore(store) {
-  writeChain = writeChain.then(async () => {
+  const done = writeChain.then(async () => {
     await fsp.mkdir(DATA_DIR, { recursive: true });
     const tmp = `${DATA_FILE}.tmp`;
     await fsp.writeFile(tmp, JSON.stringify(store), 'utf8');
     await fsp.rename(tmp, DATA_FILE); // atomar, damit die Datei nie halb geschrieben ist
-  }).catch((err) => {
-    console.error('Speichern fehlgeschlagen:', err.message);
   });
-  return writeChain;
+  // Die Kette darf nie mit einer abgelehnten Zusage weiterlaufen, sonst
+  // scheitern alle folgenden Schreibvorgänge mit demselben alten Fehler.
+  writeChain = done.catch(() => {});
+  // Der Fehler geht dagegen an den Aufrufer: Ein stillschweigend verworfener
+  // Schreibfehler sähe für die App wie ein erfolgreicher Abgleich aus,
+  // während in Wirklichkeit nichts ankommt.
+  return done;
+}
+
+/**
+ * Prüft, ob das Datenverzeichnis wirklich beschreibbar ist. Der häufigste
+ * Fall in der Praxis: Das Volume gehört root, der Dienst läuft aber als
+ * `node` – dann schlägt jeder Abgleich still fehl.
+ */
+async function storageStatus() {
+  try {
+    await fsp.mkdir(DATA_DIR, { recursive: true });
+    await fsp.access(DATA_DIR, fs.constants.W_OK);
+    return { path: DATA_DIR, writable: true };
+  } catch (err) {
+    return { path: DATA_DIR, writable: false, reason: err.code || err.message };
+  }
 }
 
 /**
@@ -155,7 +174,12 @@ function readBody(req) {
 
 async function handleApi(req, res, url) {
   if (url.pathname === '/api/health') {
-    return sendJson(res, 200, { status: 'ok', version: APP_VERSION });
+    const storage = await storageStatus();
+    return sendJson(res, 200, {
+      status: storage.writable ? 'ok' : 'readonly',
+      version: APP_VERSION,
+      storage,
+    });
   }
 
   if (url.pathname === '/api/version') {
@@ -194,7 +218,16 @@ async function handleApi(req, res, url) {
     merged.revision = (Number(current.revision) || 0) + 1;
     merged.updatedAt = Date.now();
 
-    await writeStore(merged);
+    try {
+      await writeStore(merged);
+    } catch (err) {
+      console.error('Speichern fehlgeschlagen:', err.message);
+      return sendJson(res, 500, {
+        error: `Der Server kann nicht speichern (${DATA_FILE}: ${err.code || err.message}). ` +
+          'Meist gehört das Datenverzeichnis dem falschen Nutzer.',
+        storage: await storageStatus(),
+      });
+    }
     return sendJson(res, 200, merged);
   }
 

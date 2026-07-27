@@ -16,14 +16,26 @@ const Sync = {
   available: false,   // Server erreichbar?
   lastSync: null,
   pending: false,
+  // Gesetzt, wenn der Server zwar antwortet, aber nicht speichern kann –
+  // sonst sähe ein wirkungsloser Abgleich wie ein erfolgreicher aus.
+  problem: null,
 
   /** Prüft einmalig, ob ein Sync-Server hinter der App steht. */
   async probe() {
     try {
       const response = await Utils.fetchWithTimeout('api/health', {}, 4000);
       this.available = response.ok;
+      this.problem = null;
+      if (response.ok) {
+        const health = await response.json().catch(() => null);
+        if (health && health.storage && health.storage.writable === false) {
+          this.problem = `Der Server kann sein Datenverzeichnis ` +
+            `${health.storage.path} nicht beschreiben (${health.storage.reason}).`;
+        }
+      }
     } catch (err) {
       this.available = false;
+      this.problem = null;
     }
     return this.available;
   },
@@ -88,14 +100,22 @@ const Sync = {
         },
         15000
       );
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) {
+        // Der Server ist da, kommt aber nicht zum Ziel. Das ist etwas
+        // anderes als „kein Server“ und muss auch so benannt werden.
+        const detail = await response.json().catch(() => null);
+        this.problem = (detail && detail.error) || `Der Server meldet HTTP ${response.status}.`;
+        return null;
+      }
 
       const merged = await response.json();
+      this.problem = null;
       this.lastSync = new Date();
       return merged;
     } catch (err) {
       console.warn('Abgleich fehlgeschlagen:', err);
       this.available = false; // bei der nächsten Gelegenheit erneut prüfen
+      this.problem = null;
       return null;
     } finally {
       this.pending = false;

@@ -1582,6 +1582,20 @@ body {
 .about-note.ok     { background: #e7f0e9; border-color: #c3dbc9; color: var(--green-dark); }
 .about-note.update { background: #fdf3dd; border-color: #e8d6a8; color: #8a6100; }
 
+.about-note .update-command {
+  display: block;
+  margin: 0.35rem 0;
+  padding: 0.3rem 0.45rem;
+  border-radius: 4px;
+  background: #fff;
+  border: 1px solid #e8d6a8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72rem;
+  overflow-x: auto;
+  white-space: nowrap;
+  user-select: all;
+}
+
 /* ---------- Abgleich und Sicherung ---------- */
 
 .sync-section {

@@ -8,7 +8,9 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { startServer, launchBrowser, stubExternals, writeGpxWaypoints } = require('../helpers');
+const {
+  startServer, launchBrowser, stubExternals, writeGpxWaypoints, openSettings, openStamps,
+} = require('../helpers');
 
 module.exports = {
   name: 'Abgleich zwischen Geräten',
@@ -31,7 +33,9 @@ module.exports = {
     };
 
     const sync = async (page) => {
+      await openSettings(page);
       await page.click('#btn-sync');
+      await page.keyboard.press('Escape');
       await page.waitForTimeout(1100);
     };
     const stampCount = (page) => page.locator('#stamp-list li:not(.list-empty)').count();
@@ -47,6 +51,7 @@ module.exports = {
       check.contains(await a.textContent('#sync-badge'), 'synchron',
         'Gerät A erkennt den Abgleich-Dienst');
 
+      await openSettings(a);
       const [chooser] = await Promise.all([
         a.waitForEvent('filechooser'),
         a.click('#btn-import'),
@@ -59,6 +64,7 @@ module.exports = {
         'Gerät B sieht die Stempelstellen ohne eigenen Import');
 
       /* ---- Abhaken auf B kommt bei A an ---- */
+      await openStamps(b);
       await b.locator('#stamp-list li').first().locator('input[type=checkbox]').check();
       await b.waitForTimeout(2300);
       await sync(a);
@@ -66,6 +72,7 @@ module.exports = {
         'Auf B abgehakter Stempel erscheint auf A');
 
       /* ---- Löschen auf A darf auf B nicht zurückkehren ---- */
+      await openStamps(a);
       await a.locator('#stamp-list li').last().locator('.item-delete').click();
       await a.waitForTimeout(2300);
       check.equal(await stampCount(a), 2, 'Löschen wirkt auf A');
@@ -94,6 +101,7 @@ module.exports = {
         'Die gespeicherte Tour erscheint auf dem anderen Gerät');
 
       /* ---- Sicherung als Datei ---- */
+      await openSettings(a);
       const [download] = await Promise.all([
         a.waitForEvent('download'),
         a.click('#btn-backup'),

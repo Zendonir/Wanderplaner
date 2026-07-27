@@ -51,9 +51,9 @@ module.exports = {
 
   async run(check) {
     const { Utils, QRCode, Daylight, Nearby, WayTypes, Clusters, Progress, MapLinks,
-            RouteStyle } =
+            RouteStyle, Tracks } =
       loadModules(['utils', 'qrcode', 'daylight', 'nearby', 'waytypes', 'clusters',
-                   'progress', 'maplinks', 'routestyle']);
+                   'progress', 'maplinks', 'routestyle', 'tracks']);
 
     /* ---- QR-Code: gegen einen unabhängigen Decoder ---- */
     const jsQR = require('jsqr');
@@ -303,6 +303,71 @@ module.exports = {
 
     const noSegments = RouteStyle.build('surface', routeCoords, routeEle, null);
     check.contains(noSegments.note, 'Wegedaten', 'Fehlende Wegedaten werden erklärt');
+
+    /* ---- Dieselben Farben im Höhenprofil ---- */
+    // Stützpunkte, wie sie das Höhenprofil verwendet: Position, gelaufene
+    // Strecke und Höhe.
+    const profileSamples = routeCoords.map((c, i) => ({
+      lat: c[1], lng: c[0], dist: i * 100, ele: routeEle[i],
+    }));
+
+    check.equal(RouteStyle.sampleColors('plain', profileSamples, routeCoords, null), null,
+      'Einfarbig lässt das Profil unverändert');
+
+    const profileSlope = RouteStyle.sampleColors('slope', profileSamples, routeCoords, null);
+    check.equal(profileSlope.length, profileSamples.length,
+      'Für jeden Stützpunkt gibt es eine Farbe');
+    check.ok(profileSlope.every((c) => /^#[0-9a-f]{6}$/.test(c)),
+      'Alle Profilfarben sind gültige Farbwerte');
+    check.ok(new Set(profileSlope).size >= 4,
+      'Das Profil ist genauso fein abgestuft wie die Karte',
+      `${new Set(profileSlope).size} Farben`);
+    check.ok(isGreenish(profileSlope[0]), 'Der flache Anfang ist auch im Profil grün',
+      profileSlope[0]);
+    check.ok(red(profileSlope[30]) > red(profileSlope[5]),
+      'Der steile Teil ist im Profil röter als der flache');
+    // Die Farbe des steilsten Stücks muss zur Kartenfarbe derselben Steigung passen.
+    const steepIndex = 30;
+    const steepPercent = (profileSamples[steepIndex].ele - profileSamples[steepIndex - 1].ele)
+      / (profileSamples[steepIndex].dist - profileSamples[steepIndex - 1].dist) * 100;
+    check.equal(profileSlope[steepIndex],
+      RouteStyle.slopeColor(Math.round(steepPercent / RouteStyle.SLOPE_STEP) * RouteStyle.SLOPE_STEP),
+      'Profil und Karte nutzen dieselbe Farbrampe');
+
+    const noEleSamples = profileSamples.map((s) => ({ ...s, ele: null }));
+    check.equal(RouteStyle.sampleColors('slope', noEleSamples, routeCoords, null), null,
+      'Ohne Höhen bleibt das Profil einfarbig');
+
+    const profileSurface = RouteStyle.sampleColors(
+      'surface', profileSamples, routeCoords, styleSegments
+    );
+    check.equal(profileSurface.length, profileSamples.length,
+      'Auch nach Wegart bekommt jeder Stützpunkt eine Farbe');
+    const surfaceUsed = new Set(profileSurface);
+    check.ok(surfaceUsed.size >= 2, 'Das Profil zeigt die Wegarten unterschiedlich',
+      [...surfaceUsed].join(' '));
+    const mapSurfaceColors = new Set(surface.sections.map((s) => s.color));
+    check.ok([...surfaceUsed].every((c) => mapSurfaceColors.has(c)),
+      'Die Profilfarben stammen aus derselben Palette wie die Karte');
+    check.equal(RouteStyle.sampleColors('surface', profileSamples, routeCoords, null), null,
+      'Ohne Wegedaten bleibt das Profil einfarbig');
+
+    check.equal(RouteStyle.fade('#4a9a5c', 0.35), 'rgba(74, 154, 92, 0.35)',
+      'Die Fläche unter dem Profil nutzt dieselbe Farbe, nur blasser');
+
+    /* ---- Hinterlegte Spur auf Stützpunkte eindampfen ---- */
+    // Eine dichte Spur mit einer klaren Kehre – die muss erhalten bleiben.
+    const dense = [];
+    for (let i = 0; i < 200; i++) dense.push({ lat: 51.80 + i * 0.0002, lng: 10.60 });
+    for (let i = 0; i < 200; i++) dense.push({ lat: 51.84, lng: 10.60 + i * 0.0002 });
+    const thinned = Tracks.simplify(dense, 120);
+    check.ok(thinned.length >= 3 && thinned.length <= 25,
+      'Aus einer dichten Spur werden wenige Stützpunkte', `${thinned.length} Punkte`);
+    check.equal(thinned[0].lat, dense[0].lat, 'Der Startpunkt bleibt erhalten');
+    check.equal(thinned[thinned.length - 1].lng, dense[dense.length - 1].lng,
+      'Der Endpunkt bleibt erhalten');
+    check.ok(thinned.some((p) => Math.abs(p.lat - 51.84) < 1e-4 && Math.abs(p.lng - 10.60) < 1e-4),
+      'Die Kehre bleibt als Stützpunkt erhalten');
 
     /* ---- Der Service Worker muss alle Programmdateien kennen ---- */
     // Ein vergessener Eintrag fällt sonst erst offline auf, wo die App dann

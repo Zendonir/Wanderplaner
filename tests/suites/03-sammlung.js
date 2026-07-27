@@ -7,7 +7,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const jsQR = require('jsqr');
-const { startServer, launchBrowser, stubExternals, writeGpxWaypoints } = require('../helpers');
+const {
+  startServer, launchBrowser, stubExternals, writeGpxWaypoints, openSettings, openStamps,
+} = require('../helpers');
 
 module.exports = {
   name: 'Sammlung und Import',
@@ -28,7 +30,29 @@ module.exports = {
       await page.waitForSelector('#map.leaflet-container');
       await page.waitForTimeout(600);
 
+      /* ---- Einstellungsseite ---- */
+      check.ok(await page.locator('#settings').isHidden(),
+        'Die Einstellungen sind zunächst geschlossen');
+      check.ok(await page.locator('#stamp-list').isHidden(),
+        'Die Stempelliste liegt in einem zugeklappten Untermenü');
+      check.equal(await page.locator('.tab-panel[data-panel=planung] #rs-preset').count(), 0,
+        'Die Routing-Einstellungen liegen nicht mehr in der Planung');
+
+      await page.click('#btn-settings');
+      await page.waitForSelector('#settings:not([hidden])');
+      for (const [id, was] of [
+        ['#rs-preset', 'Routing'], ['#import-type', 'Import'],
+        ['#btn-sync', 'Abgleich'], ['#app-version', 'Version'],
+      ]) {
+        check.ok(await page.locator(`#settings ${id}`).isVisible(),
+          `${was} steht in den Einstellungen`);
+      }
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(200);
+      check.ok(await page.locator('#settings').isHidden(), 'Esc schließt die Einstellungen');
+
       const importFile = async (type, file) => {
+        await openSettings(page);
         await page.selectOption('#import-type', type);
         const [chooser] = await Promise.all([
           page.waitForEvent('filechooser'),
@@ -45,6 +69,10 @@ module.exports = {
         { lat: 51.810, lng: 10.580, name: 'HWN 3', note: 'Felsklippe' },
       ]);
       await importFile('stempel', stampFile);
+      check.ok(await page.locator('#stamp-details').evaluate((d) => d.open),
+        'Nach dem Import klappt die Stempelliste auf');
+      check.ok(await page.locator('#settings').isHidden(),
+        'Nach dem Import schließt sich der Einstellungsdialog');
       check.equal(await page.locator('#stamp-list li:not(.list-empty)').count(), 3,
         'Drei Stempelstellen importiert');
 
@@ -54,6 +82,7 @@ module.exports = {
         'Erneuter Import überspringt vorhandene Einträge');
 
       /* ---- Abhaken mit Datum ---- */
+      await openStamps(page);
       await page.locator('#stamp-list li').first().locator('input[type=checkbox]').check();
       await page.waitForTimeout(500);
       check.contains(await page.textContent('#stamp-counter'), '1 von 3',
@@ -108,6 +137,25 @@ module.exports = {
       check.contains(
         await page.locator('#track-list li .item-label').first().textContent(),
         'Brocken 2024', 'Der Name aus der GPX-Datei wird übernommen');
+
+      /* ---- Hinterlegte Tour als Planung übernehmen ---- */
+      await page.locator('#track-list li .item-action').first().click();
+      await page.waitForTimeout(1800);
+      const adopted = await page.locator('#point-list li:not(.list-empty)').count();
+      check.ok(adopted >= 2 && adopted <= 25,
+        'Die hinterlegte Spur wird zu wenigen Routenpunkten eingedampft',
+        `${adopted} Punkte`);
+      check.equal(await page.locator('#tour-name').inputValue(), 'Brocken 2024',
+        'Der Name der Spur wird als Tourname übernommen');
+      check.ok(await page.locator('[data-panel=planung]').isVisible(),
+        'Nach dem Übernehmen wird zur Planung gewechselt');
+      check.contains(await page.textContent('#stat-distance'), 'km',
+        'Die übernommene Tour wird sofort berechnet');
+      check.contains(await page.textContent('#status'), 'neu berechnet',
+        'Der Hinweis zur Abweichung steht nach der Berechnung noch da');
+
+      await page.click('#btn-clear');
+      await page.waitForTimeout(900);
 
       /* ---- Tour speichern und laden ---- */
       const box = await page.locator('#map').boundingBox();

@@ -185,6 +185,20 @@ async function waitForRoute(page, contains = 'km') {
   );
 }
 
+/** Öffnet den Einstellungsdialog (Import, Abgleich, Routing, Version). */
+async function openSettings(page) {
+  if (await page.locator('#settings').isVisible()) return;
+  await page.click('#btn-settings');
+  await page.waitForSelector('#settings:not([hidden])');
+}
+
+/** Klappt die Stempelliste in der linken Leiste auf. */
+async function openStamps(page) {
+  const open = await page.locator('#stamp-details').evaluate((d) => d.open);
+  if (!open) await page.click('#stamp-details > summary');
+  await page.waitForSelector('#stamp-list', { state: 'visible' });
+}
+
 /** Zwei Punkte auf die Karte setzen und die Berechnung abwarten. */
 async function drawRoute(page) {
   const box = await page.locator('#map').boundingBox();
@@ -203,4 +217,6 @@ module.exports = {
   writeGpxWaypoints,
   waitForRoute,
   drawRoute,
+  openSettings,
+  openStamps,
 };

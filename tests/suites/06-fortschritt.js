@@ -7,7 +7,9 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { startServer, launchBrowser, stubExternals, writeGpxWaypoints } = require('../helpers');
+const {
+  startServer, launchBrowser, stubExternals, writeGpxWaypoints, openSettings, openStamps,
+} = require('../helpers');
 
 module.exports = {
   name: 'Fortschritt und Vorschläge',
@@ -62,6 +64,7 @@ module.exports = {
       ]);
 
       const importFile = async (type, file) => {
+        await openSettings(page);
         await page.selectOption('#import-type', type);
         const [chooser] = await Promise.all([
           page.waitForEvent('filechooser'),
@@ -82,6 +85,7 @@ module.exports = {
         'Die nächste Stufe wird genannt');
 
       // Elf Stempel gibt es nicht – wir haken alle zehn ab und prüfen die Zählung.
+      await openStamps(page);
       const boxes = page.locator('#stamp-list li input[type=checkbox]');
       const count = await boxes.count();
       for (let i = 0; i < count; i++) {
@@ -130,6 +134,7 @@ module.exports = {
         'Ein Tourname wird vorgeschlagen');
 
       /* ---- Versionsanzeige ---- */
+      await openSettings(page);
       const versionText = await page.textContent('#app-version');
       check.contains(versionText, 'Version', 'Die laufende Version wird angezeigt');
       check.ok(/\d+\.\d+\.\d+/.test(versionText),

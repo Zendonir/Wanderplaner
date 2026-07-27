@@ -157,6 +157,10 @@
     checkUpdate: document.getElementById('btn-check-update'),
     updateNote: document.getElementById('update-note'),
     routeStyle: document.getElementById('route-style'),
+    settings: document.getElementById('settings'),
+    settingsBtn: document.getElementById('btn-settings'),
+    settingsClose: document.getElementById('btn-settings-close'),
+    stampDetails: document.getElementById('stamp-details'),
   };
 
   /* ---------- Sammlungen: speichern, löschen, abgleichen ---------- */
@@ -334,6 +338,10 @@
 
   const scheduleRecalc = Utils.debounce(recalcRoute, 400);
 
+  // Hinweis, der erst nach der Neuberechnung stehen bleiben soll. Direkt
+  // gesetzt würde ihn das „Berechne Route …“ sofort wieder verdrängen.
+  let pendingNote = null;
+
   async function recalcRoute() {
     const id = ++requestId;
 
@@ -374,7 +382,9 @@
       updateEngineNote(route.engine);
 
       if (route.warning) showStatus('warn', route.warning, 10000);
+      else if (pendingNote) showStatus('info', pendingNote, 12000);
       else hideStatus();
+      pendingNote = null;
 
       await loadElevationAndFinish(id, route);
 
@@ -485,6 +495,38 @@
 
   /* ---------- Höhenprofil (Chart.js) ---------- */
 
+  // Farbe je Stützpunkt des Höhenprofils – null bedeutet einfarbig.
+  let profileColors = null;
+
+  const PROFILE_GREEN = '#2f6b3f';
+
+  /**
+   * Verlauf für die Fläche unter dem Profil: dieselben Farben wie die Linie,
+   * nur blasser. Jeder Abschnitt bekommt zwei Haltepunkte, damit die
+   * Übergänge genauso hart sind wie auf der Karte.
+   */
+  function profileGradient(context) {
+    const area = context.chart.chartArea;
+    if (!area || !profileColors) return RouteStyle.fade(PROFILE_GREEN, 0.18);
+
+    const samples = state.samples;
+    const scale = context.chart.scales.x;
+    const gradient = context.chart.ctx.createLinearGradient(area.left, 0, area.right, 0);
+    const span = area.right - area.left;
+
+    // Über die x-Achse rechnen statt über den reinen Streckenanteil: nur so
+    // liegt der Farbwechsel der Fläche genau unter dem der Linie.
+    const at = (dist) => Math.min(1, Math.max(0,
+      (scale.getPixelForValue(dist / 1000) - area.left) / span));
+
+    for (let i = 1; i < samples.length; i++) {
+      const color = RouteStyle.fade(profileColors[i], 0.35);
+      gradient.addColorStop(at(samples[i - 1].dist), color);
+      gradient.addColorStop(at(samples[i].dist), color);
+    }
+    return gradient;
+  }
+
   function initChart() {
     const canvas = document.getElementById('elevation-chart');
     chart = new Chart(canvas, {
@@ -493,8 +535,14 @@
         datasets: [{
           label: 'Höhe',
           data: [],
-          borderColor: '#2f6b3f',
-          backgroundColor: 'rgba(47, 107, 63, 0.18)',
+          borderColor: PROFILE_GREEN,
+          backgroundColor: profileGradient,
+          // Jedes Teilstück der Linie trägt die Farbe seines Endpunkts –
+          // so passt das Profil zur eingefärbten Route auf der Karte.
+          segment: {
+            borderColor: (ctx) =>
+              (profileColors ? profileColors[ctx.p1DataIndex] : undefined),
+          },
           fill: true,
           pointRadius: 0,
           pointHoverRadius: 5,
@@ -553,6 +601,11 @@
     chart.data.datasets[0].data = hasData
       ? state.samples.map((s) => ({ x: s.dist / 1000, y: s.ele }))
       : [];
+    profileColors = hasData
+      ? RouteStyle.sampleColors(
+        state.routeStyle, state.samples, state.geometry, state.segments
+      )
+      : null;
     chart.update('none');
     el.chartEmpty.classList.toggle('hidden', Boolean(hasData));
     el.chartEmpty.textContent = state.geometry && !hasData
@@ -806,6 +859,10 @@
     }
 
     renderAll();
+    // Der Import steht im Einstellungsdialog – danach soll man sehen,
+    // was angekommen ist.
+    setSettingsOpen(false);
+    if (kind === 'stempel') el.stampDetails.open = true;
     showStatus(hadError ? 'warn' : 'info', messages.join(' '), 9000);
   }
 
@@ -973,6 +1030,12 @@
       label.addEventListener('click', () => MapView.fitTo(Tracks.toLatLngs(track)));
       label.addEventListener('dblclick', () => renameTrack(track.id));
 
+      const adoptBtn = document.createElement('button');
+      adoptBtn.className = 'item-action';
+      adoptBtn.textContent = '➜';
+      adoptBtn.title = 'Als neue Planung übernehmen und neu berechnen';
+      adoptBtn.addEventListener('click', () => adoptTrack(track.id));
+
       const renameBtn = document.createElement('button');
       renameBtn.className = 'item-action';
       renameBtn.textContent = '✎';
@@ -985,9 +1048,67 @@
       deleteBtn.title = 'Hinterlegte Tour löschen';
       deleteBtn.addEventListener('click', () => deleteTrack(track.id));
 
-      li.append(visible, swatch, label, renameBtn, deleteBtn);
+      li.append(visible, swatch, label, adoptBtn, renameBtn, deleteBtn);
       el.trackList.appendChild(li);
     });
+  }
+
+  // So viele Routenpunkte entstehen höchstens aus einer hinterlegten Spur.
+  // Mehr würde die Liste unbedienbar machen und dem Router keinen Spielraum
+  // mehr lassen, einen sinnvollen Weg zu finden.
+  const ADOPT_MAX_POINTS = 25;
+  const ADOPT_START_TOLERANCE_M = 120;
+
+  /**
+   * Zieht aus einer dichten Spur die charakteristischen Stützpunkte heraus:
+   * Douglas-Peucker mit wachsender Toleranz, bis wenige Punkte übrig sind.
+   * Ecken und Kehren bleiben dabei erhalten, gerade Stücke fallen weg.
+   */
+  function adoptPoints(latlngs) {
+    let tolerance = ADOPT_START_TOLERANCE_M;
+    let points = Tracks.simplify(latlngs, tolerance);
+    while (points.length > ADOPT_MAX_POINTS && tolerance < 5000) {
+      tolerance *= 1.8;
+      points = Tracks.simplify(latlngs, tolerance);
+    }
+    if (points.length > ADOPT_MAX_POINTS) {
+      // Sehr verschlungene Spuren lassen sich nicht weiter ausdünnen,
+      // ohne ihre Form zu verlieren – dann gleichmäßig auswählen.
+      const step = (points.length - 1) / (ADOPT_MAX_POINTS - 1);
+      points = Array.from({ length: ADOPT_MAX_POINTS },
+        (_, i) => points[Math.round(i * step)]);
+    }
+    return points;
+  }
+
+  /** Übernimmt eine hinterlegte Spur als neue Planung. */
+  function adoptTrack(id) {
+    const track = state.tracks.find((t) => t.id === id && !t.deletedAt);
+    if (!track) return;
+
+    const latlngs = Tracks.toLatLngs(track);
+    if (latlngs.length < 2) {
+      showStatus('warn', `„${track.name}“ enthält zu wenige Punkte für eine Planung.`, 6000);
+      return;
+    }
+    if (state.points.length > 0 && !window.confirm(
+      `Die aktuelle Planung wird durch „${track.name}“ ersetzt. Fortfahren?`
+    )) return;
+
+    pushUndo();
+    state.points = adoptPoints(latlngs)
+      .map((p) => ({ id: Utils.uid(), lat: p.lat, lng: p.lng }));
+    state.tourName = track.name;
+    el.tourNameInput.value = track.name;
+
+    setTab('planung');
+    renderAll();
+    MapView.fitTo(state.points);
+    pendingNote =
+      `„${track.name}“ als Planung übernommen – ${state.points.length} Stützpunkte. ` +
+      'Die Route wurde neu berechnet und kann dabei etwas von der Originalspur ' +
+      'abweichen; einzelne Punkte lassen sich verschieben.';
+    scheduleRecalc();
   }
 
   function renameTrack(id) {
@@ -2156,6 +2277,14 @@
     setLibraryOpen(el.layout.classList.contains('library-collapsed'));
   }
 
+  /* ---------- Einstellungen ---------- */
+
+  function setSettingsOpen(open) {
+    el.settings.hidden = !open;
+    el.settingsBtn.setAttribute('aria-expanded', String(open));
+    if (open) el.settingsClose.focus();
+  }
+
   /* ---------- Sicherung als Datei ---------- */
 
   function downloadBackup() {
@@ -2183,6 +2312,7 @@
 
       ['stamps', 'parking', 'tracks', 'tours'].forEach(persist);
       renderAll();
+      setSettingsOpen(false);
       showStatus(
         'info',
         `Sicherung eingelesen: ${items('stamps').length} Stempelstellen, ` +
@@ -2333,6 +2463,7 @@
       state.routeStyle = el.routeStyle.value;
       localStorage.setItem('wanderplaner.routestyle', state.routeStyle);
       drawRoute();
+      updateChart(); // das Höhenprofil trägt dieselben Farben
     });
 
     el.checkUpdate.addEventListener('click', checkForUpdate);
@@ -2340,6 +2471,23 @@
 
     el.libraryToggle.addEventListener('click', toggleLibrary);
     setLibraryOpen(localStorage.getItem('wanderplaner.library') !== 'closed');
+
+    el.settingsBtn.addEventListener('click', () => setSettingsOpen(true));
+    el.settingsClose.addEventListener('click', () => setSettingsOpen(false));
+    // Klick neben das Fenster schließt es, Klick darin nicht.
+    el.settings.addEventListener('click', (e) => {
+      if (e.target === el.settings) setSettingsOpen(false);
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !el.settings.hidden) setSettingsOpen(false);
+    });
+
+    // Die Stempelliste bleibt so, wie der Nutzer sie zuletzt hatte.
+    el.stampDetails.open = localStorage.getItem('wanderplaner.stampsopen') === 'open';
+    el.stampDetails.addEventListener('toggle', () => {
+      localStorage.setItem('wanderplaner.stampsopen',
+        el.stampDetails.open ? 'open' : 'closed');
+    });
 
     el.syncBtn.addEventListener('click', async () => {
       // Der Knopf prüft auch erneut, ob der Server inzwischen da ist.

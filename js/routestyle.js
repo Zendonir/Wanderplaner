@@ -249,6 +249,72 @@ const RouteStyle = {
     };
   },
 
+  /* ---------- Farben für das Höhenprofil ---------- */
+
+  /**
+   * Farbe je Stützpunkt des Höhenprofils, damit das Diagramm dieselbe
+   * Sprache spricht wie die Linie auf der Karte.
+   *
+   * Zurückgegeben wird die Farbe des Stücks, das *zu* einem Stützpunkt
+   * führt; der erste Eintrag wiederholt den zweiten, damit die Länge zur
+   * Datenreihe passt.
+   *
+   * @param {string} mode plain | slope | surface
+   * @param {Array<{lat:number,lng:number,dist:number,ele:?number}>} samples
+   * @param {?Array<[number,number]>} coordinates Routengeometrie [lng, lat]
+   * @param {?Array} segments Wegabschnitte mit OSM-Tags
+   * @returns {?string[]} null, wenn einfarbig gezeichnet werden soll
+   */
+  sampleColors(mode, samples, coordinates, segments) {
+    if (!samples || samples.length < 2) return null;
+
+    if (mode === 'slope') {
+      if (samples.some((s) => s.ele == null)) return null;
+      // Die Stützpunkte liegen bereits mindestens 50 m auseinander – die
+      // Steigung zwischen ihnen ist damit von sich aus geglättet.
+      const colors = samples.map((sample, i) => {
+        if (i === 0) return null;
+        const run = sample.dist - samples[i - 1].dist;
+        const rise = sample.ele - samples[i - 1].ele;
+        const percent = run > 1 ? (rise / run) * 100 : 0;
+        return this.slopeColor(Math.round(percent / this.SLOPE_STEP) * this.SLOPE_STEP);
+      });
+      colors[0] = colors[1];
+      return colors;
+    }
+
+    if (mode === 'surface') {
+      if (!coordinates || !segments || segments.length === 0) return null;
+      const marks = segments
+        .filter((s) => s.lat != null && s.lng != null)
+        .map((s) => ({
+          index: this._nearestIndex(coordinates, s.lat, s.lng),
+          tags: s.tags,
+        }))
+        .sort((a, b) => a.index - b.index);
+      if (marks.length === 0) return null;
+
+      const colors = samples.map((sample) => {
+        // Den Stützpunkt auf der Geometrie verorten und den Wegabschnitt
+        // nehmen, der dort gilt.
+        const index = this._nearestIndex(coordinates, sample.lat, sample.lng);
+        const mark = marks.find((m) => m.index >= index) || marks[marks.length - 1];
+        const category = WayTypes.CATEGORIES.find((c) => c.test(mark.tags));
+        return category ? category.color : '#b0b6ac';
+      });
+      colors[0] = colors[1];
+      return colors;
+    }
+
+    return null;
+  },
+
+  /** Hex-Farbe mit Deckkraft, für die Fläche unter dem Höhenprofil. */
+  fade(hex, alpha) {
+    const value = parseInt(hex.slice(1), 16);
+    return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`;
+  },
+
   /** Index des Geometriepunkts, der einer Position am nächsten liegt. */
   _nearestIndex(coordinates, lat, lng) {
     const cosLat = Math.cos((lat * Math.PI) / 180);

@@ -56,7 +56,8 @@ denselben Datenstand sehen.
 - **Höhenprofil** – bis zu 100 Stützpunkte entlang der Route werden per
   Open-Elevation abgefragt (Fallback: Open-Topo-Data) und als Diagramm
   angezeigt. Hovern über das Profil markiert die Stelle auf der Karte –
-  und umgekehrt.
+  und umgekehrt. Linie und Fläche tragen dieselbe Farbgebung wie die Route,
+  je nach gewählter Darstellung also nach Steigung oder nach Wegart.
 - **GPX-Import mit Art-Auswahl** – beim Import wird gewählt, was die Datei
   enthält: Stempelstellen, Parkplätze, eine abgeschlossene Tour oder POIs.
   Mehrere Dateien auf einmal sind möglich.
@@ -76,7 +77,10 @@ denselben Datenstand sehen.
 - **Abgeschlossene Touren hinterlegen** – GPX-Spuren (`<trk>`) werden dauerhaft
   auf der Karte hinterlegt, je Tour in eigener Farbe, einzeln ein- und
   ausblendbar, umbenennbar und löschbar. Die Geometrie wird beim Import
-  ausgedünnt, damit auch viele Touren in den Browser-Speicher passen.
+  ausgedünnt, damit auch viele Touren in den Browser-Speicher passen. Mit ➜
+  wird eine hinterlegte Spur zur neuen Planung: Sie wird auf höchstens 25
+  charakteristische Stützpunkte eingedampft und neu berechnet, sodass sie sich
+  anschließend Punkt für Punkt anpassen lässt.
 - **Touren benennen und speichern** – die aktuelle Planung lässt sich unter
   einem Namen sichern (inklusive POIs und Routing-Einstellungen), später
   wieder laden, umbenennen und löschen.
@@ -122,9 +126,14 @@ denselben Datenstand sehen.
 - **Geräteübergreifender Abgleich** – die Sammlung liegt im Container und ist
   auf Laptop, Handy und Tablet gleich. Zusätzlich lässt sich alles als Datei
   sichern und wieder einlesen (siehe unten).
-- **Einklappbare Sammlung** – links liegen Import, Touren, Parkplätze und
-  Stempelstellen, rechts die aktuelle Planung. Über ☰ oben links lässt sich
-  die linke Leiste ausblenden, wenn die Karte mehr Platz braucht.
+- **Einklappbare Sammlung** – links liegen gespeicherte und hinterlegte Touren,
+  Parkplätze und – in einem eigenen Untermenü – die Stempelstellen, rechts die
+  aktuelle Planung. Über ☰ oben links lässt sich die linke Leiste ausblenden,
+  wenn die Karte mehr Platz braucht.
+- **Einstellungsseite** – alles, was man einmal einrichtet und dann in Ruhe
+  lässt, liegt hinter ⚙ *Einstellungen* oben rechts: Routing-Gewichtung,
+  GPX-Import, Abgleich und Sicherung sowie Version und Update-Prüfung. Esc
+  oder ein Klick daneben schließt sie wieder.
 
 Alle Karten-, Routing- und Höhenabfragen laufen clientseitig im Browser – der
 Container braucht dafür keine ausgehenden Verbindungen.

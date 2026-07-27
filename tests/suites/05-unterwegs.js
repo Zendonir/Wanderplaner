@@ -8,7 +8,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { startServer, launchBrowser, stubExternals, writeGpxWaypoints,
-        drawRoute } = require('../helpers');
+        drawRoute, openSettings } = require('../helpers');
 
 module.exports = {
   name: 'Unterwegs und Offline',
@@ -51,6 +51,7 @@ module.exports = {
         { lat: 51.8080, lng: 10.6120, name: '800 m ab' },
         { lat: 52.5000, lng: 13.4000, name: 'Weit weg' },
       ]);
+      await openSettings(page);
       const [chooser] = await Promise.all([
         page.waitForEvent('filechooser'),
         page.click('#btn-import'),

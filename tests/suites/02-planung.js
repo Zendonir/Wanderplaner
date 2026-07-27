@@ -108,8 +108,25 @@ module.exports = {
           .map((p) => p.getAttribute('stroke'))
           .filter((c) => c && c !== 'none'));
 
+      // Wie viele deutlich verschiedene Farbtöne im Höhenprofil vorkommen.
+      // Graue Achsen und Beschriftung werden dabei übersprungen.
+      const profileTones = () => page.evaluate(() => {
+        const canvas = document.getElementById('elevation-chart');
+        const ctx = canvas.getContext('2d');
+        const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        const tones = new Set();
+        for (let i = 0; i < pixels.length; i += 4) {
+          const [r, g, b, a] = [pixels[i], pixels[i + 1], pixels[i + 2], pixels[i + 3]];
+          if (a < 200) continue;
+          if (Math.max(r, g, b) - Math.min(r, g, b) < 40) continue;
+          tones.add(`${r >> 4},${g >> 4},${b >> 4}`);
+        }
+        return tones.size;
+      });
+
       await page.selectOption('#route-style', 'plain');
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(700);
+      const plainTones = await profileTones();
       const plainColors = new Set(await lineColors());
       check.ok(plainColors.has('#c0392b'), 'Einfarbig zeichnet die Route in einer Farbe');
       check.equal(await page.locator('.route-legend').count(), 0,
@@ -131,6 +148,14 @@ module.exports = {
         'Die tatsächliche Spanne der Tour wird genannt');
       check.ok(slopeColors.size >= 4, 'Die Abstufung ist fein',
         `${slopeColors.size} Farben`);
+
+      // Das Höhenprofil muss dieselbe Sprache sprechen wie die Karte.
+      const slopeTones = await profileTones();
+      check.ok(slopeTones > plainTones,
+        'Das Höhenprofil übernimmt die Farben der Route',
+        `einfarbig ${plainTones}, nach Steigung ${slopeTones} Farbtöne`);
+      check.ok(slopeTones >= 4, 'Auch im Profil ist die Abstufung fein',
+        `${slopeTones} Farbtöne`);
 
       await page.selectOption('#route-style', 'surface');
       await page.waitForTimeout(600);

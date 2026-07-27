@@ -19,6 +19,7 @@
     <h1>🥾 Wanderplaner</h1>
     <span id="sync-badge" class="sync-badge" title="Abgleich mit dem Server"></span>
     <button id="btn-locate" class="locate-toggle" title="Eigenen Standort auf der Karte anzeigen">📍 Standort</button>
+    <button id="btn-settings" class="locate-toggle" title="Einstellungen, Import und Abgleich">⚙ Einstellungen</button>
     <form id="search-form" class="search-form" autocomplete="off">
       <input type="text" id="search-input" placeholder="Ort suchen (z. B. Zugspitze)">
       <button type="submit" title="Ort suchen">🔍</button>
@@ -26,34 +27,9 @@
   </header>
 
   <main class="layout" id="layout">
-    <!-- Linke Seitenleiste: alles, was zur Sammlung gehört und nicht direkt
-         zur aktuellen Routenplanung. -->
+    <!-- Linke Seitenleiste: die Sammlung. Was man nur selten braucht –
+         Import, Abgleich, Routing-Einstellungen – liegt im Einstellungsdialog. -->
     <aside class="library" id="library">
-      <section class="sync-section">
-        <div class="sync-status" id="sync-status">Abgleich wird geprüft …</div>
-        <div class="sync-actions">
-          <button id="btn-sync" title="Jetzt mit dem Server abgleichen">⟳ Abgleichen</button>
-          <button id="btn-backup" title="Gesamte Sammlung als Datei sichern">⬇ Sichern</button>
-          <button id="btn-restore" title="Sicherung einlesen">⬆ Laden</button>
-          <input type="file" id="restore-file" accept=".json,application/json" hidden>
-        </div>
-      </section>
-
-      <section class="list-section">
-        <h2>GPX importieren</h2>
-        <div class="import-row">
-          <select id="import-type" title="Art des GPX-Imports">
-            <option value="stempel">Stempelstellen</option>
-            <option value="parkplatz">Parkplätze</option>
-            <option value="track">Abgeschlossene Tour</option>
-            <option value="poi">POIs</option>
-          </select>
-          <button id="btn-import">⬆ Datei wählen</button>
-          <input type="file" id="import-file" accept=".gpx,application/gpx+xml" hidden multiple>
-        </div>
-        <p class="hint" id="import-hint"></p>
-      </section>
-
       <section class="list-section" id="section-tours">
         <h2>Gespeicherte Touren</h2>
         <ul id="tour-list" class="tour-list"></ul>
@@ -71,9 +47,12 @@
         <ul id="parking-list" class="parking-list"></ul>
       </section>
 
-      <section class="list-section">
-        <h2>Stempelstellen</h2>
-        <p class="hint stamp-counter" id="stamp-counter">Noch keine Stempelstellen importiert</p>
+      <!-- Die Stempelliste wird schnell sehr lang – deshalb aufklappbar. -->
+      <details class="list-details" id="stamp-details">
+        <summary>
+          <span>Stempelstellen</span>
+          <span class="stamp-counter" id="stamp-counter">Noch keine Stempelstellen importiert</span>
+        </summary>
         <div class="stamp-tools">
           <input type="text" id="stamp-search" placeholder="Stempelstelle suchen …">
           <select id="stamp-filter">
@@ -88,15 +67,7 @@
           <button id="btn-tour-clear" disabled>Auswahl leeren</button>
         </div>
         <ul id="stamp-list" class="stamp-list"></ul>
-      </section>
-
-      <footer class="about">
-        <span id="app-version" title="Laufende Version dieser Installation">Version …</span>
-        <button id="btn-check-update" title="Bei GitHub nachsehen, ob es eine neuere Version gibt">
-          Auf Updates prüfen
-        </button>
-        <p class="about-note" id="update-note" hidden></p>
-      </footer>
+      </details>
     </aside>
 
     <div id="map" class="map-panel"></div>
@@ -186,83 +157,6 @@
         </div>
         <button id="btn-generate" class="wide-btn" disabled>Rundtour erzeugen</button>
         <p class="hint" id="generator-note"></p>
-      </details>
-
-      <details class="routing-settings" id="routing-settings">
-        <summary>⚙ Routing-Einstellungen <span id="preset-badge" class="preset-badge"></span></summary>
-
-        <label class="field">
-          <span>Voreinstellung</span>
-          <select id="rs-preset"></select>
-        </label>
-        <p class="hint" id="preset-description"></p>
-
-        <div class="sliders">
-          <label class="slider" title="Wie stark Straßen gemieden werden. Straßen bleiben nutzbar, wenn sie zwingend verbinden.">
-            <span>Straßen meiden</span>
-            <input type="range" id="rs-avoidRoads" min="0" max="3" step="1">
-            <output></output>
-          </label>
-          <label class="slider" title="Bevorzugt Wege, die zum Wandern taugen: Pfade, Fußwege, Forstwege, Fußgängerzonen.">
-            <span>Wanderwege bevorzugen</span>
-            <input type="range" id="rs-preferHiking" min="0" max="3" step="1">
-            <output></output>
-          </label>
-          <label class="slider" title="Bevorzugt ausgeschilderte Wanderwege (OSM-Relationen route=hiking / route=foot).">
-            <span>Markierte Wanderwege</span>
-            <input type="range" id="rs-preferMarked" min="0" max="3" step="1">
-            <output></output>
-          </label>
-          <label class="slider" title="Bevorzugt schmale Pfade und Fußwege (highway=path/footway).">
-            <span>Pfade bevorzugen</span>
-            <input type="range" id="rs-preferPaths" min="0" max="3" step="1">
-            <output></output>
-          </label>
-          <label class="slider" title="Bevorzugt Forst- und Feldwege (highway=track).">
-            <span>Forstwege bevorzugen</span>
-            <input type="range" id="rs-preferTracks" min="0" max="3" step="1">
-            <output></output>
-          </label>
-          <label class="slider" title="Asphalt, Beton und Pflaster kosten mehr – unbefestigte Wege werden dadurch bevorzugt.">
-            <span>Asphalt meiden</span>
-            <input type="range" id="rs-avoidPaved" min="0" max="3" step="1">
-            <output></output>
-          </label>
-          <label class="slider" title="Bewertet surface, smoothness und tracktype: grobe oder ausgewaschene Wege kosten mehr.">
-            <span>Schlechte Oberfläche meiden</span>
-            <input type="range" id="rs-avoidRoughSurface" min="0" max="3" step="1">
-            <output></output>
-          </label>
-          <label class="slider" title="Bestraft Höhenmeter und ausgewiesen steile Abschnitte (incline).">
-            <span>Steile Wege meiden</span>
-            <input type="range" id="rs-avoidSteep" min="0" max="3" step="1">
-            <output></output>
-          </label>
-          <label class="slider" title="Bestraft Pfade mit schlechter trail_visibility – hilft gegen kaum erkennbare Trampelpfade.">
-            <span>Schlecht sichtbare Pfade meiden</span>
-            <input type="range" id="rs-avoidBadVisibility" min="0" max="3" step="1">
-            <output></output>
-          </label>
-        </div>
-
-        <label class="field">
-          <span>Max. Schwierigkeit (sac_scale)</span>
-          <select id="rs-sacLimit">
-            <option value="1">T1 – Wandern</option>
-            <option value="2">T2 – Bergwandern</option>
-            <option value="3">T3 – anspruchsvolles Bergwandern</option>
-            <option value="4">T4 – Alpinwandern</option>
-            <option value="5">T5 – anspruchsvolles Alpinwandern</option>
-            <option value="6">T6 – schwieriges Alpinwandern</option>
-          </select>
-        </label>
-
-        <label class="checkbox">
-          <input type="checkbox" id="rs-allowSteps">
-          <span>Treppen erlauben</span>
-        </label>
-
-        <div class="engine-note" id="engine-note"></div>
       </details>
 
       <section class="list-section">
@@ -376,7 +270,6 @@
         <ul id="along-list" class="along-list"></ul>
       </section>
 
-
       </div><!-- /unterwegs -->
 
       <button id="btn-export" class="export-btn" disabled>⬇ Route exportieren (GPX)</button>
@@ -392,6 +285,136 @@
       </div>
     </section>
   </main>
+
+  <!-- Einstellungen: alles, was man einmal einrichtet und dann in Ruhe lässt. -->
+  <div class="settings-overlay" id="settings" hidden>
+    <div class="settings-sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <header class="settings-head">
+        <h2 id="settings-title">⚙ Einstellungen</h2>
+        <button id="btn-settings-close" class="settings-close" title="Schließen (Esc)">✕</button>
+      </header>
+
+      <div class="settings-body">
+        <section class="settings-block">
+        <h3>Routing <span id="preset-badge" class="preset-badge"></span></h3>
+        <p class="hint">Diese Gewichtungen fließen direkt in die Wegekosten ein –
+          sie wirken sich also wirklich auf den gewählten Weg aus.</p>
+
+        <label class="field">
+          <span>Voreinstellung</span>
+          <select id="rs-preset"></select>
+        </label>
+        <p class="hint" id="preset-description"></p>
+
+        <div class="sliders">
+          <label class="slider" title="Wie stark Straßen gemieden werden. Straßen bleiben nutzbar, wenn sie zwingend verbinden.">
+            <span>Straßen meiden</span>
+            <input type="range" id="rs-avoidRoads" min="0" max="3" step="1">
+            <output></output>
+          </label>
+          <label class="slider" title="Bevorzugt Wege, die zum Wandern taugen: Pfade, Fußwege, Forstwege, Fußgängerzonen.">
+            <span>Wanderwege bevorzugen</span>
+            <input type="range" id="rs-preferHiking" min="0" max="3" step="1">
+            <output></output>
+          </label>
+          <label class="slider" title="Bevorzugt ausgeschilderte Wanderwege (OSM-Relationen route=hiking / route=foot).">
+            <span>Markierte Wanderwege</span>
+            <input type="range" id="rs-preferMarked" min="0" max="3" step="1">
+            <output></output>
+          </label>
+          <label class="slider" title="Bevorzugt schmale Pfade und Fußwege (highway=path/footway).">
+            <span>Pfade bevorzugen</span>
+            <input type="range" id="rs-preferPaths" min="0" max="3" step="1">
+            <output></output>
+          </label>
+          <label class="slider" title="Bevorzugt Forst- und Feldwege (highway=track).">
+            <span>Forstwege bevorzugen</span>
+            <input type="range" id="rs-preferTracks" min="0" max="3" step="1">
+            <output></output>
+          </label>
+          <label class="slider" title="Asphalt, Beton und Pflaster kosten mehr – unbefestigte Wege werden dadurch bevorzugt.">
+            <span>Asphalt meiden</span>
+            <input type="range" id="rs-avoidPaved" min="0" max="3" step="1">
+            <output></output>
+          </label>
+          <label class="slider" title="Bewertet surface, smoothness und tracktype: grobe oder ausgewaschene Wege kosten mehr.">
+            <span>Schlechte Oberfläche meiden</span>
+            <input type="range" id="rs-avoidRoughSurface" min="0" max="3" step="1">
+            <output></output>
+          </label>
+          <label class="slider" title="Bestraft Höhenmeter und ausgewiesen steile Abschnitte (incline).">
+            <span>Steile Wege meiden</span>
+            <input type="range" id="rs-avoidSteep" min="0" max="3" step="1">
+            <output></output>
+          </label>
+          <label class="slider" title="Bestraft Pfade mit schlechter trail_visibility – hilft gegen kaum erkennbare Trampelpfade.">
+            <span>Schlecht sichtbare Pfade meiden</span>
+            <input type="range" id="rs-avoidBadVisibility" min="0" max="3" step="1">
+            <output></output>
+          </label>
+        </div>
+
+        <label class="field">
+          <span>Max. Schwierigkeit (sac_scale)</span>
+          <select id="rs-sacLimit">
+            <option value="1">T1 – Wandern</option>
+            <option value="2">T2 – Bergwandern</option>
+            <option value="3">T3 – anspruchsvolles Bergwandern</option>
+            <option value="4">T4 – Alpinwandern</option>
+            <option value="5">T5 – anspruchsvolles Alpinwandern</option>
+            <option value="6">T6 – schwieriges Alpinwandern</option>
+          </select>
+        </label>
+
+        <label class="checkbox">
+          <input type="checkbox" id="rs-allowSteps">
+          <span>Treppen erlauben</span>
+        </label>
+
+        <div class="engine-note" id="engine-note"></div>
+        </section>
+
+        <section class="settings-block">
+          <h3>GPX importieren</h3>
+          <div class="import-row">
+            <select id="import-type" title="Art des GPX-Imports">
+              <option value="stempel">Stempelstellen</option>
+              <option value="parkplatz">Parkplätze</option>
+              <option value="track">Abgeschlossene Tour</option>
+              <option value="poi">POIs</option>
+            </select>
+            <button id="btn-import">⬆ Datei wählen</button>
+            <input type="file" id="import-file" accept=".gpx,application/gpx+xml" hidden multiple>
+          </div>
+          <p class="hint" id="import-hint"></p>
+        </section>
+
+        <section class="settings-block">
+          <h3>Abgleich und Sicherung</h3>
+          <div class="sync-section">
+            <div class="sync-status" id="sync-status">Abgleich wird geprüft …</div>
+            <div class="sync-actions">
+              <button id="btn-sync" title="Jetzt mit dem Server abgleichen">⟳ Abgleichen</button>
+              <button id="btn-backup" title="Gesamte Sammlung als Datei sichern">⬇ Sichern</button>
+              <button id="btn-restore" title="Sicherung einlesen">⬆ Laden</button>
+              <input type="file" id="restore-file" accept=".json,application/json" hidden>
+            </div>
+          </div>
+        </section>
+
+        <section class="settings-block">
+          <h3>Über</h3>
+          <div class="about">
+            <span id="app-version" title="Laufende Version dieser Installation">Version …</span>
+            <button id="btn-check-update" title="Bei GitHub nachsehen, ob es eine neuere Version gibt">
+              Auf Updates prüfen
+            </button>
+            <p class="about-note" id="update-note" hidden></p>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
 
   <script src="vendor/leaflet.js"></script>
   <script src="vendor/chart.umd.js"></script>

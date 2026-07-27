@@ -41,7 +41,7 @@ function moduleName(file) {
   const map = {
     utils: 'Utils', qrcode: 'QRCode', daylight: 'Daylight', nearby: 'Nearby',
     waytypes: 'WayTypes', clusters: 'Clusters', progress: 'Progress',
-    maplinks: 'MapLinks', tracks: 'Tracks',
+    maplinks: 'MapLinks', tracks: 'Tracks', routestyle: 'RouteStyle',
   };
   return map[file] || file;
 }
@@ -50,9 +50,10 @@ module.exports = {
   name: 'Logik (ohne Browser)',
 
   async run(check) {
-    const { Utils, QRCode, Daylight, Nearby, WayTypes, Clusters, Progress, MapLinks } =
+    const { Utils, QRCode, Daylight, Nearby, WayTypes, Clusters, Progress, MapLinks,
+            RouteStyle } =
       loadModules(['utils', 'qrcode', 'daylight', 'nearby', 'waytypes', 'clusters',
-                   'progress', 'maplinks']);
+                   'progress', 'maplinks', 'routestyle']);
 
     /* ---- QR-Code: gegen einen unabhängigen Decoder ---- */
     const jsQR = require('jsqr');
@@ -207,6 +208,63 @@ module.exports = {
       (sum, p, i) => sum + Utils.haversine(pts[i], p), 0);
     check.ok(lengthOf(ordered) <= lengthOf(messy),
       'Optimierte Reihenfolge ist nicht länger als die ursprüngliche');
+
+    /* ---- Farbige Darstellung der Route ---- */
+    // Strecke mit flachem Anfang, steilem Anstieg und flachem Ende.
+    const routeCoords = [];
+    const routeEle = [];
+    for (let i = 0; i <= 60; i++) {
+      routeCoords.push([10.60, 51.80 + i * 0.0009]);
+      // 0–20 flach, 20–40 steil bergauf, 40–60 bergab
+      if (i <= 20) routeEle.push(600);
+      else if (i <= 40) routeEle.push(600 + (i - 20) * 20);
+      else routeEle.push(1000 - (i - 40) * 12);
+    }
+
+    const plain = RouteStyle.build('plain', routeCoords, routeEle, null);
+    check.equal(plain.sections.length, 1, 'Einfarbig ergibt genau ein Teilstück');
+    check.equal(plain.legend.length, 0, 'Einfarbig braucht keine Legende');
+
+    const slope = RouteStyle.build('slope', routeCoords, routeEle, null);
+    check.ok(slope.sections.length >= 3,
+      'Nach Steigung entstehen mehrere Farbabschnitte',
+      `${slope.sections.length} Abschnitte`);
+    const slopeColors = new Set(slope.sections.map((s) => s.color));
+    check.ok(slopeColors.size >= 3, 'Flach, bergauf und bergab werden unterschieden',
+      `${slopeColors.size} Farben`);
+    check.ok(slope.legend.length === slopeColors.size,
+      'Die Legende nennt genau die verwendeten Klassen');
+    // Der flache Anfang muss grün sein, der steile Teil warm.
+    check.equal(slope.sections[0].color, '#4a9a5c', 'Flacher Anfang ist grün');
+    check.ok(slope.sections.some((s) => s.color === '#c0392b'),
+      'Der steile Anstieg bekommt die Warnfarbe');
+
+    // Ohne Höhenwerte darf es nicht abstürzen, sondern muss es erklären.
+    const noEle = RouteStyle.build('slope', routeCoords, null, null);
+    check.equal(noEle.sections.length, 1, 'Ohne Höhen wird einfarbig gezeichnet');
+    check.contains(noEle.note, 'Steigung', 'Der Grund wird genannt');
+
+    const styleSegments = [
+      { length: 1600, lat: 51.809, lng: 10.60, tags: { highway: 'path', route_hiking_rwn: 'yes' } },
+      { length: 1200, lat: 51.827, lng: 10.60, tags: { highway: 'track' } },
+      { length: 700, lat: 51.845, lng: 10.60, tags: { highway: 'tertiary' } },
+    ];
+    const surface = RouteStyle.build('surface', routeCoords, routeEle, styleSegments);
+    check.ok(surface.sections.length >= 2,
+      'Nach Wegbedingungen entstehen mehrere Abschnitte',
+      `${surface.sections.length} Abschnitte`);
+    check.ok(surface.legend.some((l) => l.label.includes('Markierter')),
+      'Die Legende nennt die vorkommenden Wegarten');
+    check.ok(surface.sections.every((s) => s.coordinates.length >= 2),
+      'Jedes Teilstück hat mindestens zwei Punkte');
+
+    // Alle Teilstücke zusammen müssen die Strecke lückenlos abdecken.
+    const covered = surface.sections.reduce((sum, s) => sum + s.coordinates.length - 1, 0);
+    check.equal(covered, routeCoords.length - 1,
+      'Die Teilstücke decken die Strecke lückenlos ab');
+
+    const noSegments = RouteStyle.build('surface', routeCoords, routeEle, null);
+    check.contains(noSegments.note, 'Wegedaten', 'Fehlende Wegedaten werden erklärt');
 
     /* ---- Der Service Worker muss alle Programmdateien kennen ---- */
     // Ein vergessener Eintrag fällt sonst erst offline auf, wo die App dann

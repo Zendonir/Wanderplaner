@@ -25,6 +25,8 @@ const MapView = (function () {
   let routePoints = [];
   let pavedLines = [];
   let placeMarkers = [];
+  let routeLines = [];
+  let legendControl = null;
   let suppressNextClick = false;
   let samples = null; // Höhen-Stützpunkte für die Hover-Zuordnung
 
@@ -621,7 +623,13 @@ const MapView = (function () {
     });
   }
 
-  function renderRoute(coordinates, points) {
+  /**
+   * Zeichnet die Route. `sections` sind farbige Teilstücke; ohne Angabe
+   * wird die Strecke einfarbig dargestellt.
+   */
+  function renderRoute(coordinates, points, sections) {
+    routeLines.forEach((l) => map.removeLayer(l));
+    routeLines = [];
     if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
     if (hitLine) { map.removeLayer(hitLine); hitLine = null; }
     routeCoords = coordinates;
@@ -629,11 +637,22 @@ const MapView = (function () {
     if (!coordinates || coordinates.length < 2) return;
 
     const latlngs = coordinates.map((c) => [c[1], c[0]]);
-    routeLine = L.polyline(latlngs, {
-      color: '#c0392b',
-      weight: 4,
-      opacity: 0.85,
-    }).addTo(map);
+    const parts = sections && sections.length > 0
+      ? sections
+      : [{ coordinates, color: '#c0392b' }];
+
+    parts.forEach((part) => {
+      const line = L.polyline(part.coordinates.map((c) => [c[1], c[0]]), {
+        color: part.color,
+        weight: 5,
+        opacity: 0.9,
+        // Abgerundete Enden lassen die Farbwechsel nahtlos wirken.
+        lineCap: 'round',
+        lineJoin: 'round',
+        interactive: false,
+      }).addTo(map);
+      routeLines.push(line);
+    });
 
     // Breite, praktisch unsichtbare Linie: fängt Hover und Ziehen großzügig
     // ab. Bei opacity 0 wird der Pfad nicht gezeichnet und bekommt dann auch
@@ -657,6 +676,43 @@ const MapView = (function () {
       clearHoverPoint();
       cbs.onRouteHoverEnd();
     });
+  }
+
+  /** Farblegende in der Kartenecke; ohne Einträge wird sie entfernt. */
+  function renderLegend(entries, note) {
+    if (legendControl) {
+      map.removeControl(legendControl);
+      legendControl = null;
+    }
+    if ((!entries || entries.length === 0) && !note) return;
+
+    const control = L.control({ position: 'bottomright' });
+    control.onAdd = () => {
+      const div = L.DomUtil.create('div', 'route-legend');
+      L.DomEvent.disableClickPropagation(div);
+
+      (entries || []).forEach((entry) => {
+        const row = document.createElement('div');
+        row.className = 'legend-row';
+        const swatch = document.createElement('span');
+        swatch.className = 'legend-swatch';
+        swatch.style.background = entry.color;
+        const label = document.createElement('span');
+        label.textContent = entry.label;
+        row.append(swatch, label);
+        div.appendChild(row);
+      });
+
+      if (note) {
+        const hint = document.createElement('p');
+        hint.className = 'legend-note';
+        hint.textContent = note;
+        div.appendChild(hint);
+      }
+      return div;
+    };
+    control.addTo(map);
+    legendControl = control;
   }
 
   /** Hebt die befestigten bzw. Straßenabschnitte der Route hervor. */
@@ -767,6 +823,7 @@ const MapView = (function () {
     renderPoints,
     renderPois,
     renderRoute,
+    renderLegend,
     renderPavedSections,
     renderPlaces,
     renderStamps,

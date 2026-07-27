@@ -18,6 +18,10 @@ denselben Datenstand sehen.
 - **Route per Ziehen bearbeiten** – die berechnete Linie an einer beliebigen
   Stelle greifen und ziehen: dort entsteht ein Zwischenpunkt an der richtigen
   Position in der Reihenfolge, die Route rechnet sofort neu.
+- **Farbige Route** – die geplante Strecke lässt sich umschalten zwischen
+  *einfarbig*, *nach Steigung* (grün flach, warm bergauf, kühl bergab) und
+  *nach Wegbedingungen* (markierter Wanderweg, Pfad, Forstweg, Straße).
+  Eine Legende auf der Karte erklärt die Farben; die Wahl bleibt gespeichert.
 - **Wegebeschaffenheit** – nach jeder Berechnung wird aufgeschlüsselt, woraus
   die Route besteht: Anteile von markierten Wanderwegen, Pfaden, Forstwegen
   und Straßen sowie die Oberflächen. Damit lässt sich prüfen, ob die
@@ -350,6 +354,7 @@ js/roundtrip.js     – Rundtour nach Wunschlänge erzeugen
 js/weather.js       – Wettervorhersage über Open-Meteo
 js/progress.js      – Sammelfortschritt, Stufen, Jahresstatistik
 js/clusters.js      – Gruppen offener Stempelstellen für Tourenvorschläge
+js/routestyle.js    – farbige Abschnitte der Route nach Steigung bzw. Wegart
 tests/              – Testsuiten (siehe unten)
 sw.js               – Service Worker für den Offline-Betrieb
 manifest.webmanifest– Angaben zur Installation als App

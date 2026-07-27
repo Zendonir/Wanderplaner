@@ -15,6 +15,7 @@
     savedTours: Tours.load(), // benannte Planungen – persistent
     tourName: '',
     version: null,
+    routeStyle: localStorage.getItem('wanderplaner.routestyle') || 'plain',
     tourSelection: [],  // Stempel-IDs, die in den Routenvorschlag sollen
     routing: loadRoutingSettings(), // Gewichtung der Wegetypen
     preset: localStorage.getItem('wanderplaner.preset') || 'wander',
@@ -155,6 +156,7 @@
     appVersion: document.getElementById('app-version'),
     checkUpdate: document.getElementById('btn-check-update'),
     updateNote: document.getElementById('update-note'),
+    routeStyle: document.getElementById('route-style'),
   };
 
   /* ---------- Sammlungen: speichern, löschen, abgleichen ---------- */
@@ -344,7 +346,8 @@
       state.descent = null;
       state.alternatives = [];
       state.places = [];
-      MapView.renderRoute(null, state.points);
+      state.elevations = null;
+      drawRoute();
       MapView.renderPlaces(null);
       MapView.setSamples(null);
       el.altSection.hidden = true;
@@ -399,12 +402,27 @@
   function applyRoute(route) {
     state.geometry = route.coordinates;
     state.segments = route.segments || null;
+    state.elevations = route.elevations || null;
     state.distance = route.distance;
-    MapView.renderRoute(state.geometry, state.points);
+    drawRoute();
     updateWayTypes();
     updateWarnings();
     updateStats();
     updateButtons();
+  }
+
+  /** Zeichnet die Route in der gewählten Darstellung samt Legende. */
+  function drawRoute() {
+    if (!state.geometry) {
+      MapView.renderRoute(null, state.points);
+      MapView.renderLegend(null, null);
+      return;
+    }
+    const styled = RouteStyle.build(
+      state.routeStyle, state.geometry, state.elevations, state.segments
+    );
+    MapView.renderRoute(state.geometry, state.points, styled.sections);
+    MapView.renderLegend(styled.legend, styled.note);
   }
 
   /** Höhen übernehmen (vom Router oder per Dienst) und Anzeige auffrischen. */
@@ -2308,6 +2326,13 @@
     el.clustersBtn.addEventListener('click', findClusters);
     el.clusterLength.addEventListener('change', () => {
       if (state.clusters) findClusters();
+    });
+
+    el.routeStyle.value = state.routeStyle;
+    el.routeStyle.addEventListener('change', () => {
+      state.routeStyle = el.routeStyle.value;
+      localStorage.setItem('wanderplaner.routestyle', state.routeStyle);
+      drawRoute();
     });
 
     el.checkUpdate.addEventListener('click', checkForUpdate);

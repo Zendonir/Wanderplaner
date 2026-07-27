@@ -1135,6 +1135,47 @@ body {
 .wide-btn:hover:not(:disabled) { background: var(--green-dark); }
 .wide-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
+/* ---------- Darstellung der Route ---------- */
+
+.style-row {
+  display: flex;
+  align-items: center;
+}
+
+.style-row .field-inline > span {
+  white-space: nowrap;
+}
+
+.route-legend {
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.76rem;
+  line-height: 1.35;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.2);
+  max-width: 230px;
+}
+
+.legend-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.legend-swatch {
+  width: 1.1rem;
+  height: 0.35rem;
+  border-radius: 2px;
+  flex: 0 0 auto;
+}
+
+.legend-note {
+  margin-top: 0.3rem;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
 /* ---------- Route ziehen ---------- */
 
 .route-draggable {

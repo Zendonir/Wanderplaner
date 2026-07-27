@@ -102,6 +102,45 @@ module.exports = {
       check.ok(await page.locator('#point-list li:not(.list-empty)').count() >= 6,
         'Die Rundtour besteht aus mehreren Punkten');
 
+      /* ---- Farbliche Darstellung ---- */
+      const lineColors = () => page.evaluate(() =>
+        [...document.querySelectorAll('#map path')]
+          .map((p) => p.getAttribute('stroke'))
+          .filter((c) => c && c !== 'none'));
+
+      await page.selectOption('#route-style', 'plain');
+      await page.waitForTimeout(500);
+      const plainColors = new Set(await lineColors());
+      check.ok(plainColors.has('#c0392b'), 'Einfarbig zeichnet die Route in einer Farbe');
+      check.equal(await page.locator('.route-legend').count(), 0,
+        'Einfarbig zeigt keine Legende');
+
+      await page.selectOption('#route-style', 'slope');
+      await page.waitForTimeout(600);
+      const slopeColors = new Set(await lineColors());
+      check.ok(slopeColors.size >= 2, 'Nach Steigung wird mehrfarbig gezeichnet',
+        `${slopeColors.size} Farben`);
+      check.equal(await page.locator('.route-legend').count(), 1,
+        'Eine Legende erscheint auf der Karte');
+      const slopeLegend = await page.locator('.route-legend .legend-row').count();
+      check.ok(slopeLegend >= 2, 'Die Legende nennt die Steigungsklassen',
+        `${slopeLegend} Einträge`);
+
+      await page.selectOption('#route-style', 'surface');
+      await page.waitForTimeout(600);
+      const surfaceLegend = await page.locator('.route-legend .legend-row').allTextContents();
+      check.ok(surfaceLegend.length >= 2, 'Nach Wegbedingungen erscheint eine Legende',
+        surfaceLegend.join(' | '));
+      check.ok(surfaceLegend.some((t) => t.includes('Wanderweg') || t.includes('Pfad')),
+        'Die Legende nennt Wegarten');
+
+      // Die Wahl muss einen Neustart überstehen.
+      await page.reload();
+      await page.waitForSelector('#map.leaflet-container');
+      await page.waitForTimeout(700);
+      check.equal(await page.locator('#route-style').inputValue(), 'surface',
+        'Die gewählte Darstellung bleibt gespeichert');
+
       check.equal(errors.length, 0, 'Keine Skriptfehler',
         errors.join(' | '));
     } finally {

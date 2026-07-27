@@ -153,6 +153,17 @@
         <button id="btn-clear" disabled title="Alle Routenpunkte und POIs entfernen">🗑 Leeren</button>
       </section>
 
+      <section class="style-row">
+        <label class="field-inline" title="Wie die berechnete Strecke auf der Karte eingefärbt wird">
+          <span>Darstellung</span>
+          <select id="route-style">
+            <option value="plain">Einfarbig</option>
+            <option value="slope">Nach Steigung</option>
+            <option value="surface">Nach Wegbedingungen</option>
+          </select>
+        </label>
+      </section>
+
       <details class="tool-panel" id="generator-panel">
         <summary>🔄 Rundtour vorschlagen</summary>
         <p class="hint">Erzeugt ab dem ersten Routenpunkt eine Schleife mit
@@ -401,6 +412,7 @@
   <script src="js/weather.js"></script>
   <script src="js/progress.js"></script>
   <script src="js/clusters.js"></script>
+  <script src="js/routestyle.js"></script>
   <script src="js/places.js"></script>
   <script src="js/tracks.js"></script>
   <script src="js/tours.js"></script>

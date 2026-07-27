@@ -101,11 +101,19 @@ async function stubExternals(page, options = {}) {
   );
 }
 
-/** Gerade Route von Süd nach Nord mit Höhen und Wegedaten. */
+/**
+ * Gerade Route von Süd nach Nord mit Höhen und Wegedaten.
+ * Das Höhenprofil ist bewusst abwechslungsreich (flach – steiler Anstieg –
+ * Abstieg), damit sich die Einfärbung nach Steigung prüfen lässt.
+ */
 function defaultRoute(alt = 0, lengthM = 4000) {
   const coordinates = [];
   for (let i = 0; i <= 20; i++) {
-    coordinates.push([10.60 + alt * 0.002, 51.80 + i * 0.0006, 600 + i * 6]);
+    let ele;
+    if (i <= 6) ele = 600;                        // flach
+    else if (i <= 13) ele = 600 + (i - 6) * 30;   // kräftig bergauf
+    else ele = 810 - (i - 13) * 20;               // wieder hinunter
+    coordinates.push([10.60 + alt * 0.002, 51.80 + i * 0.0006, ele]);
   }
   return {
     type: 'FeatureCollection',

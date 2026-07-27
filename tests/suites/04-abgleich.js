@@ -9,7 +9,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const {
-  startServer, launchBrowser, stubExternals, writeGpxWaypoints, openSettings, openStamps,
+  startServer, launchBrowser, stubExternals, writeGpxWaypoints, openSettings, openStamps, startDrawing,
 } = require('../helpers');
 
 module.exports = {
@@ -88,6 +88,7 @@ module.exports = {
       check.equal(await stampCount(b), 2, 'Auch auf B bleibt er gelöscht');
 
       /* ---- Tour auf A speichern, auf B laden ---- */
+      await startDrawing(a);
       const box = await a.locator('#map').boundingBox();
       await a.locator('#map').click({ position: { x: box.width * 0.4, y: box.height * 0.7 } });
       await a.locator('#map').click({ position: { x: box.width * 0.6, y: box.height * 0.3 } });

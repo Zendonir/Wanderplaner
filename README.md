@@ -93,6 +93,17 @@ denselben Datenstand sehen.
   die Reihenfolge wird automatisch optimiert (Nearest-Neighbor + 2-Opt) und
   die Route entlang echter Wege berechnet. Die ausgewählten Stempelstellen
   landen beim GPX-Export als Wegpunkte mit in der Datei.
+- **Klick mit Rückfrage** – ein Klick auf die Karte öffnet ein Menü
+  (Routenpunkt anhängen, als neuen Startpunkt einfügen, POI setzen, Parkplatz
+  merken, hier weiterzeichnen), statt sofort einen Punkt zu setzen. Wer zügig
+  eine Route zeichnen will, schaltet auf **✏ Zeichnen** um – dann setzt jeder
+  Klick sofort. Rechtsklick öffnet das Menü in jedem Modus, Esc führt zurück.
+- **Punkte bearbeiten** – ein Klick auf einen gesetzten Punkt öffnet sein Menü:
+  löschen, zum Startpunkt machen oder die Route dort abschneiden. In der Liste
+  lassen sich Punkte per Drag & Drop **oder** mit ▲▼ umsortieren – Letzteres
+  auch am Handy, wo Ziehen nicht funktioniert.
+- **Tastatur** – Esc schließt Dialog, Kartenmenü und Zeichenmodus (in dieser
+  Reihenfolge), Strg+Z macht rückgängig.
 - **Undo & Route leeren** – die letzte Aktion lässt sich rückgängig machen.
 - **GPX-Export** – berechnete Wegstrecke als `<trk>` (inkl. Höhenwerten,
   falls verfügbar) und POIs als `<wpt>`, Download mit Zeitstempel im Namen.

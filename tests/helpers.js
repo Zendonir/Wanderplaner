@@ -199,8 +199,18 @@ async function openStamps(page) {
   await page.waitForSelector('#stamp-list', { state: 'visible' });
 }
 
+/**
+ * Schaltet auf den Zeichenmodus, in dem ein Klick sofort einen Punkt setzt.
+ * Voreingestellt ist das Menü – dort fragt jeder Klick erst nach.
+ */
+async function startDrawing(page) {
+  await page.click('#mode-route');
+  await page.waitForTimeout(150);
+}
+
 /** Zwei Punkte auf die Karte setzen und die Berechnung abwarten. */
 async function drawRoute(page) {
+  await startDrawing(page);
   const box = await page.locator('#map').boundingBox();
   await page.locator('#map').click({ position: { x: box.width * 0.5, y: box.height * 0.75 } });
   await page.locator('#map').click({ position: { x: box.width * 0.55, y: box.height * 0.25 } });
@@ -217,6 +227,7 @@ module.exports = {
   writeGpxWaypoints,
   waitForRoute,
   drawRoute,
+  startDrawing,
   openSettings,
   openStamps,
 };

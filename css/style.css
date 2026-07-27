@@ -244,6 +244,60 @@ body {
   color: #fff;
 }
 
+.mode-hint {
+  margin-top: -0.35rem;
+  line-height: 1.35;
+}
+
+/* ---------- Kontextmenü auf der Karte ---------- */
+
+.map-menu-popup .leaflet-popup-content-wrapper {
+  border-radius: 8px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.map-menu-popup .leaflet-popup-content {
+  margin: 0;
+  width: auto !important;
+  min-width: 210px;
+}
+
+.map-menu-head {
+  padding: 0.35rem 0.6rem;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.7rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text-muted);
+}
+
+.map-menu-item {
+  display: block;
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  text-align: left;
+  font-size: 0.85rem;
+  line-height: 1.3;
+  cursor: pointer;
+}
+
+.map-menu-item:last-child { border-bottom: none; }
+
+.map-menu-item:hover,
+.map-menu-item:focus-visible {
+  background: #eef1ec;
+}
+
+.map-menu-item small {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
 .actions button:disabled,
 .export-btn:disabled {
   opacity: 0.45;

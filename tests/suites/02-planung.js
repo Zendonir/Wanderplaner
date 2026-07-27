@@ -22,7 +22,61 @@ module.exports = {
     try {
       await page.goto(server.url);
       await page.waitForSelector('#map.leaflet-container');
+
+      /* ---- Klick auf die Karte setzt nicht mehr ungefragt ---- */
+      const mapBox = await page.locator('#map').boundingBox();
+      const clickMap = (fx, fy, options) => page.locator('#map').click({
+        position: { x: mapBox.width * fx, y: mapBox.height * fy }, ...options,
+      });
+
+      check.ok(await page.locator('#mode-menu').evaluate((b) => b.classList.contains('active')),
+        'Der Menümodus ist voreingestellt');
+
+      await clickMap(0.45, 0.5);
+      await page.waitForSelector('.map-menu', { timeout: 4000 });
+      check.equal(await page.locator('#point-list li:not(.list-empty)').count(), 0,
+        'Ein Klick allein setzt keinen Punkt mehr');
+      const menuEntries = await page.locator('.map-menu-item').allTextContents();
+      check.contains(menuEntries.join(' | '), 'Routenpunkt anhängen',
+        'Das Menü bietet den Routenpunkt an');
+      check.contains(menuEntries.join(' | '), 'POI',
+        'Und den POI an derselben Stelle');
+      check.contains(menuEntries.join(' | '), 'Parkplatz',
+        'Ein Parkplatz lässt sich direkt anlegen');
+
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(250);
+      check.equal(await page.locator('.map-menu').count(), 0, 'Esc schließt das Menü');
+      check.equal(await page.locator('#point-list li:not(.list-empty)').count(), 0,
+        'Nach dem Abbrechen ist die Planung unverändert');
+
+      await clickMap(0.45, 0.5);
+      await page.waitForSelector('.map-menu', { timeout: 4000 });
+      await page.locator('.map-menu-item').first().click();
+      await page.waitForTimeout(500);
+      check.equal(await page.locator('#point-list li:not(.list-empty)').count(), 1,
+        'Erst die Auswahl im Menü setzt den Punkt');
+
+      /* ---- Zweiter Punkt: Menü bietet jetzt auch den Startpunkt an ---- */
+      await clickMap(0.55, 0.4);
+      await page.waitForSelector('.map-menu', { timeout: 4000 });
+      check.contains((await page.locator('.map-menu-item').allTextContents()).join(' | '),
+        'Startpunkt', 'Bei bestehender Route lässt sich davor eingefügt werden');
+      await page.keyboard.press('Escape');
+
+      /* ---- Strg+Z macht rückgängig ---- */
+      await page.keyboard.press('Control+z');
+      await page.waitForTimeout(600);
+      check.equal(await page.locator('#point-list li:not(.list-empty)').count(), 0,
+        'Strg+Z nimmt den Punkt zurück');
+
       await drawRoute(page);
+      check.ok(await page.locator('#mode-route').evaluate((b) => b.classList.contains('active')),
+        'Der Zeichenmodus lässt sich einschalten');
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(200);
+      check.ok(await page.locator('#mode-menu').evaluate((b) => b.classList.contains('active')),
+        'Esc führt aus dem Zeichnen zurück ins Menü');
 
       const distance = await page.textContent('#stat-distance');
       check.contains(distance, '4,0', 'Route wird berechnet und Länge angezeigt');
@@ -84,6 +138,49 @@ module.exports = {
         check.equal(nums.join(','), '1,2,3',
           'Der neue Punkt liegt in der Mitte, nicht am Ende');
       }
+
+      /* ---- Menü am gesetzten Punkt ---- */
+      // Löschen ging vorher nur per Rechtsklick – am Handy also gar nicht.
+      // Leaflet ordnet die Marker im DOM nach Breitengrad, nicht nach
+      // Reihenfolge – deshalb über die angezeigte Nummer auswählen.
+      const total = await page.locator('#point-list li:not(.list-empty)').count();
+      const marker = (number) => page.locator('#map .route-marker')
+        .filter({ hasText: new RegExp(`^${number}$`) });
+
+      // Leaflet blendet ein geschlossenes Popup langsam aus – erst warten,
+      // bis wirklich nur noch ein Menü im Dokument steht.
+      const openPointMenu = async (number) => {
+        await marker(number).click({ force: true });
+        await page.waitForFunction(
+          () => document.querySelectorAll('.map-menu').length === 1,
+          null, { timeout: 4000 }
+        );
+      };
+
+      await openPointMenu(2);
+      const pointMenu = (await page.locator('.map-menu-item').allTextContents()).join(' | ');
+      check.contains(pointMenu, 'löschen', 'Ein Punkt lässt sich per Klick löschen');
+      check.contains(pointMenu, 'Startpunkt', 'Er lässt sich an den Anfang holen');
+      check.contains(pointMenu, 'abschneiden',
+        'Die Route lässt sich an einem mittleren Punkt kürzen');
+      await page.keyboard.press('Escape');
+
+      // Am letzten Punkt wäre „abschneiden“ sinnlos und fehlt deshalb.
+      await openPointMenu(total);
+      const lastMenu = (await page.locator('.map-menu-item').allTextContents()).join(' | ');
+      check.ok(!lastMenu.includes('abschneiden'),
+        'Am letzten Punkt fehlt das Abschneiden', `Menü: ${lastMenu} (von ${total} Punkten)`);
+      await page.keyboard.press('Escape');
+
+      /* ---- Reihenfolge per Pfeil ändern ---- */
+      const labelsBefore = await page.locator('#point-list .item-label').allTextContents();
+      await page.locator('#point-list li').last().locator('.point-up').click();
+      await page.waitForTimeout(900);
+      const labelsAfter = await page.locator('#point-list .item-label').allTextContents();
+      check.equal(labelsAfter[labelsAfter.length - 2], labelsBefore[labelsBefore.length - 1],
+        'Der Pfeil ▲ schiebt einen Punkt nach oben');
+      check.ok(await page.locator('#point-list li').first().locator('.point-up')
+        .isDisabled(), 'Beim obersten Punkt ist ▲ abgeschaltet');
 
       /* ---- Umkehren ---- */
       const firstBefore = await page.locator('#point-list li .item-label').first().textContent();

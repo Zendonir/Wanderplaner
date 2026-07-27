@@ -8,7 +8,7 @@ const os = require('os');
 const path = require('path');
 const jsQR = require('jsqr');
 const {
-  startServer, launchBrowser, stubExternals, writeGpxWaypoints, openSettings, openStamps,
+  startServer, launchBrowser, stubExternals, writeGpxWaypoints, openSettings, openStamps, startDrawing,
 } = require('../helpers');
 
 module.exports = {
@@ -158,6 +158,7 @@ module.exports = {
       await page.waitForTimeout(900);
 
       /* ---- Tour speichern und laden ---- */
+      await startDrawing(page);
       const box = await page.locator('#map').boundingBox();
       await page.locator('#map').click({ position: { x: box.width * 0.4, y: box.height * 0.7 } });
       await page.locator('#map').click({ position: { x: box.width * 0.6, y: box.height * 0.3 } });

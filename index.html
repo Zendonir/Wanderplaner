@@ -104,9 +104,11 @@
       <div class="tab-panel" data-panel="planung">
 
       <section class="mode-toggle">
-        <button id="mode-route" class="mode-btn active" title="Klick auf die Karte setzt einen Routenpunkt">📍 Route</button>
-        <button id="mode-poi" class="mode-btn" title="Klick auf die Karte setzt einen POI">⚑ POI</button>
+        <button id="mode-menu" class="mode-btn active" title="Klick auf die Karte öffnet ein Menü – nichts passiert versehentlich">🖱 Menü</button>
+        <button id="mode-route" class="mode-btn" title="Klick auf die Karte setzt sofort einen Routenpunkt – zum zügigen Zeichnen">✏ Zeichnen</button>
+        <button id="mode-poi" class="mode-btn" title="Klick auf die Karte setzt sofort einen POI">⚑ POI</button>
       </section>
+      <p class="hint mode-hint" id="mode-hint"></p>
 
       <section class="tour-name-row">
         <input type="text" id="tour-name" placeholder="Name der Tour" aria-label="Name der Tour">
@@ -161,8 +163,9 @@
 
       <section class="list-section">
         <h2>Routenpunkte</h2>
-        <p class="hint">Klick auf die Karte setzt einen Punkt · Ziehen verschiebt ·
-          Rechtsklick auf einen Marker löscht · Liste per Drag&nbsp;&amp;&nbsp;Drop sortieren</p>
+        <p class="hint">Marker ziehen verschiebt · Marker anklicken öffnet sein Menü ·
+          Liste per Drag&nbsp;&amp;&nbsp;Drop oder mit ▲▼ sortieren · die Route selbst
+          lässt sich anfassen und ziehen</p>
         <ul id="point-list" class="point-list"></ul>
       </section>
 

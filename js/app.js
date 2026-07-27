@@ -6,7 +6,7 @@
  */
 (function () {
   const state = {
-    mode: 'route',      // 'route' | 'poi'
+    mode: 'menu',       // 'menu' (Klick fragt nach) | 'route' | 'poi'
     points: [],         // [{id, lat, lng}]
     pois: [],           // [{id, lat, lng, name, note}]
     stamps: Stamps.load(), // [{id, lat, lng, name, note, collected}] – persistent
@@ -79,8 +79,10 @@
     ascent: document.getElementById('stat-ascent'),
     descent: document.getElementById('stat-descent'),
     time: document.getElementById('stat-time'),
+    modeMenu: document.getElementById('mode-menu'),
     modeRoute: document.getElementById('mode-route'),
     modePoi: document.getElementById('mode-poi'),
+    modeHint: document.getElementById('mode-hint'),
     undo: document.getElementById('btn-undo'),
     clear: document.getElementById('btn-clear'),
     export: document.getElementById('btn-export'),
@@ -375,6 +377,12 @@
       updateButtons();
       if (state.points.length === 1) {
         showStatus('info', 'Noch einen zweiten Punkt setzen, um die Route zu berechnen.', 4000);
+      } else if (isFreshInstall()) {
+        // Nur bei einer leeren Sammlung: Wer schon Touren und Stempel hat,
+        // weiß, wie es geht, und braucht den Hinweis nicht jedes Mal.
+        showStatus('info',
+          'Klick auf die Karte öffnet ein Menü – dort „Routenpunkt anhängen“ wählen. ' +
+          'Zum zügigen Zeichnen oben auf „✏ Zeichnen“ umschalten.', 12000);
       } else {
         hideStatus();
       }
@@ -684,12 +692,21 @@
       const li = document.createElement('li');
       li.draggable = true;
       li.dataset.index = i;
+      // Ziehen mit der Maus ist bequem, am Handy aber unmöglich – deshalb
+      // zusätzlich zwei Pfeile zum Verschieben.
       li.innerHTML =
         '<span class="drag-handle" title="Zum Sortieren ziehen">≡</span>' +
         `<span class="point-num">${i + 1}</span>` +
-        `<span class="item-label">${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}</span>` +
+        `<span class="item-label" title="Auf der Karte zeigen">${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}</span>` +
+        `<button class="item-action point-up" title="Nach oben"${i === 0 ? ' disabled' : ''}>▲</button>` +
+        `<button class="item-action point-down" title="Nach unten"${i === state.points.length - 1 ? ' disabled' : ''}>▼</button>` +
         '<button class="item-delete" title="Punkt löschen">✕</button>';
 
+      li.querySelector('.item-label').addEventListener('click', () => {
+        MapView.setView(p.lat, p.lng, 15);
+      });
+      li.querySelector('.point-up').addEventListener('click', () => movePointBy(i, -1));
+      li.querySelector('.point-down').addEventListener('click', () => movePointBy(i, 1));
       li.querySelector('.item-delete').addEventListener('click', () => deletePoint(p.id));
 
       li.addEventListener('dragstart', () => {
@@ -720,6 +737,17 @@
 
       el.pointList.appendChild(li);
     });
+  }
+
+  /** Verschiebt einen Routenpunkt um eine Stelle nach oben oder unten. */
+  function movePointBy(index, delta) {
+    const target = index + delta;
+    if (target < 0 || target >= state.points.length) return;
+    pushUndo();
+    const [moved] = state.points.splice(index, 1);
+    state.points.splice(target, 0, moved);
+    renderAll();
+    scheduleRecalc();
   }
 
   function renderPoiList() {
@@ -1340,9 +1368,16 @@
 
   /* ---------- Aktionen ---------- */
 
-  function addPoint(latlng) {
+  /**
+   * Setzt einen Routenpunkt.
+   * @param {{lat:number, lng:number}} latlng
+   * @param {?number} index Einfügestelle; ohne Angabe ans Ende
+   */
+  function addPoint(latlng, index) {
     pushUndo();
-    state.points.push({ id: Utils.uid(), lat: latlng.lat, lng: latlng.lng });
+    const point = { id: Utils.uid(), lat: latlng.lat, lng: latlng.lng };
+    if (index == null) state.points.push(point);
+    else state.points.splice(index, 0, point);
     renderAll();
     scheduleRecalc();
   }
@@ -1431,10 +1466,155 @@
     scheduleRecalc();
   }
 
+  const MODE_HINTS = {
+    menu: 'Ein Klick auf die Karte fragt erst nach – versehentliche Punkte ' +
+      'gibt es damit nicht. Rechtsklick öffnet das Menü in jedem Modus.',
+    route: 'Jeder Klick setzt sofort einen Routenpunkt. Esc führt zurück ins Menü.',
+    poi: 'Jeder Klick setzt sofort einen POI. Esc führt zurück ins Menü.',
+  };
+
+  /** Noch nichts gesammelt und nichts geplant – vermutlich der erste Start. */
+  function isFreshInstall() {
+    return state.points.length === 0
+      && items('tours').length === 0
+      && items('stamps').length === 0
+      && items('tracks').length === 0;
+  }
+
   function setMode(mode) {
     state.mode = mode;
-    el.modeRoute.classList.toggle('active', mode === 'route');
-    el.modePoi.classList.toggle('active', mode === 'poi');
+    [[el.modeMenu, 'menu'], [el.modeRoute, 'route'], [el.modePoi, 'poi']]
+      .forEach(([button, name]) => {
+        button.classList.toggle('active', mode === name);
+        button.setAttribute('aria-pressed', String(mode === name));
+      });
+    el.modeHint.textContent = MODE_HINTS[mode] || '';
+    localStorage.setItem('wanderplaner.mode', mode);
+    MapView.closeMenu();
+    // Beim Zeichnen wäre der Doppelklick-Zoom fatal: Er setzt zwei Punkte
+    // und springt gleichzeitig eine Zoomstufe weiter.
+    MapView.setDoubleClickZoom(mode === 'menu');
+  }
+
+  /* ---------- Tastatur ---------- */
+
+  /**
+   * Esc räumt der Reihe nach auf: erst offene Dialoge, dann das Kartenmenü,
+   * zuletzt der Zeichenmodus. Strg+Z macht rückgängig – beides erwartet man,
+   * und beides fehlte bisher.
+   */
+  function onKeyDown(e) {
+    const inField = /^(INPUT|TEXTAREA|SELECT)$/.test(
+      (e.target && e.target.tagName) || ''
+    );
+
+    if (e.key === 'Escape') {
+      if (!el.settings.hidden) return setSettingsOpen(false);
+      if (MapView.menuOpen()) return MapView.closeMenu();
+      if (state.mode !== 'menu') return setMode('menu');
+      return undefined;
+    }
+
+    // In einem Eingabefeld gehört Strg+Z dem Feld selbst.
+    if (!inField && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+      if (state.undoStack.length === 0) return undefined;
+      e.preventDefault();
+      undo();
+    }
+    return undefined;
+  }
+
+  /* ---------- Kontextmenü auf der Karte ---------- */
+
+  /** Menü an der angeklickten Stelle – nichts davon passiert ungefragt. */
+  function openMapMenu(latlng) {
+    const hasRoute = state.points.length > 0;
+    MapView.openMenu(latlng, [
+      {
+        label: '📍 Routenpunkt anhängen',
+        hint: hasRoute ? `wird Punkt ${state.points.length + 1}` : 'wird der Startpunkt',
+        action: addPoint,
+      },
+      hasRoute ? {
+        label: '↑ Als neuen Startpunkt',
+        hint: 'vor den bisherigen Punkt 1',
+        action: (ll) => addPoint(ll, 0),
+      } : null,
+      {
+        label: '⚑ POI setzen',
+        hint: 'Notiz an dieser Stelle',
+        action: addPoi,
+      },
+      {
+        label: '🅿 Als Parkplatz merken',
+        hint: 'dauerhaft, mit QR-Code zur Anfahrt',
+        action: addParkingAt,
+      },
+      {
+        label: '✏ Hier weiterzeichnen',
+        hint: 'setzt den Punkt und schaltet auf Zeichnen um',
+        action: (ll) => { addPoint(ll); setMode('route'); },
+      },
+    ]);
+  }
+
+  /** Menü an einem gesetzten Routenpunkt. */
+  function openPointMenu(point, index) {
+    MapView.openMenu({ lat: point.lat, lng: point.lng }, [
+      {
+        label: `✕ Punkt ${index + 1} löschen`,
+        action: () => deletePoint(point.id),
+      },
+      index > 0 ? {
+        label: '↑ Zum Startpunkt machen',
+        hint: 'verschiebt ihn an den Anfang',
+        action: () => movePointToStart(point.id),
+      } : null,
+      index < state.points.length - 1 ? {
+        label: '✂ Route hier abschneiden',
+        hint: `entfernt die ${state.points.length - index - 1} Punkte danach`,
+        action: () => truncateAfter(index),
+      } : null,
+    ]);
+  }
+
+  /** Legt an dieser Stelle einen Parkplatz an – ohne Umweg über den Import. */
+  function addParkingAt(latlng) {
+    const name = window.prompt('Name des Parkplatzes:', 'Wanderparkplatz');
+    if (name === null) return;
+    pushUndo();
+    state.parking.push({
+      id: Utils.uid(),
+      lat: latlng.lat,
+      lng: latlng.lng,
+      name: name.trim() || 'Wanderparkplatz',
+      note: '',
+      updatedAt: Date.now(),
+    });
+    persist('parking');
+    renderAll();
+    showStatus('info', 'Parkplatz gespeichert – ein Klick auf den Marker zeigt den QR-Code.', 6000);
+  }
+
+  function movePointToStart(id) {
+    const index = state.points.findIndex((p) => p.id === id);
+    if (index <= 0) return;
+    pushUndo();
+    const [point] = state.points.splice(index, 1);
+    state.points.unshift(point);
+    renderAll();
+    scheduleRecalc();
+  }
+
+  function truncateAfter(index) {
+    if (index >= state.points.length - 1) {
+      showStatus('info', 'Hinter diesem Punkt liegt nichts mehr.', 4000);
+      return;
+    }
+    pushUndo();
+    state.points = state.points.slice(0, index + 1);
+    renderAll();
+    scheduleRecalc();
   }
 
   function exportGpx() {
@@ -2467,9 +2647,13 @@
   function init() {
     MapView.init({
       onMapClick: (latlng) => {
+        // Im Menümodus verändert ein Klick nichts, sondern fragt erst nach.
         if (state.mode === 'poi') addPoi(latlng);
-        else addPoint(latlng);
+        else if (state.mode === 'route') addPoint(latlng);
+        else openMapMenu(latlng);
       },
+      onMapMenu: openMapMenu,
+      onPointMenu: openPointMenu,
       onPointMoved: movePoint,
       onPointDelete: deletePoint,
       onPoiMoved: movePoi,
@@ -2489,8 +2673,10 @@
     initChart();
     initRoutingUi();
 
+    el.modeMenu.addEventListener('click', () => setMode('menu'));
     el.modeRoute.addEventListener('click', () => setMode('route'));
     el.modePoi.addEventListener('click', () => setMode('poi'));
+    setMode(localStorage.getItem('wanderplaner.mode') || 'menu');
     el.undo.addEventListener('click', undo);
     el.clear.addEventListener('click', clearAll);
     el.export.addEventListener('click', exportGpx);
@@ -2581,9 +2767,7 @@
     el.settings.addEventListener('click', (e) => {
       if (e.target === el.settings) setSettingsOpen(false);
     });
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && !el.settings.hidden) setSettingsOpen(false);
-    });
+    document.addEventListener('keydown', onKeyDown);
 
     // Die Stempelliste bleibt so, wie der Nutzer sie zuletzt hatte.
     el.stampDetails.open = localStorage.getItem('wanderplaner.stampsopen') === 'open';
@@ -2608,6 +2792,12 @@
     renderAll();
     updateStats();
     if (items('stamps').length > 0) MapView.fitTo(items('stamps'));
+    // Beim allerersten Start erklären, wie man anfängt.
+    if (isFreshInstall()) {
+      showStatus('info',
+        'Klick auf die Karte öffnet ein Menü – dort „Routenpunkt anhängen“ wählen. ' +
+        'Zum zügigen Zeichnen oben auf „✏ Zeichnen“ umschalten.', 12000);
+    }
 
     // Abgleich im Hintergrund starten – die App ist sofort bedienbar.
     initSync();

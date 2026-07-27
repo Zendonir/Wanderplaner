@@ -34,6 +34,7 @@ const MapView = (function () {
   let placeMarkers = [];
   let routeLines = [];
   let legendControl = null;
+  let menuPopup = null;
   let suppressNextClick = false;
   let samples = null; // Höhen-Stützpunkte für die Hover-Zuordnung
 
@@ -87,6 +88,84 @@ const MapView = (function () {
       }
       cbs.onMapClick(e.latlng);
     });
+
+    // Rechtsklick öffnet das Menü unabhängig vom eingestellten Modus –
+    // auch mitten im Zeichnen erreichbar.
+    map.on('contextmenu', (e) => {
+      L.DomEvent.preventDefault(e.originalEvent);
+      cbs.onMapMenu(e.latlng);
+    });
+  }
+
+  /* ---------- Kontextmenü auf der Karte ---------- */
+
+  /**
+   * Zeigt ein Menü an der angeklickten Stelle. Erst die Auswahl löst etwas
+   * aus – ein Klick allein verändert die Planung also nicht mehr.
+   * @param {{lat:number, lng:number}} latlng
+   * @param {Array<{label:string, hint:?string, action:Function}|null>} entries
+   */
+  function openMenu(latlng, entries) {
+    closeMenu();
+
+    const div = document.createElement('div');
+    div.className = 'map-menu';
+
+    const head = document.createElement('div');
+    head.className = 'map-menu-head';
+    head.textContent = `${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`;
+    div.appendChild(head);
+
+    entries.filter(Boolean).forEach((entry) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'map-menu-item';
+
+      const label = document.createElement('span');
+      label.textContent = entry.label;
+      button.appendChild(label);
+
+      if (entry.hint) {
+        const hint = document.createElement('small');
+        hint.textContent = entry.hint;
+        button.appendChild(hint);
+      }
+
+      button.addEventListener('click', () => {
+        closeMenu();
+        entry.action(latlng);
+      });
+      div.appendChild(button);
+    });
+
+    menuPopup = L.popup({
+      closeButton: false,
+      className: 'map-menu-popup',
+      autoPan: true,
+      // Nicht zu weit vom Klickpunkt weg, sonst verliert man den Bezug.
+      offset: [0, -4],
+    })
+      .setLatLng(latlng)
+      .setContent(div)
+      .openOn(map);
+  }
+
+  function closeMenu() {
+    if (menuPopup) {
+      map.closePopup(menuPopup);
+      menuPopup = null;
+    }
+  }
+
+  function menuOpen() {
+    return Boolean(menuPopup);
+  }
+
+  /** Doppelklick-Zoom beim Zeichnen abschalten – er setzt sonst Punkte. */
+  function setDoubleClickZoom(enabled) {
+    if (!map) return;
+    if (enabled) map.doubleClickZoom.enable();
+    else map.doubleClickZoom.disable();
   }
 
   /* ---------- Routenpunkte ---------- */
@@ -113,19 +192,29 @@ const MapView = (function () {
       }).addTo(map);
       marker.bindTooltip(
         isStart
-          ? 'Startpunkt · klicken für QR-Code zur Anfahrt'
-          : `Punkt ${i + 1} · ziehen zum Verschieben, Rechtsklick löscht`,
+          ? 'Startpunkt · klicken für QR-Code und weitere Optionen'
+          : `Punkt ${i + 1} · ziehen zum Verschieben, klicken für Optionen`,
         { direction: 'top', offset: [0, -12] }
       );
-      // Der Startpunkt zeigt beim Anklicken den QR-Code für die Anfahrt.
+      // Der Startpunkt zeigt beim Anklicken den QR-Code für die Anfahrt,
+      // jeder andere Punkt sein Menü. Vorher ging Löschen nur per
+      // Rechtsklick – auf dem Handy also gar nicht.
       if (isStart) {
         marker.bindPopup(
           () => qrPopupContent({ ...p, name: cbs.getStartName() }, 'start'),
           { maxWidth: 260 }
         );
+      } else {
+        marker.on('click', (e) => {
+          L.DomEvent.stop(e);
+          cbs.onPointMenu(p, i);
+        });
       }
       marker.on('dragend', (e) => cbs.onPointMoved(p.id, e.target.getLatLng()));
-      marker.on('contextmenu', () => cbs.onPointDelete(p.id));
+      marker.on('contextmenu', (e) => {
+        L.DomEvent.preventDefault(e.originalEvent);
+        cbs.onPointDelete(p.id);
+      });
       pointMarkers.push(marker);
     });
   }
@@ -881,6 +970,10 @@ const MapView = (function () {
     renderPois,
     renderRoute,
     renderLegend,
+    openMenu,
+    closeMenu,
+    menuOpen,
+    setDoubleClickZoom,
     renderPavedSections,
     renderPlaces,
     renderStamps,

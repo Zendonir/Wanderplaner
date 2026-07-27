@@ -116,6 +116,14 @@
         </div>
       </section>
 
+      <nav class="tabs" role="tablist">
+        <button class="tab active" data-tab="planung" role="tab">Planung</button>
+        <button class="tab" data-tab="analyse" role="tab">Analyse</button>
+        <button class="tab" data-tab="unterwegs" role="tab">Unterwegs</button>
+      </nav>
+
+      <div class="tab-panel" data-panel="planung">
+
       <section class="mode-toggle">
         <button id="mode-route" class="mode-btn active" title="Klick auf die Karte setzt einen Routenpunkt">📍 Route</button>
         <button id="mode-poi" class="mode-btn" title="Klick auf die Karte setzt einen POI">⚑ POI</button>
@@ -238,6 +246,22 @@
         <div class="engine-note" id="engine-note"></div>
       </details>
 
+      <section class="list-section">
+        <h2>Routenpunkte</h2>
+        <p class="hint">Klick auf die Karte setzt einen Punkt · Ziehen verschiebt ·
+          Rechtsklick auf einen Marker löscht · Liste per Drag&nbsp;&amp;&nbsp;Drop sortieren</p>
+        <ul id="point-list" class="point-list"></ul>
+      </section>
+
+      <section class="list-section">
+        <h2>POIs</h2>
+        <ul id="poi-list" class="poi-list"></ul>
+      </section>
+
+      </div><!-- /planung -->
+
+      <div class="tab-panel" data-panel="analyse" hidden>
+
       <section class="list-section" id="section-alternatives" hidden>
         <h2>Varianten</h2>
         <ul id="alternative-list" class="alternative-list"></ul>
@@ -255,6 +279,34 @@
       <section class="list-section" id="section-warnings" hidden>
         <h2>Hinweise zur Strecke</h2>
         <ul id="warning-list" class="warning-list"></ul>
+      </section>
+
+      </div><!-- /analyse -->
+
+      <div class="tab-panel" data-panel="unterwegs" hidden>
+
+      <section class="list-section" id="section-fortschritt">
+        <h2>Fortschritt</h2>
+        <div id="progress-box"></div>
+      </section>
+
+      <section class="list-section" id="section-clusters">
+        <h2>Tourenvorschläge</h2>
+        <p class="hint">Sucht Gruppen offener Stempelstellen, die zusammen eine
+          Runde ergeben – mit dem nächstgelegenen Parkplatz als Start.</p>
+        <div class="cluster-tools">
+          <label class="field-inline">
+            <span>Wunschlänge</span>
+            <select id="cluster-length">
+              <option value="8">bis 8 km</option>
+              <option value="12" selected>bis 12 km</option>
+              <option value="18">bis 18 km</option>
+              <option value="25">bis 25 km</option>
+            </select>
+          </label>
+          <button id="btn-clusters">Vorschläge suchen</button>
+        </div>
+        <ul id="cluster-list" class="cluster-list"></ul>
       </section>
 
       <section class="list-section" id="section-places">
@@ -305,17 +357,8 @@
         <ul id="along-list" class="along-list"></ul>
       </section>
 
-      <section class="list-section">
-        <h2>Routenpunkte</h2>
-        <p class="hint">Klick auf die Karte setzt einen Punkt · Ziehen verschiebt ·
-          Rechtsklick auf einen Marker löscht · Liste per Drag&nbsp;&amp;&nbsp;Drop sortieren</p>
-        <ul id="point-list" class="point-list"></ul>
-      </section>
 
-      <section class="list-section">
-        <h2>POIs</h2>
-        <ul id="poi-list" class="poi-list"></ul>
-      </section>
+      </div><!-- /unterwegs -->
 
       <button id="btn-export" class="export-btn" disabled>⬇ Route exportieren (GPX)</button>
     </aside>
@@ -348,6 +391,8 @@
   <script src="js/overpass.js"></script>
   <script src="js/roundtrip.js"></script>
   <script src="js/weather.js"></script>
+  <script src="js/progress.js"></script>
+  <script src="js/clusters.js"></script>
   <script src="js/places.js"></script>
   <script src="js/tracks.js"></script>
   <script src="js/tours.js"></script>

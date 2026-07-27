@@ -22,6 +22,7 @@
     alternatives: [],   // von BRouter angebotene Varianten
     activeAlternative: 0,
     places: [],         // Fundstellen der Umgebungssuche
+    clusters: null,     // Tourenvorschläge aus Stempelgruppen
     placeCategories: loadPlaceCategories(),
     distance: 0,        // Meter
     samples: null,      // [{lat, lng, dist, ele}] Höhen-Stützpunkte
@@ -144,6 +145,12 @@
     placeNote: document.getElementById('place-note'),
     placeList: document.getElementById('place-list'),
     weatherNote: document.getElementById('weather-note'),
+    tabs: document.querySelectorAll('.tab'),
+    panels: document.querySelectorAll('.tab-panel'),
+    progressBox: document.getElementById('progress-box'),
+    clusterLength: document.getElementById('cluster-length'),
+    clustersBtn: document.getElementById('btn-clusters'),
+    clusterList: document.getElementById('cluster-list'),
   };
 
   /* ---------- Sammlungen: speichern, löschen, abgleichen ---------- */
@@ -1108,6 +1115,10 @@
     if (!stamp) return;
     pushUndo();
     stamp.collected = !stamp.collected;
+    // Datum festhalten, damit sich später Jahresstatistik und Chronik
+    // erzeugen lassen.
+    if (stamp.collected) stamp.collectedAt = new Date().toISOString();
+    else delete stamp.collectedAt;
     Sync.touch(stamp);
     persist('stamps');
     renderAll();
@@ -1168,6 +1179,7 @@
     renderParkingList();
     renderTrackList();
     renderTourList();
+    renderProgress();
     updateTourBar();
     updateButtons();
   }
@@ -1380,6 +1392,164 @@
 
   function updateImportHint() {
     el.importHint.textContent = IMPORT_HINTS[el.importType.value] || '';
+  }
+
+  /* ---------- Reiter ---------- */
+
+  function setTab(name) {
+    el.tabs.forEach((tab) => tab.classList.toggle('active', tab.dataset.tab === name));
+    el.panels.forEach((panel) => { panel.hidden = panel.dataset.panel !== name; });
+    localStorage.setItem('wanderplaner.tab', name);
+    // Nach dem Wechsel kann sich die Höhe ändern – Karte neu vermessen.
+    setTimeout(() => MapView.invalidateSize(), 60);
+  }
+
+  /* ---------- Fortschritt ---------- */
+
+  function renderProgress() {
+    const stamps = items('stamps');
+    const box = el.progressBox;
+    box.innerHTML = '';
+
+    if (stamps.length === 0) {
+      const hint = document.createElement('p');
+      hint.className = 'hint';
+      hint.textContent = 'Noch keine Stempelstellen importiert.';
+      box.appendChild(hint);
+      return;
+    }
+
+    const summary = Progress.summary(stamps);
+
+    const headline = document.createElement('p');
+    headline.className = 'progress-headline';
+    headline.textContent = `${summary.collected} von ${summary.total} Stempeln`;
+    if (summary.current) {
+      const badge = document.createElement('span');
+      badge.className = 'progress-badge';
+      badge.textContent = `${summary.current.icon} ${summary.current.label}`;
+      headline.appendChild(badge);
+    }
+    box.appendChild(headline);
+
+    // Balken bis zur nächsten Stufe, sonst bis zur Gesamtzahl.
+    const target = summary.next ? summary.next.at : summary.total;
+    const bar = document.createElement('div');
+    bar.className = 'progress-bar';
+    const fill = document.createElement('span');
+    fill.style.width = `${Math.min(100, (summary.collected / (target || 1)) * 100)}%`;
+    bar.appendChild(fill);
+    box.appendChild(bar);
+
+    const note = document.createElement('p');
+    note.className = 'progress-note';
+    if (summary.next) {
+      note.textContent = `Noch ${summary.remaining} bis ${summary.next.icon} ${summary.next.label} (${summary.next.at}).`;
+    } else {
+      note.textContent = 'Alle Stufen erreicht.';
+    }
+    box.appendChild(note);
+
+    const facts = document.createElement('ul');
+    facts.className = 'progress-facts';
+    const add = (text) => {
+      const li = document.createElement('li');
+      li.textContent = text;
+      facts.appendChild(li);
+    };
+    add(`${new Date().getFullYear()}: ${summary.thisYear} Stempel`);
+    if (summary.last) {
+      add(`Zuletzt: ${summary.last.name} am ${Progress.formatDate(summary.last.collectedAt)}`);
+    }
+    if (summary.undated > 0) {
+      // Ehrlich bleiben: vor der Einführung des Datums abgehakte Stempel
+      // tauchen in der Jahreszählung nicht auf.
+      add(`${summary.undated} ohne Datum (vor dieser Version abgehakt)`);
+    }
+    summary.perYear.slice(0, 3).forEach((entry) => {
+      if (entry.year !== new Date().getFullYear()) {
+        add(`${entry.year}: ${entry.count} Stempel`);
+      }
+    });
+    box.appendChild(facts);
+  }
+
+  /* ---------- Tourenvorschläge aus Stempel-Nestern ---------- */
+
+  function findClusters() {
+    const maxKm = Number(el.clusterLength.value);
+    state.clusters = Clusters.find(items('stamps'), items('parking'), maxKm);
+    renderClusterList();
+  }
+
+  function renderClusterList() {
+    el.clusterList.innerHTML = '';
+    const clusters = state.clusters || [];
+
+    if (clusters.length === 0) {
+      const li = document.createElement('li');
+      li.className = 'list-empty';
+      li.textContent = state.clusters
+        ? 'Keine passende Gruppe gefunden – andere Wunschlänge versuchen.'
+        : 'Noch nicht gesucht';
+      el.clusterList.appendChild(li);
+      return;
+    }
+
+    clusters.slice(0, 8).forEach((cluster, index) => {
+      const li = document.createElement('li');
+
+      const label = document.createElement('span');
+      label.className = 'item-label';
+      const km = cluster.lengthKm.toLocaleString('de-DE', { maximumFractionDigits: 1 });
+      label.textContent = `${cluster.stamps.length} Stempel · ca. ${km} km`;
+      label.title = cluster.stamps.map((s) => s.name).join(', ');
+
+      const where = document.createElement('span');
+      where.className = 'cluster-start';
+      where.textContent = cluster.start ? `ab ${cluster.start.name}` : 'ohne Parkplatz';
+
+      const useBtn = document.createElement('button');
+      useBtn.className = 'item-action';
+      useBtn.textContent = '▶';
+      useBtn.title = 'Als Route übernehmen';
+      useBtn.addEventListener('click', () => useCluster(index));
+
+      li.append(label, where, useBtn);
+      li.addEventListener('click', (event) => {
+        if (event.target === useBtn) return;
+        MapView.fitTo(cluster.stamps);
+      });
+      el.clusterList.appendChild(li);
+    });
+  }
+
+  /** Übernimmt einen Vorschlag als Routenpunkte. */
+  function useCluster(index) {
+    const cluster = (state.clusters || [])[index];
+    if (!cluster) return;
+
+    pushUndo();
+    const points = [];
+    if (cluster.start) points.push({ lat: cluster.start.lat, lng: cluster.start.lng });
+    cluster.stamps.forEach((s) => points.push({ lat: s.lat, lng: s.lng }));
+    // Zurück zum Ausgangspunkt, damit eine Runde entsteht.
+    if (cluster.start) points.push({ lat: cluster.start.lat, lng: cluster.start.lng });
+
+    state.points = points.map((p) => ({ id: Utils.uid(), lat: p.lat, lng: p.lng }));
+    state.tourSelection = cluster.stamps.map((s) => s.id);
+    if (!el.tourNameInput.value.trim() && cluster.start) {
+      el.tourNameInput.value = `Stempelrunde ab ${cluster.start.name}`;
+      state.tourName = el.tourNameInput.value;
+    }
+
+    renderAll();
+    MapView.fitTo(state.points);
+    scheduleRecalc();
+    setTab('planung');
+    showStatus('info',
+      `${cluster.stamps.length} Stempelstellen als Route übernommen – die Reihenfolge ist optimiert.`,
+      6000);
   }
 
   /* ---------- Wegebeschaffenheit und Hinweise ---------- */
@@ -2053,6 +2223,15 @@
     renderPlaceFilters();
     el.locate.addEventListener('click', toggleLocate);
     if (!Geo.supported) el.locate.hidden = true;
+
+    el.tabs.forEach((tab) => {
+      tab.addEventListener('click', () => setTab(tab.dataset.tab));
+    });
+    setTab(localStorage.getItem('wanderplaner.tab') || 'planung');
+    el.clustersBtn.addEventListener('click', findClusters);
+    el.clusterLength.addEventListener('change', () => {
+      if (state.clusters) findClusters();
+    });
 
     el.libraryToggle.addEventListener('click', toggleLibrary);
     setLibraryOpen(localStorage.getItem('wanderplaner.library') !== 'closed');

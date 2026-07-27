@@ -89,6 +89,16 @@ denselben Datenstand sehen.
 - **Ortssuche** – Sprung zu einem Ort über Nominatim/OpenStreetMap.
 - **Karte** – OpenTopoMap-Kacheln, ideal für Wanderungen.
 
+- **Fortschritt und Abzeichen** – Sammelstand mit Stufen (Bronze ab 11,
+  Silber 24, Gold 50, Wanderkönig 111, Wanderkaiser 222), Balken bis zur
+  nächsten Stufe und Jahresstatistik. Beim Abhaken wird das Datum
+  festgehalten.
+- **Tourenvorschläge aus Stempel-Nestern** – die App sucht Gruppen offener
+  Stempelstellen, die zusammen eine Runde ergeben, schätzt die Länge und
+  schlägt den nächstgelegenen Parkplatz als Start vor. Ein Klick übernimmt
+  die Gruppe als Route.
+- **Drei Reiter** – die rechte Leiste ist in *Planung*, *Analyse* und
+  *Unterwegs* gegliedert; der zuletzt gewählte Reiter bleibt geöffnet.
 - **Stempelstellen an der Route** – sobald eine Route berechnet ist, listet
   die App alle Stempelstellen im wählbaren Umkreis (200 m bis 2 km) auf,
   sortiert in Gehrichtung und mit Abstand zum Weg. Sie lassen sich direkt
@@ -259,6 +269,31 @@ selbst braucht keine ausgehenden Verbindungen.
 Alle Dienste sind öffentliche Demo-Instanzen mit Fair-Use-Limits – für
 intensive Nutzung ggf. eigene Instanzen betreiben.
 
+## Tests
+
+Die App wird mit einer eigenen Testsammlung abgesichert: reine Rechenlogik
+sowie Browsertests gegen den echten Sync-Dienst. Routing, Höhen,
+Umgebungssuche und Wetter werden dabei durch feste Antworten ersetzt – so
+sind die Läufe schnell, wiederholbar und belasten keine öffentlichen Dienste.
+
+```bash
+npm install                 # einmalig
+npx playwright install chromium
+npm test                    # alle Suiten
+npm test -- logik           # nur passende Suiten
+```
+
+Der Testlauf umfasst über 100 Prüfungen, unter anderem:
+
+- QR-Codes werden mit einem unabhängigen Decoder (jsQR) wieder ausgelesen
+- Sonnenzeiten werden gegen die Bibliothek SunCalc gehalten
+- ein auf einem Gerät gelöschter Eintrag darf beim Abgleich nicht zurückkehren
+- die App startet ohne Netz, der Datenabgleich landet nie im Zwischenspeicher
+- jedes eingebundene Skript steht auch in der Offline-Liste des Service Workers
+
+Bei jedem Push laufen die Tests über GitHub Actions; ein Release wird nur
+gebaut, wenn sie durchlaufen.
+
 ## Projektstruktur
 
 ```
@@ -282,6 +317,9 @@ js/waytypes.js      – Auswertung der Wegabschnitte, Warnungen, Asphaltstrecken
 js/overpass.js      – Suche nach Einkehr, Wasser und Haltestellen (OpenStreetMap)
 js/roundtrip.js     – Rundtour nach Wunschlänge erzeugen
 js/weather.js       – Wettervorhersage über Open-Meteo
+js/progress.js      – Sammelfortschritt, Stufen, Jahresstatistik
+js/clusters.js      – Gruppen offener Stempelstellen für Tourenvorschläge
+tests/              – Testsuiten (siehe unten)
 sw.js               – Service Worker für den Offline-Betrieb
 manifest.webmanifest– Angaben zur Installation als App
 vendor/             – Leaflet und Chart.js (lokal, damit offline nutzbar)

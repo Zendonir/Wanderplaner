@@ -738,6 +738,167 @@ body {
   color: var(--text-muted);
 }
 
+/* ---------- Reiter ---------- */
+
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 2px solid var(--border);
+}
+
+.tab {
+  flex: 1;
+  padding: 0.45rem 0.3rem;
+  border: none;
+  background: none;
+  font-size: 0.84rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+}
+
+.tab:hover { color: var(--text); }
+
+.tab.active {
+  color: var(--green-dark);
+  font-weight: 600;
+  border-bottom-color: var(--green);
+}
+
+.tab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.tab-panel[hidden] { display: none; }
+
+/* ---------- Fortschritt ---------- */
+
+.progress-headline {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+}
+
+.progress-badge {
+  margin-left: auto;
+  font-size: 0.78rem;
+  font-weight: 500;
+  padding: 0.15rem 0.45rem;
+  border-radius: 10px;
+  background: #e7f0e9;
+  color: var(--green-dark);
+  white-space: nowrap;
+}
+
+.progress-bar {
+  height: 10px;
+  border-radius: 5px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.progress-bar span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #5c9c6b, var(--green));
+}
+
+.progress-note {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-top: 0.35rem;
+}
+
+.progress-facts {
+  list-style: none;
+  margin-top: 0.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.progress-facts li {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+/* ---------- Tourenvorschläge ---------- */
+
+.cluster-tools {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  margin-bottom: 0.4rem;
+}
+
+.cluster-tools button {
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--green);
+  border-radius: 5px;
+  background: var(--green);
+  color: #fff;
+  font-size: 0.78rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.cluster-tools button:hover { background: var(--green-dark); }
+
+.cluster-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.cluster-list li {
+  /* Zwei Zeilen: oben Umfang und Länge, darunter der Startpunkt – sonst
+     wird der Parkplatzname im schmalen Panel abgeschnitten. */
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "label action"
+    "start action";
+  align-items: center;
+  gap: 0 0.45rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.cluster-list li:hover { background: #eef1ec; }
+
+.cluster-list .item-label {
+  grid-area: label;
+  font-weight: 600;
+}
+
+.cluster-list .item-action {
+  grid-area: action;
+  font-size: 1.1rem;
+}
+
+.cluster-start {
+  grid-area: start;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ---------- Wegebeschaffenheit ---------- */
 
 .waytype-heading {

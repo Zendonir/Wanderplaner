@@ -1,0 +1,19 @@
+{
+  "name": "wanderplaner",
+  "version": "2.3.0",
+  "private": true,
+  "description": "Interaktive Web-App zur Planung von Wanderrouten",
+  "scripts": {
+    "start": "node server/server.js",
+    "test": "node tests/run.js",
+    "icons": "node tools/make-icons.js"
+  },
+  "devDependencies": {
+    "jsqr": "^1.4.0",
+    "playwright": "^1.49.0",
+    "suncalc": "^2.0.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

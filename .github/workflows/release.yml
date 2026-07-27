@@ -22,7 +22,12 @@ env:
   IMAGE: ghcr.io/zendonir/wanderplaner
 
 jobs:
+  # Kein Image ohne grüne Tests.
+  test:
+    uses: ./.github/workflows/test.yml
+
   build-and-release:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

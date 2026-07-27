@@ -1,0 +1,32 @@
+name: Tests
+
+# Läuft bei jedem Push und bei Pull Requests. Der Release-Workflow ruft
+# diese Prüfungen zusätzlich auf, damit kein ungetestetes Image entsteht.
+on:
+  push:
+    branches-ignore:
+      - "gh-pages"
+  pull_request:
+  workflow_call:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node einrichten
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Abhängigkeiten installieren
+        run: npm ci
+
+      - name: Browser installieren
+        run: npx playwright install --with-deps chromium
+
+      - name: Tests ausführen
+        run: npm test

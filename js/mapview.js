@@ -12,6 +12,11 @@ const MapView = (function () {
   const ROUTE_CASING_WIDTH = 2.5;
   const ROUTE_CASING_COLOR = '#1c2318';
 
+  // Hinterlegte Touren – geplante wie abgeschlossene. Etwas schmaler als die
+  // aktive Route, aber kräftig genug, um auf der Karte zu bestehen.
+  const TOUR_WEIGHT = 5;
+  const TOUR_CASING_WIDTH = 2;
+
   let map = null;
   let cbs = {};
   let routeLine = null;
@@ -22,6 +27,7 @@ const MapView = (function () {
   let stampMarkers = new Map();
   let parkingMarkers = new Map();
   let trackLines = new Map();
+  let plannedLines = new Map();
   let highlighted = new Set(); // Stempel an der aktuellen Route
   let positionMarker = null;
   let accuracyCircle = null;
@@ -474,9 +480,9 @@ const MapView = (function () {
     return L.divIcon({
       className: '',
       html: '<div class="parking-marker">P</div>',
-      iconSize: [26, 26],
-      iconAnchor: [13, 13],
-      popupAnchor: [0, -14],
+      iconSize: [17, 17],
+      iconAnchor: [9, 9],
+      popupAnchor: [0, -10],
     });
   }
 
@@ -617,23 +623,69 @@ const MapView = (function () {
 
     tracks.forEach((track) => {
       if (!track.visible) return;
-      const line = L.polyline(Tracks.toLatLngs(track).map((p) => [p.lat, p.lng]), {
-        color: track.color,
-        weight: 3,
-        opacity: 0.65,
-        dashArray: '6 4',
-      }).addTo(map);
-      line.bindTooltip(
+      const group = tourLine(
+        Tracks.toLatLngs(track),
+        track.color,
         `${track.name} · ${Utils.formatDistance(track.length)}`,
-        { sticky: true }
+        false
       );
-      // Hinterlegte Touren sollen das Setzen von Punkten nicht blockieren.
-      line.on('click', (e) => {
-        L.DomEvent.stop(e);
-        cbs.onMapClick(e.latlng);
-      });
-      trackLines.set(track.id, line);
+      if (group) trackLines.set(track.id, group);
     });
+  }
+
+  /* ---------- Geplante Touren ---------- */
+
+  function renderPlannedTours(tours) {
+    plannedLines.forEach((l) => map.removeLayer(l));
+    plannedLines = new Map();
+
+    tours.forEach((tour) => {
+      if (tour.visible === false) return;
+      const latlngs = Tours.toLatLngs(tour);
+      const label = tour.distance
+        ? `${tour.name} · ${Utils.formatDistance(tour.distance)} (geplant)`
+        : `${tour.name} (geplant)`;
+      const group = tourLine(latlngs, tour.color || '#1d5fbf', label, true);
+      if (group) plannedLines.set(tour.id, group);
+    });
+  }
+
+  /**
+   * Zeichnet eine hinterlegte Tour: dunkle Kontur, darauf die farbige Linie.
+   * Ohne die Kontur gehen die Spuren in der bunten Wanderkarte unter.
+   * @param {boolean} dashed geplante Touren gestrichelt, abgeschlossene voll
+   */
+  function tourLine(latlngs, color, label, dashed) {
+    if (!latlngs || latlngs.length < 2) return null;
+    const path = latlngs.map((p) => [p.lat, p.lng]);
+
+    const group = L.layerGroup([
+      L.polyline(path, {
+        color: ROUTE_CASING_COLOR,
+        weight: TOUR_WEIGHT + 2 * TOUR_CASING_WIDTH,
+        opacity: 0.45,
+        lineCap: 'round',
+        lineJoin: 'round',
+        interactive: false,
+      }),
+      L.polyline(path, {
+        color,
+        weight: TOUR_WEIGHT,
+        opacity: 0.95,
+        dashArray: dashed ? '12 7' : null,
+        lineCap: dashed ? 'butt' : 'round',
+        lineJoin: 'round',
+        className: 'tour-line',
+      }),
+    ]).addTo(map);
+
+    group.getLayers()[1].bindTooltip(label, { sticky: true });
+    // Hinterlegte Touren sollen das Setzen von Punkten nicht blockieren.
+    group.getLayers()[1].on('click', (e) => {
+      L.DomEvent.stop(e);
+      cbs.onMapClick(e.latlng);
+    });
+    return group;
   }
 
   /** Karte auf eine Punktmenge zoomen (z. B. nach einem Import). */
@@ -979,6 +1031,7 @@ const MapView = (function () {
     renderStamps,
     renderParking,
     renderTracks,
+    renderPlannedTours,
     setSamples,
     setHoverPoint,
     clearHoverPoint,

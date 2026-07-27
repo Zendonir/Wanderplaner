@@ -76,19 +76,27 @@ denselben Datenstand sehen.
   Handy-Kamera gescannt öffnet sich die Karten-App am Parkplatz. Wählbar sind
   Apple Karten (iPhone), Google Maps oder ein `geo:`-Link, jeweils als
   „Ort anzeigen“ oder „Route dorthin“. Ein Parkplatz lässt sich mit einem
-  Klick als Startpunkt der Route setzen.
+  Klick als Startpunkt der Route setzen. Die Marken sind bewusst klein –
+  es sind meist viele – und verschwinden, sobald ein Startpunkt steht: Dann
+  ist die Parkplatzfrage beantwortet. Ist die Route wieder leer, sind sie
+  zurück.
 - **Startpunkt-QR** – auch der Startpunkt der geplanten Route zeigt beim
   Anklicken denselben QR-Code, beschriftet mit dem Namen der Tour.
-- **Abgeschlossene Touren hinterlegen** – GPX-Spuren (`<trk>`) werden dauerhaft
-  auf der Karte hinterlegt, je Tour in eigener Farbe, einzeln ein- und
-  ausblendbar, umbenennbar und löschbar. Die Geometrie wird beim Import
-  ausgedünnt, damit auch viele Touren in den Browser-Speicher passen. Mit ➜
-  wird eine hinterlegte Spur zur neuen Planung: Sie wird auf höchstens 25
-  charakteristische Stützpunkte eingedampft und neu berechnet, sodass sie sich
-  anschließend Punkt für Punkt anpassen lässt.
+- **Geplante und abgeschlossene Touren** – zwei Listen, ein Ablauf: Die
+  gespeicherte Planung landet unter *Geplante Touren*. Dort lässt sie sich
+  laden und weiterbearbeiten, umbenennen, löschen – oder mit ✓ als
+  abgeschlossen abhaken. Dann wandert sie samt tatsächlich berechnetem Verlauf
+  in die Liste *Abgeschlossene Touren*. Auch importierte GPX-Spuren (`<trk>`)
+  landen dort.
+  Auf der Karte sind beide zu sehen und auseinanderzuhalten: geplante Touren
+  gestrichelt in Blautönen, abgeschlossene durchgezogen in wärmeren Farben,
+  jede mit dunkler Kontur, damit sie sich von der Wanderkarte abheben. Jede
+  Tour ist einzeln ein- und ausblendbar. Mit ➜ wird eine abgeschlossene Spur
+  zur neuen Planung: Sie wird auf höchstens 25 charakteristische Stützpunkte
+  eingedampft und neu berechnet.
 - **Touren benennen und speichern** – die aktuelle Planung lässt sich unter
-  einem Namen sichern (inklusive POIs und Routing-Einstellungen), später
-  wieder laden, umbenennen und löschen.
+  einem Namen sichern (inklusive POIs, Routing-Einstellungen und dem
+  berechneten Verlauf) und später wieder laden.
 - **Rundkurs** – auf Wunsch kehrt die Route zum Start zurück. Für den Rückweg
   werden entlang des Hinwegs Sperrbereiche gesetzt, damit ein anderer Weg
   gewählt wird statt derselben Strecke zurück. Findet sich kein eigenständiger

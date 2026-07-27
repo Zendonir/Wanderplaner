@@ -1180,7 +1180,7 @@
     renderAll();
   }
 
-  /* ---------- Gespeicherte Planungen ---------- */
+  /* ---------- Geplante Touren ---------- */
 
   function renderTourList() {
     el.tourList.innerHTML = '';
@@ -1188,7 +1188,7 @@
     if (tours.length === 0) {
       const li = document.createElement('li');
       li.className = 'list-empty';
-      li.textContent = 'Noch keine Tour gespeichert';
+      li.textContent = 'Noch keine Tour geplant';
       el.tourList.appendChild(li);
       return;
     }
@@ -1196,12 +1196,33 @@
     tours.forEach((tour) => {
       const li = document.createElement('li');
 
+      const visible = document.createElement('input');
+      visible.type = 'checkbox';
+      visible.checked = tour.visible !== false;
+      visible.title = 'Auf der Karte anzeigen';
+      visible.addEventListener('change', () => {
+        tour.visible = visible.checked;
+        Sync.touch(tour);
+        persist('tours');
+        renderAll();
+      });
+
+      const swatch = document.createElement('span');
+      swatch.className = 'track-swatch planned';
+      swatch.style.background = tour.color || '#1d5fbf';
+
       const label = document.createElement('span');
       label.className = 'item-label';
       const distance = tour.distance ? ` · ${Utils.formatDistance(tour.distance)}` : '';
       label.textContent = `${tour.name}${distance}`;
-      label.title = `Gespeichert am ${Tours.formatSavedAt(tour.savedAt)} · klicken zum Laden`;
+      label.title = `Geplant am ${Tours.formatSavedAt(tour.savedAt)} · klicken zum Bearbeiten`;
       label.addEventListener('click', () => loadTour(tour.id));
+
+      const doneBtn = document.createElement('button');
+      doneBtn.className = 'item-action';
+      doneBtn.textContent = '✓';
+      doneBtn.title = 'Als abgeschlossen abhaken – die Tour wandert in die andere Liste';
+      doneBtn.addEventListener('click', () => completeTour(tour.id));
 
       const renameBtn = document.createElement('button');
       renameBtn.className = 'item-action';
@@ -1212,12 +1233,51 @@
       const deleteBtn = document.createElement('button');
       deleteBtn.className = 'item-delete';
       deleteBtn.textContent = '✕';
-      deleteBtn.title = 'Tour löschen';
+      deleteBtn.title = 'Geplante Tour löschen';
       deleteBtn.addEventListener('click', () => deleteTour(tour.id));
 
-      li.append(label, renameBtn, deleteBtn);
+      li.append(visible, swatch, label, doneBtn, renameBtn, deleteBtn);
       el.tourList.appendChild(li);
     });
+  }
+
+  /**
+   * Hakt eine geplante Tour als gelaufen ab: Sie verlässt die Planungsliste
+   * und erscheint als abgeschlossene Tour – mit dem tatsächlich berechneten
+   * Verlauf, nicht nur den Stützpunkten.
+   */
+  function completeTour(id) {
+    const tour = state.savedTours.find((t) => t.id === id && !t.deletedAt);
+    if (!tour) return;
+
+    const line = Tours.toLatLngs(tour);
+    if (line.length < 2) {
+      showStatus('warn',
+        `„${tour.name}“ hat noch keinen berechneten Verlauf. Bitte einmal laden, ` +
+        'die Berechnung abwarten und erneut speichern.', 9000);
+      return;
+    }
+    if (!window.confirm(`„${tour.name}“ als abgeschlossen abhaken?`)) return;
+
+    pushUndo();
+    const round = (v) => Math.round(v * 1e5) / 1e5;
+    const existing = items('tracks').length;
+    state.tracks.push({
+      id: Utils.uid(),
+      name: tour.name,
+      date: new Date().toISOString().slice(0, 10),
+      color: Tracks.COLORS[existing % Tracks.COLORS.length],
+      visible: true,
+      updatedAt: Date.now(),
+      length: tour.distance || Math.round(Tracks.length(line)),
+      points: line.map((p) => [round(p.lat), round(p.lng)]),
+    });
+    persist('tracks');
+    removeItem('tours', id);
+
+    renderAll();
+    showStatus('info',
+      `„${tour.name}“ ist jetzt eine abgeschlossene Tour.`, 6000);
   }
 
   function saveCurrentTour() {
@@ -1233,12 +1293,16 @@
     }
 
     state.tourName = name;
-    const entry = Tours.fromState(name, state);
+    const entry = Tours.fromState(name, state, items('tours').length);
 
     // Gleicher Name überschreibt den bestehenden Eintrag.
     const existing = state.savedTours.findIndex((t) => !t.deletedAt && t.name === name);
     if (existing >= 0) {
+      // Farbe und Sichtbarkeit gehören zum Eintrag, nicht zur Planung –
+      // sonst springt die Tour beim Speichern auf eine andere Farbe.
       entry.id = state.savedTours[existing].id;
+      entry.color = state.savedTours[existing].color || entry.color;
+      entry.visible = state.savedTours[existing].visible !== false;
       state.savedTours[existing] = entry;
     } else {
       state.savedTours.push(entry);
@@ -1358,11 +1422,16 @@
   }
 
   function renderAll() {
-    MapView.renderTracks(items('tracks')); // zuerst, damit sie unter der Route liegen
+    // Beide Tourenlisten zuerst, damit sie unter der aktiven Route liegen.
+    MapView.renderTracks(items('tracks'));
+    MapView.renderPlannedTours(items('tours'));
     MapView.renderPoints(state.points);
     MapView.renderPois(state.pois);
     MapView.renderStamps(items('stamps'), state.tourSelection);
-    MapView.renderParking(items('parking'));
+    // Sobald ein Startpunkt steht, ist die Parkplatzfrage beantwortet – die
+    // Marken würden die Karte beim Planen nur zustellen. Sie kommen zurück,
+    // sobald die Route wieder leer ist.
+    MapView.renderParking(state.points.length > 0 ? [] : items('parking'));
     renderPointList();
     renderPoiList();
     renderStampList();

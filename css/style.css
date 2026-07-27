@@ -1846,6 +1846,14 @@ body {
   flex: 0 0 auto;
 }
 
+/* Geplante Touren erscheinen auf der Karte gestrichelt – das Feld in der
+   Liste zeigt dasselbe Muster. */
+.track-swatch.planned {
+  background-image: repeating-linear-gradient(
+    90deg, transparent 0 3px, rgba(255, 255, 255, 0.9) 3px 5px);
+}
+
+.tour-list input[type="checkbox"],
 .track-list input[type="checkbox"] {
   accent-color: var(--green);
   cursor: pointer;
@@ -1867,19 +1875,22 @@ body {
 
 /* ---------- Parkplatz-Marker ---------- */
 
+/* Deutlich kleiner als die runden Stempelmarken: Parkplätze sind
+   Beiwerk, und es sind viele. */
 .parking-marker {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 5px;
+  width: 17px;
+  height: 17px;
+  border-radius: 4px;
   background: #1d5fbf;
-  border: 2px solid #fff;
+  border: 1.5px solid #fff;
   color: #fff;
-  font-size: 0.85rem;
+  font-size: 0.62rem;
   font-weight: 700;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  line-height: 1;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
 .route-marker.start {

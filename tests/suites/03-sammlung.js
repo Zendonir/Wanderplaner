@@ -101,6 +101,19 @@ module.exports = {
       check.equal(await page.locator('#parking-list li:not(.list-empty)').count(), 1,
         'Parkplatz importiert');
 
+      // Parkplätze sind Beiwerk und zahlreich – ihre Marken bleiben deutlich
+      // kleiner als die runden Stempelmarken.
+      const größen = await page.evaluate(() => {
+        const size = (sel) => {
+          const e = document.querySelector(sel);
+          return e ? e.getBoundingClientRect().width : 0;
+        };
+        return { parkplatz: size('.parking-marker'), stempel: size('.stamp-marker') };
+      });
+      check.ok(größen.parkplatz > 0 && größen.parkplatz < größen.stempel,
+        'Die Parkplatzmarke ist kleiner als eine Stempelstelle',
+        `Parkplatz ${größen.parkplatz} px, Stempel ${größen.stempel} px`);
+
       await page.locator('#parking-list li .item-label').first().click();
       await page.waitForSelector('.qr-box svg', { timeout: 5000 });
       await page.waitForTimeout(400);
@@ -157,6 +170,10 @@ module.exports = {
       await page.click('#btn-clear');
       await page.waitForTimeout(900);
 
+      /* ---- Parkplätze weichen der Planung ---- */
+      check.ok(await page.locator('.parking-marker').count() > 0,
+        'Ohne Route sind die Parkplätze auf der Karte');
+
       /* ---- Tour speichern und laden ---- */
       await startDrawing(page);
       const box = await page.locator('#map').boundingBox();
@@ -164,16 +181,30 @@ module.exports = {
       await page.locator('#map').click({ position: { x: box.width * 0.6, y: box.height * 0.3 } });
       await page.waitForTimeout(1800);
 
+      check.equal(await page.locator('.parking-marker').count(), 0,
+        'Mit gesetztem Startpunkt verschwinden die Parkplatzmarken');
+
       await page.fill('#tour-name', 'Testtour');
       await page.click('#btn-save-tour');
       await page.waitForTimeout(700);
       check.equal(await page.locator('#tour-list li:not(.list-empty)').count(), 1,
         'Tour wird gespeichert');
+      check.contains(await page.textContent('#section-tours h2'), 'Geplante Touren',
+        'Gespeicherte Planungen heißen „Geplante Touren“');
+      check.contains(await page.textContent('#section-tracks h2'), 'Abgeschlossene Touren',
+        'Gelaufene Strecken heißen „Abgeschlossene Touren“');
+
+      // Geplante Touren sind auf der Karte zu sehen, damit man sie im
+      // Verhältnis zu den abgeschlossenen einordnen kann.
+      const plannedOnMap = await page.locator('#map path.tour-line[stroke-dasharray]').count();
+      check.ok(plannedOnMap > 0, 'Die geplante Tour erscheint gestrichelt auf der Karte');
 
       await page.click('#btn-clear');
       await page.waitForTimeout(900);
       check.equal(await page.locator('#point-list li:not(.list-empty)').count(), 0,
         'Route leeren entfernt alle Punkte');
+      check.ok(await page.locator('.parking-marker').count() > 0,
+        'Ohne Startpunkt sind die Parkplätze wieder da');
 
       await page.locator('#tour-list li .item-label').first().click();
       await page.waitForTimeout(1500);
@@ -181,6 +212,34 @@ module.exports = {
         'Gespeicherte Tour lässt sich wieder laden');
       check.equal(await page.locator('#tour-name').inputValue(), 'Testtour',
         'Der Tourname wird mitgeladen');
+
+      /* ---- Geplant → abgeschlossen ---- */
+      const tracksBefore = await page.locator('#track-list li:not(.list-empty)').count();
+      await page.locator('#tour-list li .item-action').first().click();
+      await page.waitForTimeout(1200);
+      check.equal(await page.locator('#tour-list li:not(.list-empty)').count(), 0,
+        'Die abgehakte Tour verlässt die Planungsliste');
+      check.equal(await page.locator('#track-list li:not(.list-empty)').count(),
+        tracksBefore + 1, 'Und taucht bei den abgeschlossenen Touren auf');
+      check.contains(
+        (await page.locator('#track-list li .item-label').allTextContents()).join(' | '),
+        'Testtour', 'Unter demselben Namen');
+
+      // Übernommen wird der berechnete Verlauf, nicht die angeklickten
+      // Stützpunkte: Die Teststrecke des Routers beginnt bei 51.80/10.60,
+      // geklickt wurde ganz woanders.
+      const übernommen = await page.evaluate(() => {
+        const raw = JSON.parse(localStorage.getItem('wanderplaner.tracks') || '{}');
+        const tour = (raw.items || []).find((t) => t.name === 'Testtour');
+        return tour ? { first: tour.points[0], länge: tour.length } : null;
+      });
+      check.ok(übernommen
+        && Math.abs(übernommen.first[0] - 51.80) < 0.01
+        && Math.abs(übernommen.first[1] - 10.60) < 0.01,
+        'Die abgeschlossene Tour trägt den gelaufenen Verlauf, nicht die Klickpunkte',
+        JSON.stringify(übernommen));
+      check.ok(übernommen && übernommen.länge > 0,
+        'Und die gelaufene Länge', `${übernommen && übernommen.länge} m`);
 
       /* ---- Alles übersteht einen Neustart der Seite ---- */
       await page.reload();
@@ -190,8 +249,8 @@ module.exports = {
         'Stempelstellen bleiben nach dem Neuladen erhalten');
       check.equal(await page.locator('#parking-list li:not(.list-empty)').count(), 1,
         'Parkplätze bleiben erhalten');
-      check.equal(await page.locator('#track-list li:not(.list-empty)').count(), 1,
-        'Hinterlegte Touren bleiben erhalten');
+      check.equal(await page.locator('#track-list li:not(.list-empty)').count(), 2,
+        'Abgeschlossene Touren bleiben erhalten');
 
       check.equal(errors.length, 0, 'Keine Skriptfehler', errors.join(' | '));
     } finally {

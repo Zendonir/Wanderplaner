@@ -10,6 +10,13 @@ services:
     volumes:
       # Stempelstellen, Parkplätze und Touren – geräteübergreifend.
       - wanderplaner-data:/data
+      # Nur für "Jetzt aktualisieren" in der Oberfläche nötig – bewusst
+      # auskommentiert. Wer den Socket freigibt, gibt der App faktisch
+      # Rootrechte auf dem Host. Siehe README, Abschnitt "Aktualisieren".
+      # - /var/run/docker.sock:/var/run/docker.sock
+    # environment:
+    #   ALLOW_SELF_UPDATE: "1"
+    #   CONTAINER_NAME: wanderplaner
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/api/health"]

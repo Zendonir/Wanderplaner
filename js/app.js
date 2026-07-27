@@ -155,6 +155,7 @@
     clusterList: document.getElementById('cluster-list'),
     appVersion: document.getElementById('app-version'),
     checkUpdate: document.getElementById('btn-check-update'),
+    runUpdate: document.getElementById('btn-run-update'),
     updateNote: document.getElementById('update-note'),
     routeStyle: document.getElementById('route-style'),
     settings: document.getElementById('settings'),
@@ -1629,6 +1630,85 @@
     }
   }
 
+  /**
+   * Fragt den Server, ob er sich selbst aktualisieren darf. Das ist nur der
+   * Fall, wenn der Docker-Socket bewusst eingehängt und die Freigabe gesetzt
+   * wurde – sonst bleibt der Knopf verborgen.
+   */
+  async function checkUpdateAbility() {
+    try {
+      const response = await Utils.fetchWithTimeout('api/update', {}, 5000);
+      if (!response.ok) return;
+      const data = await response.json();
+      el.runUpdate.hidden = !data.available;
+      if (data.available) {
+        el.runUpdate.title =
+          `Zieht das neue Image und erstellt „${data.container}“ neu. ` +
+          'Die App ist dabei kurz nicht erreichbar.';
+      }
+    } catch (err) {
+      // Ohne Server gibt es auch nichts zu aktualisieren.
+    }
+  }
+
+  /** Stößt die Aktualisierung an und wartet, bis der Server wiederkommt. */
+  async function runUpdate() {
+    if (!window.confirm(
+      'Der Wanderplaner zieht jetzt das neue Image und startet sich neu.\n\n' +
+      'Die App ist dabei etwa eine Minute nicht erreichbar. Fortfahren?'
+    )) return;
+
+    const before = String(state.version || '');
+    el.runUpdate.disabled = true;
+    el.checkUpdate.disabled = true;
+    el.updateNote.hidden = false;
+    el.updateNote.className = 'about-note';
+    el.updateNote.textContent = 'Aktualisierung läuft – bitte das Fenster offen lassen …';
+
+    try {
+      const response = await Utils.fetchWithTimeout('api/update', { method: 'POST' }, 60000);
+      if (!response.ok) {
+        const detail = await response.json().catch(() => null);
+        throw new Error((detail && detail.error) || `HTTP ${response.status}`);
+      }
+    } catch (err) {
+      // Bricht die Verbindung ab, wurde der Container gerade ersetzt – das
+      // ist der Normalfall und kein Fehler.
+      console.warn('Antwort während der Aktualisierung verloren:', err);
+    }
+
+    await waitForNewVersion(before);
+  }
+
+  /** Fragt die Version, bis sie sich ändert oder die Geduld endet. */
+  async function waitForNewVersion(before) {
+    const deadline = Date.now() + 180000;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 4000));
+      try {
+        const response = await Utils.fetchWithTimeout('api/version', {}, 4000);
+        if (!response.ok) continue;
+        const data = await response.json();
+        if (String(data.version) !== before) {
+          el.updateNote.className = 'about-note ok';
+          el.updateNote.textContent =
+            `Fertig – jetzt läuft Version ${data.version}. Die Seite wird neu geladen.`;
+          setTimeout(() => window.location.reload(), 2500);
+          return;
+        }
+      } catch (err) {
+        // Solange der Container neu startet, ist ein Fehler zu erwarten.
+      }
+    }
+
+    el.updateNote.className = 'about-note update';
+    el.updateNote.textContent =
+      'Die neue Version meldet sich nicht innerhalb von drei Minuten. Bitte am ' +
+      'Server nachsehen (docker compose logs) und die Seite danach neu laden.';
+    el.runUpdate.disabled = false;
+    el.checkUpdate.disabled = false;
+  }
+
   /* ---------- Reiter ---------- */
 
   function setTab(name) {
@@ -2486,7 +2566,9 @@
     });
 
     el.checkUpdate.addEventListener('click', checkForUpdate);
+    el.runUpdate.addEventListener('click', runUpdate);
     loadVersion();
+    checkUpdateAbility();
 
     el.libraryToggle.addEventListener('click', toggleLibrary);
     setLibraryOpen(localStorage.getItem('wanderplaner.library') !== 'closed');

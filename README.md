@@ -265,6 +265,36 @@ der die neue Fassung selbst übernimmt (`skipWaiting`); bleibt trotzdem die
 alte Oberfläche stehen, hilft ein harter Reload (Strg+Umschalt+R) oder – auf
 dem Homescreen-Symbol am Handy – die App einmal ganz schließen.
 
+#### Aus der Oberfläche heraus („Jetzt aktualisieren")
+
+In den **Einstellungen → Über** kann ein Knopf **„⬆ Jetzt aktualisieren"**
+erscheinen, der genau das erledigt: neues Image ziehen, Container neu
+erstellen, Seite neu laden. Er ist **standardmäßig aus** und taucht nur auf,
+wenn beides zutrifft:
+
+```yaml
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      ALLOW_SELF_UPDATE: "1"
+      CONTAINER_NAME: wanderplaner   # nur nötig, wenn der Hostname abweicht
+```
+
+**Was das bedeutet:** Wer den Docker-Socket erreicht, kann auf dem Host
+praktisch alles tun – Container starten, Dateisysteme einhängen, Rootrechte
+erlangen. Der Wanderplaner ist eine Web-App; ist sie aus dem Netz erreichbar,
+hängt diese Macht an ihrer Erreichbarkeit. Für ein Heimnetz hinter der
+Firewall ist das vertretbar, für eine ins Internet veröffentlichte Instanz
+nicht. Ohne diese beiden Zeilen bleibt der Knopf unsichtbar und der Endpunkt
+antwortet abschlägig.
+
+**Wie es abläuft:** Ein Container kann sich nicht selbst ersetzen – beim
+Austausch stirbt genau der Prozess, der die Arbeit machen müsste. Der
+Wanderplaner startet deshalb einen kurzlebigen Watchtower-Container
+(`--run-once --cleanup`), der von außen zusieht: Image ziehen, Container neu
+erstellen, sich selbst wegräumen. Die Oberfläche wartet solange und lädt neu,
+sobald sich `/api/version` meldet.
+
 **Automatisch aktualisieren** geht mit Watchtower, wenn das gewünscht ist:
 
 ```yaml

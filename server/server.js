@@ -11,6 +11,7 @@ const http = require('http');
 const fs = require('fs');
 const fsp = require('fs/promises');
 const path = require('path');
+const Update = require('./update');
 
 const PORT = Number(process.env.PORT) || 8080;
 const PUBLIC_DIR = process.env.PUBLIC_DIR || path.join(__dirname, '..', 'public');
@@ -188,6 +189,21 @@ async function handleApi(req, res, url) {
       node: process.version,
       startedAt: startedAt.toISOString(),
     });
+  }
+
+  if (url.pathname === '/api/update') {
+    if (req.method === 'GET') {
+      return sendJson(res, 200, await Update.status());
+    }
+    if (req.method === 'POST') {
+      try {
+        return sendJson(res, 200, await Update.run());
+      } catch (err) {
+        return sendJson(res, err.status || 500, { error: err.message });
+      }
+    }
+    res.writeHead(405, { Allow: 'GET, POST' });
+    return res.end();
   }
 
   if (url.pathname !== '/api/data') {

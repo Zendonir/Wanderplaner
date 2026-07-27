@@ -19,9 +19,11 @@ denselben Datenstand sehen.
   Stelle greifen und ziehen: dort entsteht ein Zwischenpunkt an der richtigen
   Position in der Reihenfolge, die Route rechnet sofort neu.
 - **Farbige Route** – die geplante Strecke lässt sich umschalten zwischen
-  *einfarbig*, *nach Steigung* (grün flach, warm bergauf, kühl bergab) und
-  *nach Wegbedingungen* (markierter Wanderweg, Pfad, Forstweg, Straße).
-  Eine Legende auf der Karte erklärt die Farben; die Wahl bleibt gespeichert.
+  *einfarbig*, *nach Steigung* und *nach Wegbedingungen*. Die Steigung wird
+  stufenlos eingefärbt (grün eben, über gelb und orange bis rot bergauf,
+  in Blautönen bergab); die Legende zeigt dazu einen Farbverlauf mit Skala
+  und nennt die Spanne, die auf dieser Tour vorkommt. Die Wahl bleibt
+  gespeichert.
 - **Wegebeschaffenheit** – nach jeder Berechnung wird aufgeschlüsselt, woraus
   die Route besteht: Anteile von markierten Wanderwegen, Pfaden, Forstwegen
   und Straßen sowie die Oberflächen. Damit lässt sich prüfen, ob die

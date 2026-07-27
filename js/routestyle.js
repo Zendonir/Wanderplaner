@@ -19,18 +19,25 @@ const RouteStyle = {
   },
 
   /**
-   * Steigungsklassen. Bergauf warm, bergab kühl, flach grün – so ist auf
-   * einen Blick erkennbar, wo es zieht.
+   * Stützpunkte der Steigungsfarbe. Zwischen ihnen wird stufenlos
+   * überblendet: bergab kühl, flach grün, bergauf warm bis rot.
    */
-  SLOPE_CLASSES: [
-    { max: -15, color: '#2c5c9c', label: 'steil bergab (über 15 %)' },
-    { max: -8, color: '#5b8ac4', label: 'bergab 8–15 %' },
-    { max: -3, color: '#9dc0e0', label: 'leicht bergab 3–8 %' },
-    { max: 3, color: '#4a9a5c', label: 'flach (unter 3 %)' },
-    { max: 8, color: '#e0c341', label: 'leicht bergauf 3–8 %' },
-    { max: 15, color: '#e08a2e', label: 'bergauf 8–15 %' },
-    { max: Infinity, color: '#c0392b', label: 'steil bergauf (über 15 %)' },
+  SLOPE_RAMP: [
+    { at: -25, rgb: [23, 48, 105] },
+    { at: -15, rgb: [44, 92, 156] },
+    { at: -8, rgb: [110, 160, 205] },
+    { at: -3, rgb: [168, 205, 224] },
+    { at: 0, rgb: [74, 154, 92] },
+    { at: 3, rgb: [163, 196, 84] },
+    { at: 8, rgb: [224, 195, 65] },
+    { at: 15, rgb: [224, 138, 46] },
+    { at: 25, rgb: [192, 57, 43] },
   ],
+
+  // Die Steigung wird auf halbe Prozentpunkte gerundet. Feiner sieht das
+  // Auge ohnehin nicht, und es hält die Zahl der Teilstücke im Rahmen –
+  // eine eigene Linie je Stützpunkt wäre für lange Touren zu viel.
+  SLOPE_STEP: 0.5,
 
   // Über wie viele Meter die Steigung gemittelt wird. Ohne Glättung
   // schwankt sie durch Ungenauigkeiten der Höhendaten stark.
@@ -47,7 +54,7 @@ const RouteStyle = {
    */
   build(mode, coordinates, elevations, segments) {
     if (!coordinates || coordinates.length < 2) {
-      return { sections: [], legend: [], note: null };
+      return { sections: [], legend: [], scale: null, note: null };
     }
 
     if (mode === 'slope') {
@@ -55,6 +62,7 @@ const RouteStyle = {
         return {
           sections: this._single(coordinates, this.PLAIN_COLOR),
           legend: [],
+          scale: null,
           note: 'Ohne Höhenwerte lässt sich die Steigung nicht darstellen.',
         };
       }
@@ -66,13 +74,17 @@ const RouteStyle = {
         return {
           sections: this._single(coordinates, this.PLAIN_COLOR),
           legend: [],
+          scale: null,
           note: 'Für diese Route liegen keine Wegedaten vor (nur mit BRouter verfügbar).',
         };
       }
       return this._bySurface(coordinates, segments);
     }
 
-    return { sections: this._single(coordinates, this.PLAIN_COLOR), legend: [], note: null };
+    return {
+      sections: this._single(coordinates, this.PLAIN_COLOR),
+      legend: [], scale: null, note: null,
+    };
   },
 
   _single(coordinates, color) {
@@ -80,6 +92,31 @@ const RouteStyle = {
   },
 
   /* ---------- Nach Steigung ---------- */
+
+  /** Farbe für eine Steigung in Prozent, stufenlos aus der Rampe. */
+  slopeColor(percent) {
+    const ramp = this.SLOPE_RAMP;
+    if (percent <= ramp[0].at) return this._hex(ramp[0].rgb);
+    if (percent >= ramp[ramp.length - 1].at) return this._hex(ramp[ramp.length - 1].rgb);
+
+    for (let i = 1; i < ramp.length; i++) {
+      if (percent > ramp[i].at) continue;
+      const a = ramp[i - 1];
+      const b = ramp[i];
+      const t = (percent - a.at) / (b.at - a.at);
+      return this._hex([
+        Math.round(a.rgb[0] + (b.rgb[0] - a.rgb[0]) * t),
+        Math.round(a.rgb[1] + (b.rgb[1] - a.rgb[1]) * t),
+        Math.round(a.rgb[2] + (b.rgb[2] - a.rgb[2]) * t),
+      ]);
+    }
+    return this._hex(ramp[ramp.length - 1].rgb);
+  },
+
+  _hex(rgb) {
+    return '#' + rgb.map((v) => Math.max(0, Math.min(255, v))
+      .toString(16).padStart(2, '0')).join('');
+  },
 
   _bySlope(coordinates, elevations) {
     // Abstände und Gesamtstrecke bis zu jedem Punkt.
@@ -92,11 +129,12 @@ const RouteStyle = {
     }
 
     const colors = [];
-    const used = new Set();
+    const used = [];
 
     for (let i = 1; i < coordinates.length; i++) {
       // Fenster um das aktuelle Teilstück suchen, damit einzelne
       // Ausreißer der Höhendaten nicht durchschlagen.
+      // (Steigungen werden anschließend auf SLOPE_STEP gerundet.)
       const target = this.SLOPE_WINDOW_M / 2;
       let from = i - 1;
       let to = i;
@@ -107,18 +145,50 @@ const RouteStyle = {
       const rise = elevations[to] - elevations[from];
       const percent = run > 1 ? (rise / run) * 100 : 0;
 
-      const cls = this.SLOPE_CLASSES.find((c) => percent < c.max)
-        || this.SLOPE_CLASSES[this.SLOPE_CLASSES.length - 1];
-      colors.push(cls.color);
-      used.add(cls.color);
+      const stepped = Math.round(percent / this.SLOPE_STEP) * this.SLOPE_STEP;
+      colors.push(this.slopeColor(stepped));
+      used.push(stepped);
     }
 
     return {
       sections: this._group(coordinates, colors),
-      legend: this.SLOPE_CLASSES
-        .filter((c) => used.has(c.color))
-        .map((c) => ({ color: c.color, label: c.label })),
+      legend: [],
+      // Statt einzelner Klassen ein Farbverlauf mit Skala – bei stufenloser
+      // Färbung wäre eine Liste von Farbfeldern sinnlos lang.
+      scale: this._slopeScale(used),
       note: null,
+    };
+  },
+
+  /**
+   * Beschreibt den Farbverlauf für die Legende: Verlaufsdefinition plus
+   * die Spanne, die auf dieser Route tatsächlich vorkommt.
+   */
+  _slopeScale(values) {
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+
+    // Anzeigebereich auf glatte Werte runden, mindestens ±5 %. Über das Ende
+    // der Farbrampe hinaus hat die Achse keinen Sinn – dort ändert sich die
+    // Farbe nicht mehr, die Skala würde also mehr Auflösung vortäuschen.
+    const rampMax = this.SLOPE_RAMP[this.SLOPE_RAMP.length - 1].at;
+    const needed = Math.ceil(Math.max(Math.abs(min), Math.abs(max)) / 5) * 5;
+    const bound = Math.min(rampMax, Math.max(5, needed));
+
+    const stops = [];
+    for (let i = 0; i <= 20; i++) {
+      const percent = -bound + (2 * bound * i) / 20;
+      stops.push({ offset: i / 20, color: this.slopeColor(percent) });
+    }
+
+    return {
+      title: 'Steigung',
+      stops,
+      min: -bound,
+      max: bound,
+      // Die tatsächlich vorkommende Spanne, damit die Zahlen zur Tour passen.
+      actualMin: min,
+      actualMax: max,
     };
   },
 
@@ -139,6 +209,7 @@ const RouteStyle = {
       return {
         sections: this._single(coordinates, this.PLAIN_COLOR),
         legend: [],
+        scale: null,
         note: 'Die Wegabschnitte ließen sich der Strecke nicht zuordnen.',
       };
     }
@@ -173,6 +244,7 @@ const RouteStyle = {
         .map((c) => ({ color: c.color, label: c.label }))
         .concat(usedLabels.has('#b0b6ac')
           ? [{ color: '#b0b6ac', label: 'Sonstige' }] : []),
+      scale: null,
       note: null,
     };
   },

@@ -678,18 +678,50 @@ const MapView = (function () {
     });
   }
 
-  /** Farblegende in der Kartenecke; ohne Einträge wird sie entfernt. */
-  function renderLegend(entries, note) {
+  /**
+   * Farblegende in der Kartenecke – entweder als Liste von Farbfeldern
+   * (Wegarten) oder als stufenloser Verlauf mit Skala (Steigung).
+   */
+  function renderLegend(entries, note, scale) {
     if (legendControl) {
       map.removeControl(legendControl);
       legendControl = null;
     }
-    if ((!entries || entries.length === 0) && !note) return;
+    if ((!entries || entries.length === 0) && !note && !scale) return;
 
     const control = L.control({ position: 'bottomright' });
     control.onAdd = () => {
       const div = L.DomUtil.create('div', 'route-legend');
       L.DomEvent.disableClickPropagation(div);
+
+      if (scale) {
+        const title = document.createElement('div');
+        title.className = 'legend-title';
+        title.textContent = scale.title;
+        div.appendChild(title);
+
+        const bar = document.createElement('div');
+        bar.className = 'legend-gradient';
+        bar.style.background = 'linear-gradient(to right, ' +
+          scale.stops.map((s) => `${s.color} ${(s.offset * 100).toFixed(0)}%`).join(', ') + ')';
+        div.appendChild(bar);
+
+        const axis = document.createElement('div');
+        axis.className = 'legend-axis';
+        [scale.min, 0, scale.max].forEach((value) => {
+          const tick = document.createElement('span');
+          tick.textContent = `${value > 0 ? '+' : ''}${value} %`;
+          axis.appendChild(tick);
+        });
+        div.appendChild(axis);
+
+        const range = document.createElement('div');
+        range.className = 'legend-range';
+        // Was auf dieser Tour tatsächlich vorkommt.
+        range.textContent = `Diese Route: ${scale.actualMin.toFixed(1)} % ` +
+          `bis ${scale.actualMax > 0 ? '+' : ''}${scale.actualMax.toFixed(1)} %`;
+        div.appendChild(range);
+      }
 
       (entries || []).forEach((entry) => {
         const row = document.createElement('div');

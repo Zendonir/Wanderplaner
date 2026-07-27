@@ -122,9 +122,15 @@ module.exports = {
         `${slopeColors.size} Farben`);
       check.equal(await page.locator('.route-legend').count(), 1,
         'Eine Legende erscheint auf der Karte');
-      const slopeLegend = await page.locator('.route-legend .legend-row').count();
-      check.ok(slopeLegend >= 2, 'Die Legende nennt die Steigungsklassen',
-        `${slopeLegend} Einträge`);
+      check.equal(await page.locator('.legend-gradient').count(), 1,
+        'Die Steigung wird als Farbverlauf erklärt');
+      const axis = await page.locator('.legend-axis span').allTextContents();
+      check.ok(axis.length === 3 && axis.join(' ').includes('%'),
+        'Der Verlauf ist mit Prozentwerten beschriftet', axis.join(' '));
+      check.contains(await page.textContent('.legend-range'), 'Diese Route',
+        'Die tatsächliche Spanne der Tour wird genannt');
+      check.ok(slopeColors.size >= 4, 'Die Abstufung ist fein',
+        `${slopeColors.size} Farben`);
 
       await page.selectOption('#route-style', 'surface');
       await page.waitForTimeout(600);

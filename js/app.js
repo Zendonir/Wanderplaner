@@ -415,14 +415,14 @@
   function drawRoute() {
     if (!state.geometry) {
       MapView.renderRoute(null, state.points);
-      MapView.renderLegend(null, null);
+      MapView.renderLegend(null, null, null);
       return;
     }
     const styled = RouteStyle.build(
       state.routeStyle, state.geometry, state.elevations, state.segments
     );
     MapView.renderRoute(state.geometry, state.points, styled.sections);
-    MapView.renderLegend(styled.legend, styled.note);
+    MapView.renderLegend(styled.legend, styled.note, styled.scale);
   }
 
   /** Höhen übernehmen (vom Router oder per Dienst) und Anzeige auffrischen. */

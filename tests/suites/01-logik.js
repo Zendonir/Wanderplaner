@@ -210,15 +210,20 @@ module.exports = {
       'Optimierte Reihenfolge ist nicht länger als die ursprüngliche');
 
     /* ---- Farbige Darstellung der Route ---- */
-    // Strecke mit flachem Anfang, steilem Anstieg und flachem Ende.
+    // Strecke mit flachem Anfang, wechselnd steilem Anstieg und Abstieg –
+    // eine exakt gleichmäßige Steigung ergäbe nur eine einzige Farbe und
+    // würde die Abstufung nicht prüfen.
     const routeCoords = [];
     const routeEle = [];
+    let height = 600;
     for (let i = 0; i <= 60; i++) {
       routeCoords.push([10.60, 51.80 + i * 0.0009]);
-      // 0–20 flach, 20–40 steil bergauf, 40–60 bergab
-      if (i <= 20) routeEle.push(600);
-      else if (i <= 40) routeEle.push(600 + (i - 20) * 20);
-      else routeEle.push(1000 - (i - 40) * 12);
+      routeEle.push(height);
+      // Steigung schwankt: flach, dann zunehmend steiler bergauf, dann bergab.
+      const slope = i < 15 ? 0.5
+        : i < 38 ? 4 + (i - 15) * 0.9
+        : -6 - (i - 38) * 0.7;
+      height += slope; // je Stützpunkt rund 100 m Strecke
     }
 
     const plain = RouteStyle.build('plain', routeCoords, routeEle, null);
@@ -226,18 +231,51 @@ module.exports = {
     check.equal(plain.legend.length, 0, 'Einfarbig braucht keine Legende');
 
     const slope = RouteStyle.build('slope', routeCoords, routeEle, null);
-    check.ok(slope.sections.length >= 3,
-      'Nach Steigung entstehen mehrere Farbabschnitte',
-      `${slope.sections.length} Abschnitte`);
     const slopeColors = new Set(slope.sections.map((s) => s.color));
-    check.ok(slopeColors.size >= 3, 'Flach, bergauf und bergab werden unterschieden',
-      `${slopeColors.size} Farben`);
-    check.ok(slope.legend.length === slopeColors.size,
-      'Die Legende nennt genau die verwendeten Klassen');
-    // Der flache Anfang muss grün sein, der steile Teil warm.
-    check.equal(slope.sections[0].color, '#4a9a5c', 'Flacher Anfang ist grün');
-    check.ok(slope.sections.some((s) => s.color === '#c0392b'),
-      'Der steile Anstieg bekommt die Warnfarbe');
+    check.ok(slopeColors.size >= 4, 'Nach Steigung entstehen viele Farbabstufungen',
+      `${slopeColors.size} Farben in ${slope.sections.length} Abschnitten`);
+    // Bei stufenloser Skala hat 0,5 % nicht exakt dieselbe Farbe wie 0 % –
+    // geprüft wird deshalb die Eigenschaft, nicht der Hexwert.
+    const isGreenish = (hex) => {
+      const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+      return g > r && g > b;
+    };
+    check.ok(isGreenish(slope.sections[0].color), 'Flacher Anfang ist grün',
+      slope.sections[0].color);
+    check.ok(slope.scale && slope.scale.stops.length > 10,
+      'Die Legende beschreibt einen Farbverlauf statt fester Klassen');
+    check.equal(slope.legend.length, 0, 'Es gibt keine Klassenliste mehr');
+    check.ok(slope.scale.actualMax > 10 && slope.scale.actualMin < -5,
+      'Die Skala nennt die tatsächliche Spanne der Route',
+      `${slope.scale.actualMin} bis ${slope.scale.actualMax} %`);
+    // Die Achse darf nicht über die Farbrampe hinausgehen – dort ändert
+    // sich die Farbe nicht mehr.
+    const rampEnd = RouteStyle.SLOPE_RAMP[RouteStyle.SLOPE_RAMP.length - 1].at;
+    check.ok(slope.scale.max <= rampEnd,
+      'Die Achse endet dort, wo die Farbrampe endet',
+      `Achse bis ${slope.scale.max} %, Rampe bis ${rampEnd} %`);
+
+    // Die Farbrampe muss stufenlos und richtig herum verlaufen.
+    check.equal(RouteStyle.slopeColor(0), '#4a9a5c', 'Ebene Strecke ist grün');
+    const uphill = [2, 5, 9, 14, 20].map((p) => RouteStyle.slopeColor(p));
+    check.equal(new Set(uphill).size, uphill.length,
+      'Jede Steigung bekommt einen eigenen Farbwert');
+    const red = (hex) => parseInt(hex.slice(1, 3), 16);
+    const blue = (hex) => parseInt(hex.slice(5, 7), 16);
+    check.ok(red(uphill[4]) > red(uphill[0]),
+      'Je steiler bergauf, desto röter');
+    const downhill = [-2, -6, -12, -20].map((p) => RouteStyle.slopeColor(p));
+    check.ok(blue(downhill[3]) > blue(RouteStyle.slopeColor(0)),
+      'Bergab wird kühler dargestellt');
+    // Zwischenwerte müssen echt interpoliert sein, nicht auf Stützpunkte springen.
+    const between = RouteStyle.slopeColor(5.5);
+    check.ok(between !== RouteStyle.slopeColor(3) && between !== RouteStyle.slopeColor(8),
+      'Zwischen den Stützpunkten wird überblendet');
+    // Extremwerte dürfen nicht aus der Rampe laufen.
+    check.equal(RouteStyle.slopeColor(80), RouteStyle.slopeColor(25),
+      'Sehr steile Werte werden auf das Rampenende begrenzt');
+    check.equal(RouteStyle.slopeColor(-80), RouteStyle.slopeColor(-25),
+      'Das gilt auch nach unten');
 
     // Ohne Höhenwerte darf es nicht abstürzen, sondern muss es erklären.
     const noEle = RouteStyle.build('slope', routeCoords, null, null);

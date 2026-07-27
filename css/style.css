@@ -1176,6 +1176,34 @@ body {
   font-size: 0.72rem;
 }
 
+.legend-title {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.legend-gradient {
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  min-width: 170px;
+}
+
+.legend-axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  margin-top: 0.15rem;
+}
+
+.legend-range {
+  margin-top: 0.2rem;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------- Route ziehen ---------- */
 
 .route-draggable {

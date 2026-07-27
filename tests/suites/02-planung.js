@@ -190,14 +190,74 @@ module.exports = {
       check.ok(firstBefore !== firstAfter, 'Umkehren dreht die Reihenfolge');
 
       /* ---- Rundtour-Generator ---- */
+      // Der Router antwortet hier mit einer Schleife, die einen Stichweg
+      // enthält – so wie es passiert, wenn ein Stützpunkt des gedachten
+      // Kreises am Ende einer Sackgasse landet. Sobald der Generator den
+      // störenden Punkt weglässt, kommt die saubere Schleife zurück.
+      // Führt die Strecke durch die angefragten Stützpunkte. Beim dritten
+      // Punkt geht sie hin und auf demselben Weg zurück – der Stichweg.
+      const buildLoop = (waypoints, spurAt) => {
+        const coordinates = [];
+        const leg = (from, to) => {
+          for (let s = 1; s <= 12; s++) {
+            coordinates.push([
+              from[0] + ((to[0] - from[0]) * s) / 12,
+              from[1] + ((to[1] - from[1]) * s) / 12,
+              600,
+            ]);
+          }
+        };
+
+        coordinates.push([...waypoints[0], 600]);
+        for (let i = 0; i < waypoints.length - 1; i++) {
+          if (i + 1 === spurAt) {
+            leg(waypoints[i], waypoints[i + 1]);
+            leg(waypoints[i + 1], waypoints[i]); // denselben Weg zurück
+          } else {
+            leg(waypoints[i], waypoints[i + 1]);
+          }
+        }
+        return {
+          type: 'FeatureCollection',
+          features: [{
+            type: 'Feature',
+            properties: { 'track-length': '8000' },
+            geometry: { type: 'LineString', coordinates },
+          }],
+        };
+      };
+
+      const spurHandler = (route, request) => {
+        const raw = decodeURIComponent(request.url().match(/lonlats=([^&]+)/)[1]);
+        const waypoints = raw.split('|').map((p) => p.split(',').map(Number));
+        // Der erste Anlauf schickt alle sieben Stützpunkte und bekommt den
+        // Stichweg; danach ist der störende Punkt weg und die Schleife sauber.
+        route.fulfill({ json: buildLoop(waypoints, waypoints.length >= 7 ? 3 : -1) });
+      };
+      await page.route('**/brouter.de/brouter?**', spurHandler);
+
       await page.click('#generator-panel summary');
       await page.fill('#gen-length', '8');
       await page.click('#btn-generate');
-      await page.waitForTimeout(2500);
+      await page.waitForTimeout(3500);
       const note = await page.textContent('#generator-note');
       check.contains(note, 'Rundtour über', 'Rundtour wird erzeugt');
-      check.ok(await page.locator('#point-list li:not(.list-empty)').count() >= 6,
-        'Die Rundtour besteht aus mehreren Punkten');
+      check.contains(note, 'Stichweg', 'Entfernte Stichwege werden benannt');
+      const roundPoints = await page.locator('#point-list li:not(.list-empty)').count();
+      check.ok(roundPoints >= 4, 'Die Rundtour besteht aus mehreren Punkten',
+        `${roundPoints} Punkte`);
+      check.ok(roundPoints < 7,
+        'Der Punkt am Ende der Sackgasse ist nicht mehr dabei',
+        `${roundPoints} statt 7 Punkten`);
+
+      await page.unroute('**/brouter.de/brouter?**', spurHandler);
+
+      // Zurück auf die übliche Teststrecke: Die Rundtour oben hat weder
+      // Wegedaten noch ein abwechslungsreiches Höhenprofil, und beides
+      // brauchen die folgenden Prüfungen zur Einfärbung.
+      await page.click('#btn-clear');
+      await page.waitForTimeout(600);
+      await drawRoute(page);
 
       /* ---- Farbliche Darstellung ---- */
       const lineColors = () => page.evaluate(() =>

@@ -42,6 +42,7 @@ function moduleName(file) {
     utils: 'Utils', qrcode: 'QRCode', daylight: 'Daylight', nearby: 'Nearby',
     waytypes: 'WayTypes', clusters: 'Clusters', progress: 'Progress',
     maplinks: 'MapLinks', tracks: 'Tracks', routestyle: 'RouteStyle',
+    roundtrip: 'RoundTrip',
   };
   return map[file] || file;
 }
@@ -51,9 +52,9 @@ module.exports = {
 
   async run(check) {
     const { Utils, QRCode, Daylight, Nearby, WayTypes, Clusters, Progress, MapLinks,
-            RouteStyle, Tracks } =
+            RouteStyle, Tracks, RoundTrip } =
       loadModules(['utils', 'qrcode', 'daylight', 'nearby', 'waytypes', 'clusters',
-                   'progress', 'maplinks', 'routestyle', 'tracks']);
+                   'progress', 'maplinks', 'routestyle', 'tracks', 'roundtrip']);
 
     /* ---- QR-Code: gegen einen unabhängigen Decoder ---- */
     const jsQR = require('jsqr');
@@ -368,6 +369,66 @@ module.exports = {
       'Der Endpunkt bleibt erhalten');
     check.ok(thinned.some((p) => Math.abs(p.lat - 51.84) < 1e-4 && Math.abs(p.lng - 10.60) < 1e-4),
       'Die Kehre bleibt als Stützpunkt erhalten');
+
+    /* ---- Stichwege in einer Rundtour erkennen ---- */
+    // Nachgebaute Schleife: von West nach Ost, dazwischen ein Abstecher nach
+    // Norden und auf demselben Weg zurück – genau der Dorn, der beim
+    // Rundtour-Generator entsteht, wenn ein Stützpunkt in einer Sackgasse
+    // landet.
+    const loop = [];
+    const push = (lat, lng) => loop.push([lng, lat]);
+    for (let i = 0; i <= 20; i++) push(51.80, 10.60 + i * 0.0012);      // Hinweg
+    for (let i = 1; i <= 12; i++) push(51.80 + i * 0.0009, 10.624);     // Abstecher hin
+    for (let i = 11; i >= 0; i--) push(51.80 + i * 0.0009, 10.624);     // und zurück
+    for (let i = 1; i <= 20; i++) push(51.80 - i * 0.0009, 10.624 - i * 0.0012);
+    for (let i = 1; i <= 20; i++) push(51.782 + i * 0.0009, 10.60);     // zurück zum Start
+
+    const abzweigung = { lat: 51.8108, lng: 10.624 };  // Spitze des Abstechers
+    const amWeg = { lat: 51.80, lng: 10.612 };         // ganz normal am Hinweg
+
+    const spurPoints = [
+      { lat: 51.80, lng: 10.60 },
+      amWeg,
+      abzweigung,
+      { lat: 51.782, lng: 10.60 },
+      { lat: 51.80, lng: 10.60 },
+    ];
+    const spurs = RoundTrip.findSpurs(spurPoints, loop);
+    check.equal(spurs.length, 1, 'Genau ein Stichweg wird erkannt',
+      `gefunden: ${JSON.stringify(spurs)}`);
+    check.equal(spurs[0], 2, 'Und zwar der Punkt am Ende der Sackgasse');
+    check.ok(!spurs.includes(1),
+      'Ein Punkt mitten auf der Strecke gilt nicht als Stichweg');
+
+    // Start und Ziel dürfen nie entfallen, auch wenn sie aufeinanderliegen.
+    check.ok(!spurs.includes(0) && !spurs.includes(spurPoints.length - 1),
+      'Start und Ziel bleiben unangetastet');
+
+    // Eine saubere Schleife ohne Abstecher darf nichts auslösen.
+    const sauber = [];
+    for (let i = 0; i <= 20; i++) sauber.push([10.60 + i * 0.0012, 51.80]);
+    for (let i = 1; i <= 20; i++) sauber.push([10.624 - i * 0.0012, 51.80 - i * 0.0009]);
+    for (let i = 1; i <= 20; i++) sauber.push([10.60, 51.782 + i * 0.0009]);
+    check.equal(
+      RoundTrip.findSpurs([
+        { lat: 51.80, lng: 10.60 }, { lat: 51.80, lng: 10.612 },
+        { lat: 51.791, lng: 10.612 }, { lat: 51.80, lng: 10.60 },
+      ], sauber).length,
+      0, 'Eine Schleife ohne Abstecher bleibt unverändert');
+
+    // Ein sehr kurzer Versatz ist kein Dorn – etwa eine kleine Wendeschleife.
+    const kurz = [];
+    for (let i = 0; i <= 20; i++) kurz.push([10.60 + i * 0.0012, 51.80]);
+    for (let i = 1; i <= 3; i++) kurz.push([10.624, 51.80 + i * 0.0002]);
+    for (let i = 2; i >= 0; i--) kurz.push([10.624, 51.80 + i * 0.0002]);
+    for (let i = 1; i <= 20; i++) kurz.push([10.624 - i * 0.0012, 51.80 - i * 0.0009]);
+    for (let i = 1; i <= 20; i++) kurz.push([10.60, 51.782 + i * 0.0009]);
+    check.equal(
+      RoundTrip.findSpurs([
+        { lat: 51.80, lng: 10.60 }, { lat: 51.8006, lng: 10.624 },
+        { lat: 51.782, lng: 10.60 }, { lat: 51.80, lng: 10.60 },
+      ], kurz).length,
+      0, 'Ein sehr kurzer Versatz zählt nicht als Stichweg');
 
     /* ---- Der Service Worker muss alle Programmdateien kennen ---- */
     // Ein vergessener Eintrag fällt sonst erst offline auf, wo die App dann

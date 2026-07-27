@@ -39,7 +39,12 @@ denselben Datenstand sehen.
   OpenStreetMap und in Gehrichtung sortiert.
 - **Rundtour vorschlagen** – Wunschlänge und Richtung angeben, und die App
   erzeugt eine Schleife ab dem Startpunkt und regelt sie in wenigen Schritten
-  auf die Ziellänge ein.
+  auf die Ziellänge ein. Die Stützpunkte liegen zunächst auf einem gedachten
+  Kreis; landet einer davon auf einer Lichtung oder am Ende eines Forstwegs,
+  entstünde ein Stichweg – die Strecke ginge hin und auf demselben Weg zurück.
+  Solche Dornen erkennt die App an der Geometrie (Hin- und Rückweg liegen
+  übereinander) und berechnet die Schleife ohne den störenden Punkt neu.
+  Wie viele Stichwege entfernt wurden, steht in der Meldung.
 - **Wetter** – Vorhersage für den Startpunkt zur geplanten Zeit
   (Open-Meteo), zusammengefasst auf das ungünstigste Wetter der Tour.
 - **Route umkehren** – ein Knopf dreht die Richtung; bei Rundkursen

@@ -2361,8 +2361,13 @@
       await loadElevationAndFinish(++requestId, result.route);
 
       const km = (result.route.distance / 1000).toFixed(1).replace('.', ',');
+      // Stichwege entstehen, wenn ein Stützpunkt des gedachten Kreises am
+      // Ende einer Sackgasse landet – sie werden herausgerechnet.
+      const spurs = result.removedSpurs
+        ? ` ${result.removedSpurs} Stichweg(e) wurden entfernt.`
+        : '';
       el.generatorNote.textContent =
-        `Rundtour über ${km} km gefunden (${result.attempts} Versuch(e)). ` +
+        `Rundtour über ${km} km gefunden (${result.attempts} Versuch(e)).${spurs} ` +
         'Punkte lassen sich wie gewohnt verschieben.';
     } catch (err) {
       el.generatorNote.textContent = err.message;

@@ -16,6 +16,10 @@ const PORT = Number(process.env.PORT) || 8080;
 const PUBLIC_DIR = process.env.PUBLIC_DIR || path.join(__dirname, '..', 'public');
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 const DATA_FILE = path.join(DATA_DIR, 'wanderplaner.json');
+// Wird beim Bauen des Images gesetzt; sonst aus der package.json gelesen.
+const APP_VERSION = process.env.APP_VERSION && process.env.APP_VERSION !== 'dev'
+  ? process.env.APP_VERSION
+  : readPackageVersion();
 const MAX_BODY_BYTES = 8 * 1024 * 1024;
 
 // Alle Sammlungen, die synchronisiert werden. Jeder Eintrag trägt eine id,
@@ -34,6 +38,15 @@ const MIME = {
 };
 
 /* ---------- Datenhaltung ---------- */
+
+function readPackageVersion() {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
+    return `${pkg.version} (aus dem Quellcode)`;
+  } catch (err) {
+    return 'unbekannt';
+  }
+}
 
 function emptyStore() {
   const store = { revision: 0, updatedAt: 0 };
@@ -142,7 +155,15 @@ function readBody(req) {
 
 async function handleApi(req, res, url) {
   if (url.pathname === '/api/health') {
-    return sendJson(res, 200, { status: 'ok' });
+    return sendJson(res, 200, { status: 'ok', version: APP_VERSION });
+  }
+
+  if (url.pathname === '/api/version') {
+    return sendJson(res, 200, {
+      version: APP_VERSION,
+      node: process.version,
+      startedAt: startedAt.toISOString(),
+    });
   }
 
   if (url.pathname !== '/api/data') {
@@ -224,8 +245,10 @@ const server = http.createServer((req, res) => {
   serveStatic(req, res, url);
 });
 
+const startedAt = new Date();
+
 server.listen(PORT, () => {
-  console.log(`Wanderplaner läuft auf Port ${PORT}`);
+  console.log(`Wanderplaner ${APP_VERSION} läuft auf Port ${PORT}`);
   console.log(`  Dateien: ${PUBLIC_DIR}`);
   console.log(`  Daten:   ${DATA_FILE}`);
 });

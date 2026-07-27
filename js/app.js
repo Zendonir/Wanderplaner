@@ -14,6 +14,7 @@
     tracks: Tracks.load(),   // abgeschlossene Touren als Spur – persistent
     savedTours: Tours.load(), // benannte Planungen – persistent
     tourName: '',
+    version: null,
     tourSelection: [],  // Stempel-IDs, die in den Routenvorschlag sollen
     routing: loadRoutingSettings(), // Gewichtung der Wegetypen
     preset: localStorage.getItem('wanderplaner.preset') || 'wander',
@@ -151,6 +152,9 @@
     clusterLength: document.getElementById('cluster-length'),
     clustersBtn: document.getElementById('btn-clusters'),
     clusterList: document.getElementById('cluster-list'),
+    appVersion: document.getElementById('app-version'),
+    checkUpdate: document.getElementById('btn-check-update'),
+    updateNote: document.getElementById('update-note'),
   };
 
   /* ---------- Sammlungen: speichern, löschen, abgleichen ---------- */
@@ -1394,6 +1398,79 @@
     el.importHint.textContent = IMPORT_HINTS[el.importType.value] || '';
   }
 
+  /* ---------- Version und Updates ---------- */
+
+  const RELEASES_URL = 'https://api.github.com/repos/Zendonir/Wanderplaner/releases/latest';
+
+  /** Holt die laufende Version vom Server; ohne Server bleibt sie unbekannt. */
+  async function loadVersion() {
+    try {
+      const response = await Utils.fetchWithTimeout('api/version', {}, 5000);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      state.version = data.version;
+      el.appVersion.textContent = `Version ${data.version}`;
+    } catch (err) {
+      // Ohne Server (Datei direkt geöffnet) gibt es keine Versionsauskunft.
+      state.version = null;
+      el.appVersion.textContent = 'Version unbekannt (kein Server)';
+      el.checkUpdate.disabled = true;
+    }
+  }
+
+  /** Vergleicht zwei Versionsangaben nach dem Muster 2.3.0. */
+  function compareVersions(a, b) {
+    const parse = (v) => String(v).replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
+    const left = parse(a);
+    const right = parse(b);
+    for (let i = 0; i < Math.max(left.length, right.length); i++) {
+      const diff = (left[i] || 0) - (right[i] || 0);
+      if (diff !== 0) return diff;
+    }
+    return 0;
+  }
+
+  /**
+   * Fragt bei GitHub nach der neuesten Veröffentlichung. Bewusst nur auf
+   * Knopfdruck – die App soll nicht ungefragt nach außen funken.
+   */
+  async function checkForUpdate() {
+    el.checkUpdate.disabled = true;
+    el.updateNote.hidden = false;
+    el.updateNote.className = 'about-note';
+    el.updateNote.textContent = 'Sehe bei GitHub nach …';
+
+    try {
+      const response = await Utils.fetchWithTimeout(RELEASES_URL, {}, 10000);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      const latest = String(data.tag_name || '').replace(/^v/, '');
+
+      if (!latest) throw new Error('Keine Versionsangabe erhalten.');
+
+      // Eine aus dem Quellcode gelesene Version trägt einen Zusatz – für den
+      // Vergleich zählt nur die Zahl davor.
+      const running = String(state.version || '').split(' ')[0];
+      const diff = compareVersions(latest, running);
+
+      if (diff > 0) {
+        el.updateNote.className = 'about-note update';
+        el.updateNote.textContent =
+          `Version ${latest} ist verfügbar (installiert: ${running}). ` +
+          'Auf dem Server das Image neu ziehen und den Container neu starten.';
+      } else {
+        el.updateNote.className = 'about-note ok';
+        el.updateNote.textContent = `Aktuell – ${running} ist die neueste Version.`;
+      }
+    } catch (err) {
+      el.updateNote.className = 'about-note';
+      el.updateNote.textContent =
+        'GitHub ist gerade nicht erreichbar – die Prüfung braucht Internetzugang.';
+    } finally {
+      el.checkUpdate.disabled = false;
+    }
+  }
+
   /* ---------- Reiter ---------- */
 
   function setTab(name) {
@@ -2232,6 +2309,9 @@
     el.clusterLength.addEventListener('change', () => {
       if (state.clusters) findClusters();
     });
+
+    el.checkUpdate.addEventListener('click', checkForUpdate);
+    loadVersion();
 
     el.libraryToggle.addEventListener('click', toggleLibrary);
     setLibraryOpen(localStorage.getItem('wanderplaner.library') !== 'closed');

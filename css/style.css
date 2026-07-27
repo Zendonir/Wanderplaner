@@ -1364,6 +1364,47 @@ body {
 
 .nearby-row button:hover { background: var(--green-dark); }
 
+/* ---------- Fußzeile mit Version ---------- */
+
+.about {
+  margin-top: auto;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.about button {
+  margin-left: auto;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--panel);
+  font-size: 0.72rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.about button:hover:not(:disabled) { background: #eef1ec; }
+.about button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.about-note {
+  flex-basis: 100%;
+  font-size: 0.74rem;
+  line-height: 1.4;
+  padding: 0.35rem 0.5rem;
+  border-radius: 5px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.about-note.ok     { background: #e7f0e9; border-color: #c3dbc9; color: var(--green-dark); }
+.about-note.update { background: #fdf3dd; border-color: #e8d6a8; color: #8a6100; }
+
 /* ---------- Abgleich und Sicherung ---------- */
 
 .sync-section {

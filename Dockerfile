@@ -7,6 +7,14 @@
 # keine ausgehenden Verbindungen.
 FROM node:22-alpine
 
+# Wird vom Release-Workflow gesetzt; beim lokalen Bauen bleibt "dev".
+ARG APP_VERSION=dev
+
+LABEL org.opencontainers.image.title="Wanderplaner" \
+      org.opencontainers.image.description="Interaktive Planung von Wanderrouten" \
+      org.opencontainers.image.source="https://github.com/Zendonir/Wanderplaner" \
+      org.opencontainers.image.version="${APP_VERSION}"
+
 WORKDIR /app
 
 # Frontend
@@ -23,7 +31,8 @@ COPY server /app/server
 ENV NODE_ENV=production \
     PORT=8080 \
     PUBLIC_DIR=/app/public \
-    DATA_DIR=/data
+    DATA_DIR=/data \
+    APP_VERSION=${APP_VERSION}
 
 # Die Sammlung liegt im Volume, damit sie Updates des Containers übersteht.
 VOLUME ["/data"]

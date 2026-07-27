@@ -269,6 +269,37 @@ selbst braucht keine ausgehenden Verbindungen.
 Alle Dienste sind öffentliche Demo-Instanzen mit Fair-Use-Limits – für
 intensive Nutzung ggf. eigene Instanzen betreiben.
 
+## Welche Version läuft?
+
+Unten links in der Sammlung steht die laufende Version, daneben ein Knopf
+**„Auf Updates prüfen“** – der sieht bei GitHub nach, ob es eine neuere
+Veröffentlichung gibt. Die Abfrage passiert nur auf Knopfdruck, die App
+funkt nicht von sich aus nach außen.
+
+Ohne die Oberfläche geht es auch:
+
+```bash
+# Über die App selbst
+curl http://<truenas-ip>:8080/api/version
+
+# Direkt am Image (zeigt die eingebaute Version)
+docker inspect ghcr.io/zendonir/wanderplaner:latest \
+  --format '{{index .Config.Labels "org.opencontainers.image.version"}}'
+```
+
+Im Log steht sie beim Start ebenfalls: `Wanderplaner 2.4.0 läuft auf Port 8080`.
+
+**Aktualisieren:**
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+Auf TrueNAS: bei der App **Update** wählen bzw. das Image neu ziehen und den
+Container neu starten. Bei `latest` bekommst du dabei automatisch die neueste
+Version; wer bei einer festen Version bleiben will, trägt sie als Tag ein
+(z. B. `2.4.0`).
+
 ## Tests
 
 Die App wird mit einer eigenen Testsammlung abgesichert: reine Rechenlogik

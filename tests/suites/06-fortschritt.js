@@ -129,6 +129,39 @@ module.exports = {
       check.contains(await page.locator('#tour-name').inputValue(), 'Stempelrunde',
         'Ein Tourname wird vorgeschlagen');
 
+      /* ---- Versionsanzeige ---- */
+      const versionText = await page.textContent('#app-version');
+      check.contains(versionText, 'Version', 'Die laufende Version wird angezeigt');
+      check.ok(/\d+\.\d+\.\d+/.test(versionText),
+        'Die Anzeige nennt eine Versionsnummer', versionText);
+
+      const api = await page.evaluate(async () => {
+        const res = await fetch('api/version');
+        return res.ok ? await res.json() : null;
+      });
+      check.ok(api && api.version, 'Der Server meldet seine Version über /api/version');
+
+      // Update-Prüfung bei nicht erreichbarem GitHub: verständliche Meldung
+      // statt stiller Fehler.
+      await page.route('**/api.github.com/**', (route) => route.abort());
+      await page.click('#btn-check-update');
+      await page.waitForTimeout(1200);
+      check.ok(!(await page.locator('#update-note').isHidden()),
+        'Die Update-Prüfung meldet ein Ergebnis');
+      check.contains(await page.textContent('#update-note'), 'GitHub',
+        'Bei fehlendem Zugang wird das erklärt');
+
+      // Und mit Antwort: neuere Version wird als solche erkannt.
+      await page.unroute('**/api.github.com/**');
+      await page.route('**/api.github.com/**', (route) =>
+        route.fulfill({ json: { tag_name: 'v99.0.0' } }));
+      await page.click('#btn-check-update');
+      await page.waitForTimeout(1200);
+      check.contains(await page.textContent('#update-note'), '99.0.0',
+        'Eine neuere Version wird gemeldet');
+      check.contains(await page.locator('#update-note').getAttribute('class'), 'update',
+        'Der Hinweis wird hervorgehoben');
+
       check.equal(errors.length, 0, 'Keine Skriptfehler', errors.join(' | '));
     } finally {
       await browser.close();

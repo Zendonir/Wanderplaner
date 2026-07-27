@@ -427,6 +427,29 @@
               ⬆ Jetzt aktualisieren
             </button>
             <p class="about-note" id="update-note" hidden></p>
+
+            <!-- Erklärt, warum „Jetzt aktualisieren“ fehlt, statt den Knopf
+                 wortlos wegzulassen. -->
+            <details class="update-setup" id="update-setup" hidden>
+              <summary>Aktualisieren aus der Oberfläche einschalten</summary>
+              <p class="hint" id="update-reason"></p>
+              <p class="hint">Dafür braucht der Container Zugriff auf den
+                Docker-Socket. In der YAML der App ergänzen:</p>
+              <pre class="setup-code">    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      ALLOW_SELF_UPDATE: "1"
+      CONTAINER_NAME: wanderplaner</pre>
+              <p class="hint">Auf TrueNAS als <em>Custom App</em>: unter
+                <em>Storage</em> einen Host-Pfad <code>/var/run/docker.sock</code>
+                auf <code>/var/run/docker.sock</code> einhängen und unter
+                <em>Environment Variables</em> <code>ALLOW_SELF_UPDATE=1</code>
+                sowie <code>CONTAINER_NAME</code> mit dem Namen der App setzen.</p>
+              <p class="hint warn-note">Zu bedenken: Wer den Docker-Socket
+                erreicht, kann auf dem Server praktisch alles tun. Im Heimnetz
+                vertretbar – bei einer aus dem Internet erreichbaren Instanz
+                nicht.</p>
+            </details>
           </div>
         </section>
       </div>

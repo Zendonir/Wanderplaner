@@ -1655,6 +1655,52 @@ body {
   user-select: all;
 }
 
+/* ---------- Aktualisierung einschalten ---------- */
+
+.update-setup {
+  flex-basis: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.45rem 0.6rem;
+  background: var(--bg);
+}
+
+.update-setup > summary {
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.update-setup .hint {
+  margin-top: 0.4rem;
+}
+
+.setup-code {
+  margin: 0.4rem 0;
+  padding: 0.5rem 0.6rem;
+  border-radius: 5px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  white-space: pre;
+  overflow-x: auto;
+  user-select: all;
+}
+
+.update-setup code {
+  font-size: 0.72rem;
+  background: var(--panel);
+  padding: 0 0.2rem;
+  border-radius: 3px;
+}
+
+.update-setup .warn-note {
+  color: #8a6100;
+}
+
 /* ---------- Abgleich und Sicherung ---------- */
 
 .sync-section {

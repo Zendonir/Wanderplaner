@@ -290,8 +290,9 @@ dem Homescreen-Symbol am Handy – die App einmal ganz schließen.
 
 In den **Einstellungen → Über** kann ein Knopf **„⬆ Jetzt aktualisieren"**
 erscheinen, der genau das erledigt: neues Image ziehen, Container neu
-erstellen, Seite neu laden. Er ist **standardmäßig aus** und taucht nur auf,
-wenn beides zutrifft:
+erstellen, Seite neu laden. Er ist **standardmäßig aus**; solange er fehlt,
+steht an seiner Stelle ein aufklappbarer Hinweis mit dem Grund und dieser
+Anleitung. Freigeschaltet wird er, wenn beides zutrifft:
 
 ```yaml
     volumes:
@@ -308,6 +309,15 @@ hängt diese Macht an ihrer Erreichbarkeit. Für ein Heimnetz hinter der
 Firewall ist das vertretbar, für eine ins Internet veröffentlichte Instanz
 nicht. Ohne diese beiden Zeilen bleibt der Knopf unsichtbar und der Endpunkt
 antwortet abschlägig.
+
+**Auf TrueNAS als *Custom App*:** unter **Storage** einen Host-Pfad
+`/var/run/docker.sock` auf `/var/run/docker.sock` einhängen, unter
+**Environment Variables** `ALLOW_SELF_UPDATE=1` und `CONTAINER_NAME` mit dem
+Namen der App setzen, dann speichern. Danach steht der Knopf in den
+Einstellungen. Zu beachten: Der Container wird dabei am App-Verwalter von
+TrueNAS vorbei ersetzt – die Oberfläche zeigt danach unter Umständen weiter
+die alte Version an, bis die App dort einmal bearbeitet und gespeichert wird.
+Wer das nicht will, bleibt bei **Apps → Installed → Update**.
 
 **Wie es abläuft:** Ein Container kann sich nicht selbst ersetzen – beim
 Austausch stirbt genau der Prozess, der die Arbeit machen müsste. Der

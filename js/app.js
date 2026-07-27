@@ -161,6 +161,8 @@
     appVersion: document.getElementById('app-version'),
     checkUpdate: document.getElementById('btn-check-update'),
     runUpdate: document.getElementById('btn-run-update'),
+    updateSetup: document.getElementById('update-setup'),
+    updateReason: document.getElementById('update-reason'),
     updateNote: document.getElementById('update-note'),
     routeStyle: document.getElementById('route-style'),
     settings: document.getElementById('settings'),
@@ -1829,10 +1831,15 @@
       if (!response.ok) return;
       const data = await response.json();
       el.runUpdate.hidden = !data.available;
+      // Ist es nicht freigeschaltet, den Knopf nicht wortlos weglassen,
+      // sondern sagen, was fehlt – sonst weiß niemand, dass es ihn gibt.
+      el.updateSetup.hidden = Boolean(data.available);
       if (data.available) {
         el.runUpdate.title =
           `Zieht das neue Image und erstellt „${data.container}“ neu. ` +
           'Die App ist dabei kurz nicht erreichbar.';
+      } else if (data.reason) {
+        el.updateReason.textContent = data.reason;
       }
     } catch (err) {
       // Ohne Server gibt es auch nichts zu aktualisieren.

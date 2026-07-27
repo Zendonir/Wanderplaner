@@ -167,6 +167,22 @@ module.exports = {
       check.contains(await page.locator('#update-note').getAttribute('class'), 'update',
         'Der Hinweis wird hervorgehoben');
 
+      /* ---- Aktualisieren aus der Oberfläche ---- */
+      // Ohne Freigabe fehlt der Knopf – dann muss wenigstens dastehen,
+      // dass es ihn gibt und wie man ihn bekommt.
+      check.ok(await page.locator('#btn-run-update').isHidden(),
+        'Ohne Freigabe erscheint kein Aktualisieren-Knopf');
+      check.ok(await page.locator('#update-setup').isVisible(),
+        'Stattdessen steht dort, wie man die Aktualisierung einschaltet');
+      check.contains(await page.textContent('#update-reason'), 'ALLOW_SELF_UPDATE',
+        'Der Grund nennt den fehlenden Schalter');
+      await page.click('#update-setup summary');
+      await page.waitForTimeout(200);
+      const setup = await page.textContent('#update-setup');
+      check.contains(setup, 'docker.sock', 'Die Anleitung nennt den Docker-Socket');
+      check.contains(setup, 'CONTAINER_NAME', 'Und den Namen des Containers');
+      check.contains(setup, 'Heimnetz', 'Die Abwägung wird dazugesagt');
+
       check.equal(errors.length, 0, 'Keine Skriptfehler', errors.join(' | '));
     } finally {
       await browser.close();

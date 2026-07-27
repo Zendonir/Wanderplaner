@@ -21,20 +21,63 @@ const MapView = (function () {
   let nearbyControl = null;
   let lastStamps = [];
   let lastSelection = [];
+  let routeCoords = null;
+  let routePoints = [];
+  let pavedLines = [];
+  let placeMarkers = [];
+  let suppressNextClick = false;
   let samples = null; // Höhen-Stützpunkte für die Hover-Zuordnung
+
+  const OSM_ATTRIB =
+    'Kartendaten: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>-Mitwirkende';
+
+  /** Auswählbare Kartenebenen. */
+  const BASE_LAYERS = {
+    'OpenTopoMap': () => L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+      maxZoom: 17,
+      attribution: `${OSM_ATTRIB}, SRTM | Darstellung: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)`,
+    }),
+    // Zeigt Wegmarkierungen und Wegweiser – beim Planen entlang markierter
+    // Wanderwege deutlich hilfreicher als eine reine Topokarte.
+    'Wanderreitkarte': () => L.tileLayer('https://topo.wanderreitkarte.de/topo/{z}/{x}/{y}.png', {
+      maxZoom: 18,
+      attribution: `${OSM_ATTRIB} | Darstellung: <a href="https://www.wanderreitkarte.de">Wanderreitkarte</a>`,
+    }),
+    'OpenStreetMap': () => L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: OSM_ATTRIB,
+    }),
+    'Luftbild': () => L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      { maxZoom: 18, attribution: 'Luftbild: &copy; Esri, Maxar, Earthstar Geographics' }
+    ),
+  };
 
   function init(callbacks) {
     cbs = callbacks;
     map = L.map('map').setView([51.163, 10.447], 6);
 
-    L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-      maxZoom: 17,
-      attribution:
-        'Kartendaten: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>-Mitwirkende, SRTM | ' +
-        'Kartendarstellung: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)',
-    }).addTo(map);
+    const saved = localStorage.getItem('wanderplaner.baselayer');
+    const layers = {};
+    Object.entries(BASE_LAYERS).forEach(([name, create]) => { layers[name] = create(); });
 
-    map.on('click', (e) => cbs.onMapClick(e.latlng));
+    const initial = layers[saved] ? saved : 'OpenTopoMap';
+    layers[initial].addTo(map);
+    L.control.layers(layers, null, { position: 'topright' }).addTo(map);
+    map.on('baselayerchange', (e) => {
+      localStorage.setItem('wanderplaner.baselayer', e.name);
+    });
+
+    map.on('click', (e) => {
+      // Nach dem Ziehen der Route feuert Leaflet zusätzlich ein click –
+      // ohne diese Sperre entstünde neben dem Zwischenpunkt noch ein
+      // zweiter Punkt am Ende der Route.
+      if (suppressNextClick) {
+        suppressNextClick = false;
+        return;
+      }
+      cbs.onMapClick(e.latlng);
+    });
   }
 
   /* ---------- Routenpunkte ---------- */
@@ -504,9 +547,85 @@ const MapView = (function () {
 
   /* ---------- Route ---------- */
 
-  function renderRoute(coordinates) {
+  /**
+   * Bestimmt, zwischen welchen Routenpunkten eine Stelle der Geometrie liegt.
+   * Dafür wird jeder Routenpunkt seinem nächstgelegenen Geometriepunkt
+   * zugeordnet; diese Marken teilen die Linie in Abschnitte.
+   * @returns {number} Position, an der ein neuer Punkt einzufügen ist
+   */
+  function insertIndexFor(latlng) {
+    if (!routeCoords || routePoints.length < 2) return routePoints.length;
+
+    // Index auf der Geometrie, der der gezogenen Stelle am nächsten liegt.
+    let target = 0;
+    let bestDist = Infinity;
+    const cosLat = Math.cos((latlng.lat * Math.PI) / 180);
+    for (let i = 0; i < routeCoords.length; i++) {
+      const dLat = routeCoords[i][1] - latlng.lat;
+      const dLng = (routeCoords[i][0] - latlng.lng) * cosLat;
+      const d = dLat * dLat + dLng * dLng;
+      if (d < bestDist) { bestDist = d; target = i; }
+    }
+
+    // Geometrie-Index je Routenpunkt.
+    const marks = routePoints.map((p) => {
+      let best = 0;
+      let dist = Infinity;
+      for (let i = 0; i < routeCoords.length; i++) {
+        const dLat = routeCoords[i][1] - p.lat;
+        const dLng = (routeCoords[i][0] - p.lng) * cosLat;
+        const d = dLat * dLat + dLng * dLng;
+        if (d < dist) { dist = d; best = i; }
+      }
+      return best;
+    });
+
+    for (let k = 0; k < marks.length - 1; k++) {
+      if (target >= marks[k] && target <= marks[k + 1]) return k + 1;
+    }
+    return routePoints.length;
+  }
+
+  /** Ziehen der Route: setzt an der gezogenen Stelle einen Zwischenpunkt. */
+  function enableRouteDragging() {
+    hitLine.on('mousedown', (event) => {
+      // Nur linke Maustaste; rechte Taste bleibt fürs Kontextmenü.
+      if (event.originalEvent && event.originalEvent.button !== 0) return;
+      L.DomEvent.stop(event);
+
+      const index = insertIndexFor(event.latlng);
+      map.dragging.disable();
+
+      const ghost = L.marker(event.latlng, {
+        icon: L.divIcon({
+          className: '',
+          html: '<div class="drag-ghost"></div>',
+          iconSize: [20, 20],
+          iconAnchor: [10, 10],
+        }),
+        interactive: false,
+        zIndexOffset: 900,
+      }).addTo(map);
+
+      const onMove = (e) => ghost.setLatLng(e.latlng);
+      const onUp = (e) => {
+        map.off('mousemove', onMove);
+        map.off('mouseup', onUp);
+        map.dragging.enable();
+        map.removeLayer(ghost);
+        suppressNextClick = true;
+        cbs.onRouteDrag(e.latlng, index);
+      };
+      map.on('mousemove', onMove);
+      map.on('mouseup', onUp);
+    });
+  }
+
+  function renderRoute(coordinates, points) {
     if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
     if (hitLine) { map.removeLayer(hitLine); hitLine = null; }
+    routeCoords = coordinates;
+    routePoints = points || [];
     if (!coordinates || coordinates.length < 2) return;
 
     const latlngs = coordinates.map((c) => [c[1], c[0]]);
@@ -516,13 +635,17 @@ const MapView = (function () {
       opacity: 0.85,
     }).addTo(map);
 
-    // Unsichtbare, breite Linie: fängt Hover-Events großzügig ab.
-    hitLine = L.polyline(latlngs, { weight: 18, opacity: 0 }).addTo(map);
-    // Klicks auf die Route sollen trotzdem Punkte setzen können.
-    hitLine.on('click', (e) => {
-      L.DomEvent.stop(e);
-      cbs.onMapClick(e.latlng);
-    });
+    // Breite, praktisch unsichtbare Linie: fängt Hover und Ziehen großzügig
+    // ab. Bei opacity 0 wird der Pfad nicht gezeichnet und bekommt dann auch
+    // keine Mausereignisse – deshalb ein winziger Wert statt echter Null.
+    hitLine = L.polyline(latlngs, {
+      weight: 20,
+      opacity: 0.01,
+      interactive: true,
+      className: 'route-draggable',
+    }).addTo(map);
+    enableRouteDragging();
+
     hitLine.on('mousemove', (e) => {
       const i = nearestSampleIndex(e.latlng);
       if (i >= 0) {
@@ -533,6 +656,55 @@ const MapView = (function () {
     hitLine.on('mouseout', () => {
       clearHoverPoint();
       cbs.onRouteHoverEnd();
+    });
+  }
+
+  /** Hebt die befestigten bzw. Straßenabschnitte der Route hervor. */
+  function renderPavedSections(sections) {
+    pavedLines.forEach((l) => map.removeLayer(l));
+    pavedLines = [];
+    if (!sections) return;
+
+    sections.forEach((section) => {
+      const line = L.polyline(section.map((c) => [c[1], c[0]]), {
+        color: '#2b2b2b',
+        weight: 6,
+        opacity: 0.55,
+        dashArray: '2 7',
+        interactive: false,
+      }).addTo(map);
+      pavedLines.push(line);
+    });
+  }
+
+  /* ---------- Orte aus der Umgebungssuche ---------- */
+
+  function renderPlaces(places) {
+    placeMarkers.forEach((m) => map.removeLayer(m));
+    placeMarkers = [];
+    if (!places) return;
+
+    places.forEach((place) => {
+      const category = Overpass.CATEGORIES[place.category];
+      const marker = L.marker([place.lat, place.lng], {
+        icon: L.divIcon({
+          className: '',
+          html: `<div class="place-marker" style="background:${category.color}">${category.icon}</div>`,
+          iconSize: [24, 24],
+          iconAnchor: [12, 12],
+          popupAnchor: [0, -12],
+        }),
+      }).addTo(map);
+
+      const details = [place.kind];
+      if (place.opening) details.push(`Öffnungszeiten: ${place.opening}`);
+      if (place.seasonal) details.push('saisonal');
+      marker.bindPopup(
+        `<strong>${Utils.escapeHtml(place.name)}</strong><br>` +
+        `<span class="place-kind">${Utils.escapeHtml(details.join(' · '))}</span>`
+      );
+      marker.bindTooltip(place.name, { direction: 'top', offset: [0, -12] });
+      placeMarkers.push(marker);
     });
   }
 
@@ -595,6 +767,8 @@ const MapView = (function () {
     renderPoints,
     renderPois,
     renderRoute,
+    renderPavedSections,
+    renderPlaces,
     renderStamps,
     renderParking,
     renderTracks,

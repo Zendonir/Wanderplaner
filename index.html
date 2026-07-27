@@ -133,8 +133,33 @@
 
       <section class="actions">
         <button id="btn-undo" disabled title="Letzte Aktion rückgängig machen">↩ Rückgängig</button>
-        <button id="btn-clear" disabled title="Alle Routenpunkte und POIs entfernen">🗑 Route leeren</button>
+        <button id="btn-reverse" disabled title="Richtung umkehren – tauscht Anstieg und Abstieg">⇄ Umkehren</button>
+        <button id="btn-clear" disabled title="Alle Routenpunkte und POIs entfernen">🗑 Leeren</button>
       </section>
+
+      <details class="tool-panel" id="generator-panel">
+        <summary>🔄 Rundtour vorschlagen</summary>
+        <p class="hint">Erzeugt ab dem ersten Routenpunkt eine Schleife mit
+          ungefähr der gewünschten Länge.</p>
+        <div class="generator-row">
+          <label class="field-inline">
+            <span>Länge</span>
+            <input type="number" id="gen-length" min="2" max="60" step="1" value="12">
+            <span>km</span>
+          </label>
+          <label class="field-inline">
+            <span>Richtung</span>
+            <select id="gen-bearing">
+              <option value="0">Nord</option>
+              <option value="90">Ost</option>
+              <option value="180">Süd</option>
+              <option value="270">West</option>
+            </select>
+          </label>
+        </div>
+        <button id="btn-generate" class="wide-btn" disabled>Rundtour erzeugen</button>
+        <p class="hint" id="generator-note"></p>
+      </details>
 
       <details class="routing-settings" id="routing-settings">
         <summary>⚙ Routing-Einstellungen <span id="preset-badge" class="preset-badge"></span></summary>
@@ -213,6 +238,43 @@
         <div class="engine-note" id="engine-note"></div>
       </details>
 
+      <section class="list-section" id="section-alternatives" hidden>
+        <h2>Varianten</h2>
+        <ul id="alternative-list" class="alternative-list"></ul>
+      </section>
+
+      <section class="list-section" id="section-waytypes" hidden>
+        <h2>Wegebeschaffenheit</h2>
+        <div id="waytype-bars"></div>
+        <label class="checkbox" title="Zeigt Asphalt- und Straßenabschnitte gestrichelt auf der Karte.">
+          <input type="checkbox" id="opt-show-paved">
+          <span>Asphalt auf der Karte zeigen</span>
+        </label>
+      </section>
+
+      <section class="list-section" id="section-warnings" hidden>
+        <h2>Hinweise zur Strecke</h2>
+        <ul id="warning-list" class="warning-list"></ul>
+      </section>
+
+      <section class="list-section" id="section-places">
+        <h2>Unterwegs</h2>
+        <div class="place-filters" id="place-filters"></div>
+        <div class="place-tools">
+          <label class="field-inline">
+            <span>Umkreis</span>
+            <select id="place-radius">
+              <option value="250">250 m</option>
+              <option value="500" selected>500 m</option>
+              <option value="1000">1 km</option>
+            </select>
+          </label>
+          <button id="btn-places" disabled>Suchen</button>
+        </div>
+        <p class="hint" id="place-note">Route berechnen, dann Kategorien wählen und suchen.</p>
+        <ul id="place-list" class="place-list"></ul>
+      </section>
+
       <section class="list-section" id="section-daylight">
         <h2>Tageslicht</h2>
         <div class="daylight-row">
@@ -223,6 +285,7 @@
           <button id="btn-now" title="Auf jetzt setzen">jetzt</button>
         </div>
         <p class="daylight-note" id="daylight-note">Route zeichnen, um die Gehzeit zu prüfen.</p>
+        <p class="weather-note" id="weather-note" hidden></p>
       </section>
 
       <section class="list-section" id="section-along" hidden>
@@ -281,6 +344,10 @@
   <script src="js/daylight.js"></script>
   <script src="js/nearby.js"></script>
   <script src="js/geo.js"></script>
+  <script src="js/waytypes.js"></script>
+  <script src="js/overpass.js"></script>
+  <script src="js/roundtrip.js"></script>
+  <script src="js/weather.js"></script>
   <script src="js/places.js"></script>
   <script src="js/tracks.js"></script>
   <script src="js/tours.js"></script>

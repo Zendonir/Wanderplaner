@@ -15,6 +15,33 @@ denselben Datenstand sehen.
   Treppen und markierte Wanderwege werden bevorzugt, Straßen nur genutzt, wenn
   sie sinnvoll verbinden. Die Gewichtung ist über Voreinstellungen und neun
   Regler steuerbar (siehe unten).
+- **Route per Ziehen bearbeiten** – die berechnete Linie an einer beliebigen
+  Stelle greifen und ziehen: dort entsteht ein Zwischenpunkt an der richtigen
+  Position in der Reihenfolge, die Route rechnet sofort neu.
+- **Wegebeschaffenheit** – nach jeder Berechnung wird aufgeschlüsselt, woraus
+  die Route besteht: Anteile von markierten Wanderwegen, Pfaden, Forstwegen
+  und Straßen sowie die Oberflächen. Damit lässt sich prüfen, ob die
+  eingestellte Gewichtung tatsächlich greift. Asphalt- und Straßenabschnitte
+  lassen sich auf der Karte hervorheben.
+- **Hinweise zur Strecke** – Abschnitte mit anspruchsvollem Gelände
+  (`sac_scale`), kaum erkennbaren Pfaden (`trail_visibility`), Straßen ohne
+  Gehweg oder Furten werden mit Länge aufgelistet und auf Klick angesteuert.
+- **Varianten** – BRouter bietet zu vielen Strecken Alternativen an; sie
+  werden mit Länge und Höhenmetern zur Auswahl gestellt.
+- **Unterwegs** – Einkehr (auch Berghütten), Trinkwasser, Toiletten,
+  Schutzhütten und Haltestellen entlang der Route, gefunden über
+  OpenStreetMap und in Gehrichtung sortiert.
+- **Rundtour vorschlagen** – Wunschlänge und Richtung angeben, und die App
+  erzeugt eine Schleife ab dem Startpunkt und regelt sie in wenigen Schritten
+  auf die Ziellänge ein.
+- **Wetter** – Vorhersage für den Startpunkt zur geplanten Zeit
+  (Open-Meteo), zusammengefasst auf das ungünstigste Wetter der Tour.
+- **Route umkehren** – ein Knopf dreht die Richtung; bei Rundkursen
+  entscheidet das, ob der steile Teil Auf- oder Abstieg wird.
+- **Zeitmarken** – im Höhenprofil zeigt der Tooltip neben der Höhe auch die
+  Gehzeit bis dorthin und die voraussichtliche Uhrzeit.
+- **Kartenauswahl** – OpenTopoMap, Wanderreitkarte (mit Wegmarkierungen),
+  OpenStreetMap und Luftbild; die Wahl wird gemerkt.
 - **POIs** – eigener Modus zum Setzen von Markierungen mit Name und Notiz,
   verschiebbar und löschbar.
 - **Live-Statistiken** – Streckenlänge (echte Wegstrecke, keine Luftlinie),
@@ -225,6 +252,9 @@ selbst braucht keine ausgehenden Verbindungen.
 | [Open-Elevation](https://open-elevation.com) | Höhendaten, wenn der Router keine liefert |
 | [Open-Topo-Data](https://www.opentopodata.org) | Höhendaten (Fallback) |
 | [Nominatim](https://nominatim.org) | Ortssuche |
+| [Overpass](https://overpass-api.de) | Einkehr, Wasser, Haltestellen entlang der Route |
+| [Open-Meteo](https://open-meteo.com) | Wettervorhersage |
+| [Wanderreitkarte](https://www.wanderreitkarte.de) | Karte mit Wegmarkierungen |
 
 Alle Dienste sind öffentliche Demo-Instanzen mit Fair-Use-Limits – für
 intensive Nutzung ggf. eigene Instanzen betreiben.
@@ -248,6 +278,10 @@ js/sync.js          – Abgleich mit dem Server, Sicherung als Datei
 js/daylight.js      – Sonnenauf-/untergang (NOAA), Tageslicht-Prüfung
 js/nearby.js        – Punkte entlang einer Route bzw. um eine Position
 js/geo.js           – eigener Standort über die Geolocation-Schnittstelle
+js/waytypes.js      – Auswertung der Wegabschnitte, Warnungen, Asphaltstrecken
+js/overpass.js      – Suche nach Einkehr, Wasser und Haltestellen (OpenStreetMap)
+js/roundtrip.js     – Rundtour nach Wunschlänge erzeugen
+js/weather.js       – Wettervorhersage über Open-Meteo
 sw.js               – Service Worker für den Offline-Betrieb
 manifest.webmanifest– Angaben zur Installation als App
 vendor/             – Leaflet und Chart.js (lokal, damit offline nutzbar)

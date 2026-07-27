@@ -18,6 +18,11 @@
     routing: loadRoutingSettings(), // Gewichtung der Wegetypen
     preset: localStorage.getItem('wanderplaner.preset') || 'wander',
     geometry: null,     // [[lng, lat], ...] der berechneten Route
+    segments: null,     // Wegabschnitte mit OSM-Tags (nur BRouter)
+    alternatives: [],   // von BRouter angebotene Varianten
+    activeAlternative: 0,
+    places: [],         // Fundstellen der Umgebungssuche
+    placeCategories: loadPlaceCategories(),
     distance: 0,        // Meter
     samples: null,      // [{lat, lng, dist, ele}] Höhen-Stützpunkte
     ascent: null,
@@ -44,6 +49,16 @@
       console.warn('Routing-Einstellungen konnten nicht geladen werden:', err);
     }
     return Profiles.defaultSettings();
+  }
+
+  function loadPlaceCategories() {
+    try {
+      const raw = localStorage.getItem('wanderplaner.places');
+      if (raw) return JSON.parse(raw);
+    } catch (err) {
+      console.warn('Kategorien konnten nicht geladen werden:', err);
+    }
+    return ['food', 'water'];
   }
 
   function saveRoutingSettings() {
@@ -111,6 +126,24 @@
     alongCount: document.getElementById('along-count'),
     alongList: document.getElementById('along-list'),
     locate: document.getElementById('btn-locate'),
+    reverse: document.getElementById('btn-reverse'),
+    genLength: document.getElementById('gen-length'),
+    genBearing: document.getElementById('gen-bearing'),
+    generate: document.getElementById('btn-generate'),
+    generatorNote: document.getElementById('generator-note'),
+    altSection: document.getElementById('section-alternatives'),
+    altList: document.getElementById('alternative-list'),
+    waytypeSection: document.getElementById('section-waytypes'),
+    waytypeBars: document.getElementById('waytype-bars'),
+    showPaved: document.getElementById('opt-show-paved'),
+    warningSection: document.getElementById('section-warnings'),
+    warningList: document.getElementById('warning-list'),
+    placeFilters: document.getElementById('place-filters'),
+    placeRadius: document.getElementById('place-radius'),
+    placesBtn: document.getElementById('btn-places'),
+    placeNote: document.getElementById('place-note'),
+    placeList: document.getElementById('place-list'),
+    weatherNote: document.getElementById('weather-note'),
   };
 
   /* ---------- Sammlungen: speichern, löschen, abgleichen ---------- */
@@ -293,12 +326,19 @@
 
     if (state.points.length < 2) {
       state.geometry = null;
+      state.segments = null;
       state.distance = 0;
       state.samples = null;
       state.ascent = null;
       state.descent = null;
-      MapView.renderRoute(null);
+      state.alternatives = [];
+      state.places = [];
+      MapView.renderRoute(null, state.points);
+      MapView.renderPlaces(null);
       MapView.setSamples(null);
+      el.altSection.hidden = true;
+      updateWayTypes();
+      updateWarnings();
       updateChart();
       updateStats();
       updateButtons();
@@ -315,22 +355,18 @@
       const route = await Routing.fetchRoute(state.points, state.routing);
       if (id !== requestId) return; // inzwischen gab es eine neuere Änderung
 
-      state.geometry = route.coordinates;
-      state.distance = route.distance;
-      MapView.renderRoute(state.geometry);
-      updateStats();
-      updateButtons();
+      state.activeAlternative = 0;
+      applyRoute(route);
       updateEngineNote(route.engine);
 
       if (route.warning) showStatus('warn', route.warning, 10000);
       else hideStatus();
 
-      if (route.elevations) {
-        // BRouter liefert die Höhen bereits mit – keine Extra-Abfrage nötig.
-        useRouteElevations(route.elevations);
-      } else {
-        await loadElevation(id);
-      }
+      await loadElevationAndFinish(id, route);
+
+      // Varianten im Hintergrund nachladen; sie sind ein Angebot, kein
+      // Grund, die Hauptroute zu verzögern.
+      loadAlternatives();
     } catch (err) {
       if (id !== requestId) return;
       showStatus('error', `${err.message} Die Route wurde nicht aktualisiert.`);
@@ -346,6 +382,28 @@
     MapView.setSamples(samples);
     updateChart();
     updateStats();
+  }
+
+  /** Übernimmt eine berechnete Route in den Zustand und zeichnet sie. */
+  function applyRoute(route) {
+    state.geometry = route.coordinates;
+    state.segments = route.segments || null;
+    state.distance = route.distance;
+    MapView.renderRoute(state.geometry, state.points);
+    updateWayTypes();
+    updateWarnings();
+    updateStats();
+    updateButtons();
+  }
+
+  /** Höhen übernehmen (vom Router oder per Dienst) und Anzeige auffrischen. */
+  async function loadElevationAndFinish(id, route) {
+    if (route.elevations) {
+      // BRouter liefert die Höhen bereits mit – keine Extra-Abfrage nötig.
+      useRouteElevations(route.elevations);
+    } else {
+      await loadElevation(id);
+    }
   }
 
   async function loadElevation(id) {
@@ -384,10 +442,14 @@
       : '–';
     updateDaylight();
     updateAlongRoute();
+    scheduleWeather();
   }
 
   function updateButtons() {
     el.undo.disabled = state.undoStack.length === 0;
+    el.reverse.disabled = state.points.length < 2;
+    el.generate.disabled = state.points.length === 0;
+    el.placesBtn.disabled = !state.geometry || state.placeCategories.length === 0;
     el.clear.disabled = state.points.length === 0 && state.pois.length === 0;
     el.export.disabled = !state.geometry;
   }
@@ -440,7 +502,14 @@
             displayColors: false,
             callbacks: {
               title: (items) => `${items[0].parsed.x.toFixed(2)} km`,
-              label: (item) => `${Math.round(item.parsed.y)} m`,
+              label: (item) => {
+                const lines = [`${Math.round(item.parsed.y)} m`];
+                // Voraussichtliche Gehzeit bis zu dieser Stelle – hilft bei
+                // der Pausen- und Umkehrplanung.
+                const reached = timeAt(item.dataIndex);
+                if (reached) lines.push(`nach ${reached}`);
+                return lines;
+              },
             },
           },
         },
@@ -460,6 +529,35 @@
     el.chartEmpty.textContent = state.geometry && !hasData
       ? 'Höhenprofil nicht verfügbar'
       : 'Noch keine Route berechnet';
+  }
+
+  /**
+   * Geschätzte Gehzeit bis zu einem Stützpunkt, mit denselben Annahmen wie
+   * die Gesamtzeit (DIN 33466) – dadurch bleiben Teil- und Gesamtzeit
+   * zueinander stimmig.
+   */
+  function timeAt(index) {
+    const samples = state.samples;
+    if (!samples || index <= 0 || index >= samples.length) return null;
+
+    let ascent = 0;
+    let descent = 0;
+    if (samples[0].ele != null) {
+      for (let i = 1; i <= index; i++) {
+        const diff = samples[i].ele - samples[i - 1].ele;
+        if (diff > 0) ascent += diff;
+        else descent -= diff;
+      }
+    }
+    const hours = Utils.estimateWalkTime(
+      samples[index].dist,
+      samples[0].ele != null ? ascent : null,
+      samples[0].ele != null ? descent : null
+    );
+    const start = plannedStart();
+    const arrival = new Date(start.getTime() + hours * 3600000);
+    return `${Utils.formatDuration(hours)} · ${arrival.toLocaleTimeString('de-DE',
+      { hour: '2-digit', minute: '2-digit' })} Uhr`;
   }
 
   function highlightChartIndex(index) {
@@ -1138,6 +1236,26 @@
     renderAll();
   }
 
+  /** Dreht die Reihenfolge der Routenpunkte um. */
+  function reverseRoute() {
+    if (state.points.length < 2) return;
+    pushUndo();
+    state.points.reverse();
+    renderAll();
+    scheduleRecalc();
+    showStatus('info', 'Richtung umgekehrt – Anstieg und Abstieg tauschen die Rollen.', 5000);
+  }
+
+  /** Fügt beim Ziehen der Route einen Zwischenpunkt an der passenden Stelle ein. */
+  function insertPointAt(latlng, index) {
+    pushUndo();
+    state.points.splice(index, 0, {
+      id: Utils.uid(), lat: latlng.lat, lng: latlng.lng,
+    });
+    renderAll();
+    scheduleRecalc();
+  }
+
   function clearAll() {
     if (state.points.length === 0 && state.pois.length === 0) return;
     pushUndo();
@@ -1262,6 +1380,343 @@
 
   function updateImportHint() {
     el.importHint.textContent = IMPORT_HINTS[el.importType.value] || '';
+  }
+
+  /* ---------- Wegebeschaffenheit und Hinweise ---------- */
+
+  function updateWayTypes() {
+    const analysis = state.segments ? WayTypes.analyse(state.segments) : null;
+
+    if (!analysis) {
+      el.waytypeSection.hidden = true;
+      MapView.renderPavedSections(null);
+      return;
+    }
+    el.waytypeSection.hidden = false;
+    el.waytypeBars.innerHTML = '';
+
+    const addGroup = (title, entries, footnote) => {
+      if (entries.length === 0) return;
+
+      const heading = document.createElement('p');
+      heading.className = 'waytype-heading';
+      heading.textContent = title;
+      el.waytypeBars.appendChild(heading);
+
+      // Ein Balken, in dem die Anteile nebeneinander liegen.
+      const bar = document.createElement('div');
+      bar.className = 'waytype-bar';
+      entries.forEach((entry) => {
+        const part = document.createElement('span');
+        part.style.width = `${entry.share * 100}%`;
+        part.style.background = entry.color;
+        part.title = `${entry.label}: ${Math.round(entry.share * 100)} % ` +
+          `(${Utils.formatDistance(entry.length)})`;
+        bar.appendChild(part);
+      });
+      el.waytypeBars.appendChild(bar);
+
+      const legend = document.createElement('ul');
+      legend.className = 'waytype-legend';
+      entries.forEach((entry) => {
+        const li = document.createElement('li');
+        const dot = document.createElement('span');
+        dot.className = 'waytype-dot';
+        dot.style.background = entry.color;
+        const text = document.createElement('span');
+        text.textContent =
+          `${entry.label} · ${Math.round(entry.share * 100)} % (${Utils.formatDistance(entry.length)})`;
+        li.append(dot, text);
+        legend.appendChild(li);
+      });
+      el.waytypeBars.appendChild(legend);
+
+      if (footnote) {
+        const note = document.createElement('p');
+        note.className = 'hint';
+        note.textContent = footnote;
+        el.waytypeBars.appendChild(note);
+      }
+    };
+
+    addGroup('Wegarten', analysis.types);
+    addGroup(
+      'Oberfläche',
+      analysis.surfaces,
+      analysis.unknownSurface > analysis.total * 0.05
+        ? `Für ${Utils.formatDistance(analysis.unknownSurface)} ist in OpenStreetMap ` +
+          'keine Oberfläche hinterlegt.'
+        : null
+    );
+
+    updatePavedOverlay();
+  }
+
+  function updatePavedOverlay() {
+    const show = el.showPaved.checked && state.segments;
+    MapView.renderPavedSections(show ? WayTypes.pavedSections(state.segments) : null);
+  }
+
+  function updateWarnings() {
+    const warnings = state.segments ? WayTypes.warnings(state.segments) : [];
+
+    if (warnings.length === 0) {
+      el.warningSection.hidden = true;
+      return;
+    }
+    el.warningSection.hidden = false;
+    el.warningList.innerHTML = '';
+
+    warnings.forEach((warning) => {
+      const li = document.createElement('li');
+      li.className = `warning-${warning.kind}`;
+
+      const label = document.createElement('span');
+      label.className = 'item-label';
+      label.textContent = warning.label;
+
+      const length = document.createElement('span');
+      length.className = 'warning-length';
+      length.textContent = Utils.formatDistance(warning.length);
+
+      li.append(label, length);
+      if (warning.lat != null) {
+        li.title = 'Auf der Karte zeigen';
+        li.classList.add('clickable');
+        li.addEventListener('click', () => MapView.setView(warning.lat, warning.lng, 16));
+      }
+      el.warningList.appendChild(li);
+    });
+  }
+
+  /* ---------- Varianten ---------- */
+
+  async function loadAlternatives() {
+    if (state.points.length < 2 || state.routing.roundTrip) {
+      el.altSection.hidden = true;
+      return;
+    }
+    const id = requestId;
+    let routes;
+    try {
+      routes = await Routing.fetchAlternatives(state.points, state.routing, 3);
+    } catch (err) {
+      el.altSection.hidden = true;
+      return;
+    }
+    if (id !== requestId || routes.length < 2) {
+      el.altSection.hidden = true;
+      return;
+    }
+
+    state.alternatives = routes;
+    renderAlternativeList();
+  }
+
+  function renderAlternativeList() {
+    const routes = state.alternatives;
+    if (!routes || routes.length < 2) {
+      el.altSection.hidden = true;
+      return;
+    }
+    el.altSection.hidden = false;
+    el.altList.innerHTML = '';
+
+    routes.forEach((route, index) => {
+      const li = document.createElement('li');
+      if (index === state.activeAlternative) li.classList.add('active');
+
+      const climb = route.elevations
+        ? Elevation.computeAscentDescent(route.elevations)
+        : null;
+
+      const label = document.createElement('span');
+      label.className = 'item-label';
+      label.textContent = index === 0 ? 'Hauptroute' : `Variante ${index}`;
+
+      const stats = document.createElement('span');
+      stats.className = 'alternative-stats';
+      stats.textContent = Utils.formatDistance(route.distance) +
+        (climb ? ` · ↗ ${Math.round(climb.ascent)} Hm` : '');
+
+      li.append(label, stats);
+      li.addEventListener('click', () => selectAlternative(index));
+      el.altList.appendChild(li);
+    });
+  }
+
+  function selectAlternative(index) {
+    const route = state.alternatives[index];
+    if (!route) return;
+    state.activeAlternative = index;
+    applyRoute(route);
+    // Höhen der gewählten Variante übernehmen, sonst zeigt das Profil noch
+    // die vorherige Strecke.
+    if (route.elevations) useRouteElevations(route.elevations);
+    renderAlternativeList();
+    renderAll();
+  }
+
+  /* ---------- Unterwegs: Einkehr, Wasser, Haltestellen ---------- */
+
+  function renderPlaceFilters() {
+    el.placeFilters.innerHTML = '';
+    Object.entries(Overpass.CATEGORIES).forEach(([key, category]) => {
+      const label = document.createElement('label');
+      label.className = 'place-filter';
+
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      box.value = key;
+      box.checked = state.placeCategories.includes(key);
+      box.addEventListener('change', () => {
+        state.placeCategories = [...el.placeFilters.querySelectorAll('input:checked')]
+          .map((input) => input.value);
+        localStorage.setItem('wanderplaner.places', JSON.stringify(state.placeCategories));
+        el.placesBtn.disabled = !state.geometry || state.placeCategories.length === 0;
+      });
+
+      const text = document.createElement('span');
+      text.textContent = `${category.icon} ${category.label}`;
+
+      label.append(box, text);
+      el.placeFilters.appendChild(label);
+    });
+  }
+
+  async function searchPlaces() {
+    if (!state.geometry || state.placeCategories.length === 0) return;
+
+    el.placesBtn.disabled = true;
+    el.placeNote.textContent = 'Suche entlang der Route …';
+    try {
+      const places = await Overpass.search(
+        state.geometry,
+        state.placeCategories,
+        Number(el.placeRadius.value)
+      );
+      state.places = places;
+      renderPlaceList();
+      MapView.renderPlaces(places);
+    } catch (err) {
+      el.placeNote.textContent = err.message ||
+        'Die Umgebungssuche ist gerade nicht erreichbar.';
+    } finally {
+      el.placesBtn.disabled = !state.geometry || state.placeCategories.length === 0;
+    }
+  }
+
+  function renderPlaceList() {
+    el.placeList.innerHTML = '';
+    const places = state.places || [];
+
+    if (places.length === 0) {
+      el.placeNote.textContent = 'Nichts gefunden – größeren Umkreis versuchen.';
+      return;
+    }
+
+    // Nach Position entlang der Route ordnen, damit die Liste der Gehrichtung folgt.
+    const withPosition = places.map((place) => {
+      const { distance, index } = Nearby.distanceToRoute(place, state.geometry);
+      return { ...place, detour: distance, order: index };
+    }).sort((a, b) => a.order - b.order);
+
+    el.placeNote.textContent = `${places.length} gefunden entlang der Route.`;
+
+    withPosition.forEach((place) => {
+      const category = Overpass.CATEGORIES[place.category];
+      const li = document.createElement('li');
+
+      const icon = document.createElement('span');
+      icon.textContent = category.icon;
+
+      const label = document.createElement('span');
+      label.className = 'item-label';
+      label.textContent = place.name;
+      label.title = place.opening ? `${place.kind} · ${place.opening}` : place.kind;
+      label.addEventListener('click', () => MapView.setView(place.lat, place.lng, 16));
+
+      const detour = document.createElement('span');
+      detour.className = 'along-detour';
+      detour.textContent = place.detour < 30 ? 'am Weg' : `${Math.round(place.detour)} m`;
+
+      li.append(icon, label, detour);
+      el.placeList.appendChild(li);
+    });
+  }
+
+  /* ---------- Rundtour erzeugen ---------- */
+
+  async function generateRoundTrip() {
+    if (state.points.length === 0) return;
+
+    const targetKm = Number(el.genLength.value);
+    if (!Number.isFinite(targetKm) || targetKm < 2) {
+      el.generatorNote.textContent = 'Bitte eine Länge ab 2 km angeben.';
+      return;
+    }
+
+    el.generate.disabled = true;
+    const start = state.points[0];
+    try {
+      const result = await RoundTrip.generate(
+        start,
+        targetKm,
+        state.routing,
+        Number(el.genBearing.value),
+        (msg) => { el.generatorNote.textContent = msg; }
+      );
+
+      pushUndo();
+      state.points = result.points.map((p) => ({ id: Utils.uid(), lat: p.lat, lng: p.lng }));
+      // Die Schleife ist bereits geschlossen – der Rundkurs-Modus würde sie
+      // ein zweites Mal zurückführen.
+      state.routing.roundTrip = false;
+      el.roundTrip.checked = false;
+      saveRoutingSettings();
+
+      applyRoute(result.route);
+      renderAll();
+      MapView.fitTo(state.points);
+      await loadElevationAndFinish(++requestId, result.route);
+
+      const km = (result.route.distance / 1000).toFixed(1).replace('.', ',');
+      el.generatorNote.textContent =
+        `Rundtour über ${km} km gefunden (${result.attempts} Versuch(e)). ` +
+        'Punkte lassen sich wie gewohnt verschieben.';
+    } catch (err) {
+      el.generatorNote.textContent = err.message;
+    } finally {
+      el.generate.disabled = state.points.length === 0;
+    }
+  }
+
+  /* ---------- Wetter ---------- */
+
+  const scheduleWeather = Utils.debounce(updateWeather, 900);
+
+  async function updateWeather() {
+    if (state.points.length === 0 || state.distance === 0) {
+      el.weatherNote.hidden = true;
+      return;
+    }
+    const hours = Utils.estimateWalkTime(state.distance, state.ascent, state.descent);
+    try {
+      const forecast = await Weather.forecast(state.points[0], plannedStart(), hours);
+      const text = Weather.describe(forecast);
+      if (!text) {
+        el.weatherNote.hidden = true;
+        return;
+      }
+      el.weatherNote.hidden = false;
+      el.weatherNote.textContent = text;
+      // Bei Gewitter oder viel Regen deutlicher hervorheben.
+      const rough = forecast.rainChance >= 60 || forecast.rainMm >= 3 ||
+        (forecast.icon === '⛈');
+      el.weatherNote.className = `weather-note ${rough ? 'rough' : ''}`;
+    } catch (err) {
+      el.weatherNote.hidden = true;
+    }
   }
 
   /* ---------- Offline-Betrieb ---------- */
@@ -1530,6 +1985,7 @@
       onParkingAsStart: parkingAsStart,
       onParkingDelete: deleteParking,
       getStartName: () => state.tourName || 'Startpunkt der Wanderung',
+      onRouteDrag: insertPointAt,
       onRouteHover: highlightChartIndex,
       onRouteHoverEnd: clearChartHighlight,
     });
@@ -1579,12 +2035,22 @@
     el.tourClear.addEventListener('click', clearTourSelection);
 
     setStartTime(new Date());
-    el.startTime.addEventListener('change', updateDaylight);
+    el.startTime.addEventListener('change', () => {
+      updateDaylight();
+      scheduleWeather();
+    });
     el.nowBtn.addEventListener('click', () => {
       setStartTime(new Date());
       updateDaylight();
+      scheduleWeather();
     });
     el.alongRadius.addEventListener('change', updateAlongRoute);
+    el.reverse.addEventListener('click', reverseRoute);
+    el.generate.addEventListener('click', generateRoundTrip);
+    el.showPaved.addEventListener('change', updatePavedOverlay);
+    el.placesBtn.addEventListener('click', searchPlaces);
+    el.placeRadius.addEventListener('change', searchPlaces);
+    renderPlaceFilters();
     el.locate.addEventListener('click', toggleLocate);
     if (!Geo.supported) el.locate.hidden = true;
 

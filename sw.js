@@ -11,7 +11,7 @@
  * Der Datenabgleich (/api/…) wird bewusst nie zwischengespeichert – dort
  * zählt immer der aktuelle Stand.
  */
-const VERSION = 'v3';
+const VERSION = 'v4';
 const SHELL_CACHE = `wanderplaner-shell-${VERSION}`;
 const TILE_CACHE = `wanderplaner-tiles-${VERSION}`;
 const MAX_TILES = 1200;
@@ -37,6 +37,10 @@ const SHELL = [
   './js/daylight.js',
   './js/nearby.js',
   './js/geo.js',
+  './js/waytypes.js',
+  './js/overpass.js',
+  './js/roundtrip.js',
+  './js/weather.js',
   './js/mapview.js',
   './js/app.js',
   './icons/icon-192.png',
@@ -122,11 +126,11 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.startsWith('/api/')) return;
 
   // Routing- und Höhendienste nie zwischenspeichern.
-  if (/brouter\.de|project-osrm\.org|open-elevation\.com|opentopodata\.org|nominatim/.test(url.hostname)) {
+  if (/brouter\.de|project-osrm\.org|open-elevation\.com|opentopodata\.org|nominatim|overpass|open-meteo/.test(url.hostname)) {
     return;
   }
 
-  if (/tile\.opentopomap\.org|tile\.openstreetmap\.org/.test(url.hostname)) {
+  if (/tile\.opentopomap\.org|tile\.openstreetmap\.org|wanderreitkarte\.de|arcgisonline\.com/.test(url.hostname)) {
     event.respondWith(cacheFirst(request, TILE_CACHE, MAX_TILES));
     return;
   }

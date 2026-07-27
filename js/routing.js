@@ -169,7 +169,34 @@ const Routing = {
     return nogos;
   },
 
-  async _viaBRouter(points, settings, nogos = null) {
+  /**
+   * Berechnet zusätzlich zur Hauptroute die Varianten, die BRouter über
+   * `alternativeidx` anbietet. Fehlschläge einzelner Varianten sind normal
+   * (nicht überall gibt es echte Alternativen) und werden übergangen.
+   * @returns {Promise<Array>} Routen, beginnend mit der Hauptroute
+   */
+  async fetchAlternatives(points, settings, count = 3) {
+    const results = await Promise.allSettled(
+      Array.from({ length: count }, (_, i) =>
+        this._viaBRouter(points, settings, null, i)
+      )
+    );
+
+    const routes = [];
+    results.forEach((r, i) => {
+      if (r.status !== 'fulfilled') return;
+      // Varianten, die sich in der Länge kaum unterscheiden, sind meist
+      // dieselbe Strecke – die blenden wir aus.
+      const duplicate = routes.some(
+        (existing) => Math.abs(existing.distance - r.value.distance) < 50
+      );
+      if (duplicate) return;
+      routes.push({ ...r.value, alternativeIndex: i });
+    });
+    return routes;
+  },
+
+  async _viaBRouter(points, settings, nogos = null, alternativeIdx = 0) {
     const profileText = Profiles.build(settings);
     const profileId = await this._uploadProfile(profileText);
 
@@ -178,7 +205,8 @@ const Routing = {
       .join('|');
     let url =
       `${this.BROUTER_URL}?lonlats=${lonlats}` +
-      `&profile=${encodeURIComponent(profileId)}&alternativeidx=0&format=geojson`;
+      `&profile=${encodeURIComponent(profileId)}` +
+      `&alternativeidx=${alternativeIdx}&format=geojson`;
 
     if (nogos && nogos.length > 0) {
       // Gewichtete Sperren: hohe Kosten statt hartem Verbot, damit BRouter
@@ -225,8 +253,51 @@ const Routing = {
       coordinates: coords.map((c) => [c[0], c[1]]),
       elevations: hasElevation ? coords.map((c) => c[2]) : null,
       distance: Number.isFinite(distance) ? distance : this._lengthOf(coords),
+      // Abschnittsweise Wegedaten für die Wegetyp-Auswertung; BRouter liefert
+      // sie als Tabelle mit Kopfzeile mit.
+      segments: this._parseMessages(props.messages),
       engine: 'brouter',
     };
+  },
+
+  /**
+   * Wandelt BRouters `messages`-Tabelle in Abschnitte um.
+   * Aufbau: erste Zeile Spaltennamen, danach je ein Wegabschnitt mit
+   * Koordinate, Länge und den OSM-Tags des Weges.
+   * @returns {?Array<{lat:number,lng:number,length:number,tags:object}>}
+   */
+  _parseMessages(messages) {
+    if (!Array.isArray(messages) || messages.length < 2) return null;
+
+    const header = messages[0].map((h) => String(h).toLowerCase());
+    const idxLon = header.indexOf('longitude');
+    const idxLat = header.indexOf('latitude');
+    const idxDist = header.indexOf('distance');
+    const idxTags = header.indexOf('waytags');
+    if (idxDist < 0 || idxTags < 0) return null;
+
+    const segments = [];
+    for (let i = 1; i < messages.length; i++) {
+      const row = messages[i];
+      const length = parseFloat(row[idxDist]);
+      if (!Number.isFinite(length) || length <= 0) continue;
+
+      // WayTags kommen als "highway=path surface=ground sac_scale=hiking".
+      const tags = {};
+      String(row[idxTags] || '').split(/\s+/).forEach((pair) => {
+        const eq = pair.indexOf('=');
+        if (eq > 0) tags[pair.slice(0, eq)] = pair.slice(eq + 1);
+      });
+
+      segments.push({
+        // BRouter gibt die Koordinaten hier in Mikrograd an.
+        lng: idxLon >= 0 ? Number(row[idxLon]) / 1e6 : null,
+        lat: idxLat >= 0 ? Number(row[idxLat]) / 1e6 : null,
+        length,
+        tags,
+      });
+    }
+    return segments.length > 0 ? segments : null;
   },
 
   async _viaOsrm(points) {

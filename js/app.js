@@ -556,7 +556,9 @@
           pointRadius: 0,
           pointHoverRadius: 5,
           pointHoverBackgroundColor: '#1d5fbf',
-          borderWidth: 2,
+          // Etwas kräftiger als üblich: Bei der Einfärbung nach Steigung
+          // sollen auch kurze Abschnitte ihre Farbe zeigen.
+          borderWidth: 3,
           tension: 0.25,
         }],
       },

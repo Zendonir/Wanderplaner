@@ -157,6 +157,30 @@ module.exports = {
       check.ok(slopeTones >= 4, 'Auch im Profil ist die Abstufung fein',
         `${slopeTones} Farbtöne`);
 
+      /* ---- Kontrast: Kontur unter der Route ---- */
+      const strokes = (selector) => page.evaluate((sel) =>
+        [...document.querySelectorAll(sel)].map((p) => ({
+          color: p.getAttribute('stroke'),
+          width: Number(p.getAttribute('stroke-width')),
+          opacity: Number(p.getAttribute('stroke-opacity') || 1),
+        })), selector);
+
+      const casings = await strokes('#map path.route-casing');
+      const lines = await strokes('#map path.route-line');
+      check.equal(casings.length, 1, 'Unter der Route liegt genau eine Kontur');
+      check.ok(lines.length >= 2, 'Die farbigen Teilstücke liegen darüber',
+        `${lines.length} Stücke`);
+
+      const thinnest = Math.min(...lines.map((s) => s.width));
+      check.ok(thinnest >= 6, 'Die Routenlinie ist kräftig genug', `${thinnest} px`);
+      check.ok(casings[0].width > thinnest + 2,
+        'Die Kontur steht auf beiden Seiten über',
+        `Kontur ${casings[0].width} px, Linie ${thinnest} px`);
+      check.ok(lines.every((s) => s.opacity === 1),
+        'Die Farben werden deckend gezeichnet, damit die Karte sie nicht aufhellt');
+      check.ok(casings[0].color !== lines[0].color,
+        'Die Kontur hebt sich von der Linie ab');
+
       await page.selectOption('#route-style', 'surface');
       await page.waitForTimeout(600);
       const surfaceLegend = await page.locator('.route-legend .legend-row').allTextContents();

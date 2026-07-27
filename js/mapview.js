@@ -5,6 +5,13 @@
  * Routen-Polyline und der Hover-Marker für die Kopplung mit dem Höhenprofil.
  */
 const MapView = (function () {
+  // Breite der Routenlinie und ihrer Kontur. Die Wanderkarte bringt selbst
+  // schon viele farbige Wegmarkierungen mit – die Route muss sich davon
+  // deutlich abheben.
+  const ROUTE_WEIGHT = 7;
+  const ROUTE_CASING_WIDTH = 2.5;
+  const ROUTE_CASING_COLOR = '#1c2318';
+
   let map = null;
   let cbs = {};
   let routeLine = null;
@@ -641,15 +648,31 @@ const MapView = (function () {
       ? sections
       : [{ coordinates, color: '#c0392b' }];
 
+    // Dunkle Kontur unter der ganzen Strecke. Die Wanderkarte ist selbst
+    // voller bunter Wegmarkierungen; ohne diesen Rand geht die Route darin
+    // unter, besonders bei hellen Farben wie Gelb oder Hellgrün.
+    routeLines.push(L.polyline(latlngs, {
+      color: ROUTE_CASING_COLOR,
+      weight: ROUTE_WEIGHT + 2 * ROUTE_CASING_WIDTH,
+      opacity: 0.55,
+      lineCap: 'round',
+      lineJoin: 'round',
+      interactive: false,
+      className: 'route-casing',
+    }).addTo(map));
+
     parts.forEach((part) => {
       const line = L.polyline(part.coordinates.map((c) => [c[1], c[0]]), {
         color: part.color,
-        weight: 5,
-        opacity: 0.9,
+        weight: ROUTE_WEIGHT,
+        // Deckend zeichnen: Halbdurchsichtig würde sich die Kartenfarbe
+        // untermischen und die Steigungsfarben verfälschen.
+        opacity: 1,
         // Abgerundete Enden lassen die Farbwechsel nahtlos wirken.
         lineCap: 'round',
         lineJoin: 'round',
         interactive: false,
+        className: 'route-line',
       }).addTo(map);
       routeLines.push(line);
     });
@@ -756,8 +779,10 @@ const MapView = (function () {
     sections.forEach((section) => {
       const line = L.polyline(section.map((c) => [c[1], c[0]]), {
         color: '#2b2b2b',
-        weight: 6,
-        opacity: 0.55,
+        // Muss die breitere Routenlinie überdecken, sonst verschwindet die
+        // Schraffur darunter.
+        weight: ROUTE_WEIGHT - 1,
+        opacity: 0.75,
         dashArray: '2 7',
         interactive: false,
       }).addTo(map);

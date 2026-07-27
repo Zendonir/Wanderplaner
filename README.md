@@ -97,7 +97,9 @@ denselben Datenstand sehen.
 - **GPX-Export** – berechnete Wegstrecke als `<trk>` (inkl. Höhenwerten,
   falls verfügbar) und POIs als `<wpt>`, Download mit Zeitstempel im Namen.
 - **Ortssuche** – Sprung zu einem Ort über Nominatim/OpenStreetMap.
-- **Karte** – OpenTopoMap-Kacheln, ideal für Wanderungen.
+- **Karte** – OpenTopoMap-Kacheln, ideal für Wanderungen. Die geplante Route
+  wird kräftig und mit dunkler Kontur gezeichnet, damit sie sich von den
+  farbigen Wegmarkierungen der Wanderkarte abhebt.
 
 - **Fortschritt und Abzeichen** – Sammelstand mit Stufen (Bronze ab 11,
   Silber 24, Gold 50, Wanderkönig 111, Wanderkaiser 222), Balken bis zur

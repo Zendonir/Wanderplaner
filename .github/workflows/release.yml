@@ -98,8 +98,12 @@ jobs:
             2. Bei *Custom App*:
                - **Image Repository:** `ghcr.io/zendonir/wanderplaner`
                - **Image Tag:** `latest`
-               - **Port:** Container-Port `80` → Host-Port z. B. `8080`
+               - **Port:** Container-Port `8080` → Host-Port z. B. `8080`
+               - **Storage:** Host-Pfad oder Dataset auf `/data` einhängen
             3. Danach ist die App unter `http://<truenas-ip>:8080` erreichbar.
+
+            Ohne das Volume auf `/data` gehen Stempelstellen und Touren beim
+            Neustart des Containers verloren.
 
             Als YAML/Compose:
 
@@ -108,7 +112,9 @@ jobs:
               wanderplaner:
                 image: ghcr.io/zendonir/wanderplaner:latest
                 ports:
-                  - "8080:80"
+                  - "8080:8080"
+                volumes:
+                  - /mnt/tank/wanderplaner:/data
                 restart: unless-stopped
             ```
 

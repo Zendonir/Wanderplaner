@@ -167,6 +167,11 @@ body {
   min-width: 0;
 }
 
+/* Der Griff der Blende gehört zum Handy-Layout und ist sonst überflüssig. */
+.sheet-handle {
+  display: none;
+}
+
 /* ---------- Statusmeldungen ---------- */
 
 .status {
@@ -1977,28 +1982,273 @@ body {
   }
 }
 
+/* ---------- Handy und Homescreen-App ----------
+   Statt alles untereinander zu stapeln (Karte, Profil, endlos lange
+   Seitenleiste) bekommt das Handy die Karte formatfüllend und die Planung
+   als Blende, die vom unteren Rand hochgezogen wird. Das Höhenprofil zieht
+   app.js dabei in die Blende hinein. */
 @media (max-width: 900px) {
-  .layout,
-  .layout.library-collapsed {
-    grid-template-columns: 1fr;
-    grid-template-rows: 55vh var(--profile-height) auto;
-    grid-template-areas:
-      "map"
-      "profile"
-      "sidebar";
+  :root {
+    /* Wie hoch die zugeklappte Blende ist: Griff plus Zahlenreihe. */
+    --sheet-peek: 92px;
   }
 
-  .sidebar {
-    border-left: none;
-    border-top: 1px solid var(--border);
+  html, body {
+    /* dvh statt vh: Safaris ein- und ausfahrende Leisten ändern die Höhe,
+       100vh wäre dauerhaft zu hoch und schöbe die Blende aus dem Bild. */
+    height: 100dvh;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  .topbar {
+    gap: 0.5rem;
+    padding: 0.4rem 0.7rem;
+    /* Im Standalone-Modus reicht die Seite unter die Statusleiste. */
+    padding-top: calc(0.4rem + env(safe-area-inset-top));
+    padding-left: calc(0.7rem + env(safe-area-inset-left));
+    padding-right: calc(0.7rem + env(safe-area-inset-right));
+  }
+
+  /* Vom Titel bleibt nur das Symbol – der Platz gehört den Knöpfen. */
+  .topbar h1 {
+    font-size: 0;
+  }
+
+  .topbar h1::first-letter {
+    font-size: 1.3rem;
+  }
+
+  /* Das Abzeichen schrumpft auf einen Punkt, der Text steht ohnehin in
+     den Einstellungen. */
+  .sync-badge {
+    font-size: 0;
+    padding: 0;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #8fd0a0;
+  }
+
+  .sync-badge.offline { background: #d8b45a; }
+  .sync-badge.busy    { background: #ffffff; }
+
+  #btn-locate {
+    font-size: 0;
+    padding: 0.35rem 0.5rem;
+  }
+
+  #btn-locate::before {
+    content: '📍';
+    font-size: 0.95rem;
+  }
+
+  /* Das Suchfeld würde in einer Zeile alles zerquetschen. Es klappt
+     deshalb erst auf Tippen als zweite Zeile auf. */
+  .topbar {
+    flex-wrap: wrap;
+    row-gap: 0.4rem;
+  }
+
+  .search-form {
+    order: 2;
+    flex: 0 0 auto;
+    margin-left: auto;
   }
 
   .search-form input {
-    width: 150px;
+    display: none;
   }
 
-  .topbar h1 {
-    font-size: 1rem;
+  .topbar.search-open .search-form {
+    flex: 1 0 100%;
+    order: 3;
+    margin-left: 0;
+  }
+
+  .topbar.search-open .search-form input {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+
+  /* Reihenfolge in der Blende: Zahlen direkt unter den Griff, damit sie
+     auch zugeklappt sichtbar bleiben. */
+  .sheet-handle    { order: 0; }
+  .stats           { order: 1; }
+  .status          { order: 2; }
+  .profile-panel   { order: 3; }
+  .tabs            { order: 4; }
+  .tab-panel       { order: 5; }
+  .export-btn      { order: 6; }
+
+  /* Als schmaler Streifen statt 2×2-Block – sonst passt er nicht in den
+     zugeklappten Rand. */
+  .stats {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.3rem;
+  }
+
+  .stat {
+    padding: 0.3rem 0.35rem;
+    align-items: center;
+    text-align: center;
+  }
+
+  .stat-label { font-size: 0.58rem; }
+
+  /* Nicht umbrechen: Sonst wird die Zahlenreihe zweizeilig und passt nicht
+     mehr in den zugeklappten Rand der Blende. */
+  .stat-value {
+    font-size: 0.82rem;
+    white-space: nowrap;
+  }
+
+  .leaflet-control-attribution {
+    font-size: 9px;
+  }
+
+  .layout,
+  .layout.library-collapsed {
+    display: block;
+    position: relative;
+  }
+
+  .map-panel {
+    position: absolute;
+    inset: 0;
+    /* Der untere Rand bleibt frei, damit Zoomknöpfe, Legende und die
+       Copyright-Zeile nicht unter der Blende verschwinden. */
+    bottom: var(--sheet-peek);
+    height: auto;
+  }
+
+  /* Die Sammlung überlagert die Karte von links. */
+  .library {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: var(--sheet-peek);
+    width: min(320px, 86vw);
+    z-index: 1200;
+    padding-left: calc(0.75rem + env(safe-area-inset-left));
+    box-shadow: 2px 0 12px rgba(0, 0, 0, 0.25);
+  }
+
+  /* Die Planung als Blende am unteren Rand. */
+  .sidebar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1300;
+    height: 82dvh;
+    border-left: none;
+    border-top: 1px solid var(--border);
+    border-radius: 14px 14px 0 0;
+    box-shadow: 0 -4px 18px rgba(0, 0, 0, 0.18);
+    padding: 0 0.75rem 0.75rem;
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
+    gap: 0.6rem;
+    /* Zugeklappt schaut nur der Griff mit den Zahlen heraus. */
+    transform: translateY(calc(100% - var(--sheet-peek)));
+    transition: transform 0.25s ease;
+    overscroll-behavior: contain;
+  }
+
+  .layout.sheet-open .sidebar {
+    transform: translateY(0);
+  }
+
+  .sheet-handle {
+    display: flex;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.2rem;
+    width: calc(100% + 1.5rem);
+    margin: 0 -0.75rem;
+    padding: 0.5rem 0 0.35rem;
+    border: none;
+    background: var(--panel);
+    border-radius: 14px 14px 0 0;
+    cursor: pointer;
+  }
+
+  .sheet-grip {
+    width: 44px;
+    height: 4px;
+    border-radius: 2px;
+    background: #c8cec4;
+  }
+
+  .sheet-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+  }
+
+  .layout.sheet-open .sheet-label::after { content: ' ▾'; }
+  .sheet-label::after { content: ' ▴'; }
+
+  /* Die Zahlen bleiben auch zugeklappt sichtbar – sie sind unterwegs das
+     Wichtigste an der ganzen Planung. */
+  .stats {
+    position: sticky;
+    top: 44px;
+    z-index: 2;
+    background: var(--panel);
+    padding-bottom: 0.35rem;
+  }
+
+  /* Ohne Route ist das Diagramm leer – dann lieber ganz weg. */
+  .profile-panel.is-empty {
+    display: none;
+  }
+
+  /* In die Blende einsortiertes Höhenprofil. */
+  .profile-panel {
+    border-top: none;
+    border-bottom: 1px solid var(--border);
+    padding: 0 0 0.5rem;
+    height: 200px;
+    flex: 0 0 auto;
+  }
+
+  /* Unter 16px zoomt iOS beim Antippen in das Feld hinein und die ganze
+     Seite verrutscht. Das !important übersteuert bewusst alle einzelnen
+     Feldgrößen – die Regel gilt hier ausnahmslos. */
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+
+  /* Fingerfreundliche Flächen und kein Zoom bei Doppeltipp. */
+  button, .mode-btn, .tab, summary {
+    touch-action: manipulation;
+  }
+
+  .tab {
+    padding: 0.6rem 0.4rem;
+  }
+
+  .item-delete,
+  .item-action,
+  .stamp-tour {
+    min-width: 34px;
+    min-height: 34px;
+  }
+
+  .search-form input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .search-form {
+    flex: 1 1 auto;
+    min-width: 0;
   }
 
   /* Auf dem Handy zählt jeder Pixel in der Kopfzeile – dort genügt das

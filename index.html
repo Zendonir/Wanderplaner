@@ -2,12 +2,15 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- viewport-fit=cover: nur damit liefert env(safe-area-inset-*) auf dem
+       iPhone echte Werte – sonst liegt die Kopfzeile unter der Uhr. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Wanderplaner – Interaktive Routenplanung</title>
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#2f6b3f">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Wanderplaner">
   <link rel="stylesheet" href="vendor/leaflet.css">
@@ -73,7 +76,14 @@
     <div id="map" class="map-panel"></div>
 
     <!-- Rechte Seitenleiste: die aktuelle Routenplanung. -->
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
+      <!-- Nur am Handy sichtbar: zieht die Planung als Blende hoch. -->
+      <button class="sheet-handle" id="sheet-handle" aria-expanded="false"
+              aria-controls="sidebar" title="Planung ein- und ausklappen">
+        <span class="sheet-grip"></span>
+        <span class="sheet-label">Planung</span>
+      </button>
+
       <div id="status" class="status hidden"></div>
 
       <section class="stats">

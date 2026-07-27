@@ -136,6 +136,14 @@ denselben Datenstand sehen.
 - **Offline nutzbar (PWA)** – die App lässt sich auf dem Homescreen
   installieren und startet ohne Netz. Programmdateien und bereits
   betrachtete Kartenkacheln bleiben gespeichert.
+- **Eigenes Layout am Handy** – auf schmalen Bildschirmen füllt die Karte das
+  Bild, und die Planung liegt als Blende am unteren Rand: Zugeklappt zeigt sie
+  Länge, Anstieg, Abstieg und Gehzeit, hochgezogen die vollständige Planung
+  samt Höhenprofil. Ein Tipp auf die Karte klappt sie wieder zu. Die Kopfzeile
+  schrumpft auf Symbole, das Suchfeld klappt bei Bedarf auf. Auf dem iPhone
+  bleibt im Homescreen-Betrieb Platz für Statusleiste und Home-Indikator
+  (`viewport-fit=cover` plus `safe-area-inset`), und alle Eingabefelder sind
+  mindestens 16 px groß – darunter zoomt iOS beim Antippen ungefragt hinein.
 - **Geräteübergreifender Abgleich** – die Sammlung liegt im Container und ist
   auf Laptop, Handy und Tablet gleich. Zusätzlich lässt sich alles als Datei
   sichern und wieder einlesen (siehe unten).

@@ -115,6 +115,9 @@
     searchForm: document.getElementById('search-form'),
     searchInput: document.getElementById('search-input'),
     layout: document.getElementById('layout'),
+    sidebar: document.getElementById('sidebar'),
+    sheetHandle: document.getElementById('sheet-handle'),
+    profilePanel: document.querySelector('.profile-panel'),
     library: document.getElementById('library'),
     libraryToggle: document.getElementById('btn-library'),
     syncBadge: document.getElementById('sync-badge'),
@@ -627,6 +630,9 @@
       : null;
     chart.update('none');
     el.chartEmpty.classList.toggle('hidden', Boolean(hasData));
+    // Am Handy nimmt ein leeres Diagramm nur Platz weg; dort verschwindet
+    // es, bis eine Route berechnet ist.
+    el.profilePanel.classList.toggle('is-empty', !hasData);
     el.chartEmpty.textContent = state.geometry && !hasData
       ? 'Höhenprofil nicht verfügbar'
       : 'Noch keine Route berechnet';
@@ -2558,6 +2564,51 @@
     setLibraryOpen(el.layout.classList.contains('library-collapsed'));
   }
 
+  /* ---------- Blende am unteren Rand (Handy) ---------- */
+
+  // Ab hier wird die Planung zur hochziehbaren Blende statt einer Spalte.
+  const PHONE = window.matchMedia('(max-width: 900px)');
+
+  function setSheetOpen(open) {
+    el.layout.classList.toggle('sheet-open', open);
+    el.sheetHandle.setAttribute('aria-expanded', String(open));
+    localStorage.setItem('wanderplaner.sheet', open ? 'open' : 'closed');
+    // Zugeklappt bleibt die Blende oben stehen, sonst sieht man beim
+    // nächsten Öffnen die Mitte der Liste.
+    if (!open) el.sidebar.scrollTop = 0;
+    setTimeout(() => MapView.invalidateSize(), 300);
+  }
+
+  /** Klappt die Blende zu, wenn sie gerade die Karte verdeckt. */
+  function dismissSheet() {
+    if (!PHONE.matches || !el.layout.classList.contains('sheet-open')) return false;
+    setSheetOpen(false);
+    return true;
+  }
+
+  /**
+   * Am Handy gehört das Höhenprofil in die Blende: Als eigener Streifen
+   * würde es ein Drittel des Bildschirms fressen, den die Karte braucht.
+   * Auf breiten Bildschirmen bleibt es an seinem Platz unter der Karte.
+   */
+  function placeProfile() {
+    const profile = el.profilePanel;
+    if (PHONE.matches) {
+      if (profile.parentElement !== el.sidebar) {
+        // Direkt hinter die Zahlenreihe, vor die Reiter.
+        el.sidebar.insertBefore(profile, el.sidebar.querySelector('.tabs'));
+      }
+    } else if (profile.parentElement !== el.layout) {
+      el.layout.appendChild(profile);
+      el.layout.classList.remove('sheet-open');
+    }
+    // Karte und Diagramm haben jetzt andere Maße.
+    setTimeout(() => {
+      MapView.invalidateSize();
+      if (chart) chart.resize();
+    }, 60);
+  }
+
   /* ---------- Einstellungen ---------- */
 
   function setSettingsOpen(open) {
@@ -2647,12 +2698,18 @@
   function init() {
     MapView.init({
       onMapClick: (latlng) => {
+        // Am Handy verdeckt die offene Blende fast die ganze Karte. Wer
+        // dorthin tippt, will die Karte – also erst zuklappen.
+        if (dismissSheet()) return;
         // Im Menümodus verändert ein Klick nichts, sondern fragt erst nach.
         if (state.mode === 'poi') addPoi(latlng);
         else if (state.mode === 'route') addPoint(latlng);
         else openMapMenu(latlng);
       },
-      onMapMenu: openMapMenu,
+      onMapMenu: (latlng) => {
+        if (dismissSheet()) return;
+        openMapMenu(latlng);
+      },
       onPointMenu: openPointMenu,
       onPointMoved: movePoint,
       onPointDelete: deletePoint,
@@ -2671,6 +2728,9 @@
     });
 
     initChart();
+    // Einmal durchlaufen, damit das leere Diagramm von Anfang an als leer
+    // markiert ist – am Handy wird es dann gar nicht erst eingeblendet.
+    updateChart();
     initRoutingUi();
 
     el.modeMenu.addEventListener('click', () => setMode('menu'));
@@ -2680,6 +2740,15 @@
     el.undo.addEventListener('click', undo);
     el.clear.addEventListener('click', clearAll);
     el.export.addEventListener('click', exportGpx);
+    // Am Handy zeigt die Kopfzeile erst nur die Lupe; sie klappt das Feld auf.
+    el.searchForm.querySelector('button').addEventListener('click', (e) => {
+      const bar = el.searchForm.parentElement;
+      if (PHONE.matches && !bar.classList.contains('search-open')) {
+        e.preventDefault();
+        bar.classList.add('search-open');
+        el.searchInput.focus();
+      }
+    });
     el.searchForm.addEventListener('submit', (e) => {
       e.preventDefault();
       const query = el.searchInput.value.trim();
@@ -2759,7 +2828,18 @@
     checkUpdateAbility();
 
     el.libraryToggle.addEventListener('click', toggleLibrary);
-    setLibraryOpen(localStorage.getItem('wanderplaner.library') !== 'closed');
+    // Am Handy überlagert die Sammlung die Karte – dort bleibt sie zu,
+    // solange man sie nicht ausdrücklich aufruft.
+    setLibraryOpen(PHONE.matches
+      ? localStorage.getItem('wanderplaner.library') === 'open'
+      : localStorage.getItem('wanderplaner.library') !== 'closed');
+
+    el.sheetHandle.addEventListener('click', () => {
+      setSheetOpen(!el.layout.classList.contains('sheet-open'));
+    });
+    placeProfile();
+    PHONE.addEventListener('change', placeProfile);
+    setSheetOpen(localStorage.getItem('wanderplaner.sheet') === 'open');
 
     el.settingsBtn.addEventListener('click', () => setSettingsOpen(true));
     el.settingsClose.addEventListener('click', () => setSettingsOpen(false));

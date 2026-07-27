@@ -55,7 +55,11 @@ const post = (payload) => ({
  * angefragt wurde – so lässt sich prüfen, dass die Aktualisierung wirklich
  * einen Helfer startet und nicht etwa versucht, sich selbst zu ersetzen.
  */
-function fakeDocker(socketPath) {
+function fakeDocker(socketPath, options = {}) {
+  // Bei Compose heißt der Container nicht wie der Dienst – dann muss die
+  // Suche über die Liste gehen. `composeStyle` stellt genau das nach.
+  const { composeStyle = false, service = 'wanderplaner' } = options;
+  const containerName = composeStyle ? `ix-${service}-${service}-1` : service;
   const calls = [];
   const server = http.createServer((req, res) => {
     const chunks = [];
@@ -70,10 +74,23 @@ function fakeDocker(socketPath) {
         res.end(text);
       };
 
+      if (req.method === 'GET' && req.url.startsWith('/containers/json')) {
+        return reply(200, [{
+          Id: 'abc123def456',
+          Names: [`/${containerName}`],
+          Labels: { 'com.docker.compose.service': service },
+        }]);
+      }
+
       if (req.method === 'GET' && /^\/containers\/[^/]+\/json$/.test(req.url)) {
+        const wanted = decodeURIComponent(req.url.split('/')[2]);
+        // Compose-Aufbau: Der Dienstname allein findet den Container nicht.
+        if (composeStyle && wanted !== containerName && wanted !== 'abc123def456') {
+          return reply(404, { message: 'No such container' });
+        }
         return reply(200, {
-          Id: 'abc123',
-          Name: '/wanderplaner',
+          Id: 'abc123def456',
+          Name: `/${containerName}`,
           Config: { Image: 'ghcr.io/zendonir/wanderplaner:latest' },
         });
       }
@@ -240,6 +257,34 @@ module.exports = {
     } finally {
       enabled.stop();
       await docker.stop();
+    }
+
+    /* ---- Compose-Aufbau: Hostname ist der Dienst, nicht der Container ---- */
+    // Genau der Fall auf TrueNAS: Der Container heißt ix-wanderplaner-…-1,
+    // der Hostname im Container aber nur „wanderplaner“. Ohne die Suche über
+    // die Containerliste fände sich die App selbst nicht.
+    const composeSocket = path.join(tmp, 'compose.sock');
+    const composeDocker = await fakeDocker(composeSocket, { composeStyle: true });
+    const compose = await startWith(9112, path.join(tmp, 'compose'), {
+      ALLOW_SELF_UPDATE: '1',
+      DOCKER_SOCKET: composeSocket,
+      // Kein CONTAINER_NAME – der Hostname ist der Dienstname aus der YAML.
+      HOSTNAME: 'wanderplaner',
+    });
+    try {
+      const state = await api(9112, '/api/update');
+      check.equal(state.body.available, true,
+        'Auch bei Compose-Namen findet sich der eigene Container');
+      check.equal(state.body.container, 'ix-wanderplaner-wanderplaner-1',
+        'Und zwar unter seinem tatsächlichen Namen');
+
+      await api(9112, '/api/update', { method: 'POST' });
+      const create = composeDocker.calls.find((c) => c.url.startsWith('/containers/create'));
+      check.contains(create.body.Cmd.join(' '), 'ix-wanderplaner-wanderplaner-1',
+        'Der Helfer bekommt den echten Containernamen genannt');
+    } finally {
+      compose.stop();
+      await composeDocker.stop();
     }
 
     fs.rmSync(tmp, { recursive: true, force: true });

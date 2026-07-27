@@ -261,6 +261,24 @@ geräteübergreifenden Abgleich. Bei *Custom App* unter **Storage** einen
 Host-Pfad oder ein Dataset auf **`/data`** einhängen – sonst gehen die
 Daten beim Neustart des Containers verloren.
 
+### Warum das Update-Fenster von TrueNAS „No options" zeigt
+
+Der Knopf **Update** in der App-Übersicht gehört zu den Katalog-Apps: Er
+bietet die nächste *Chart-Version* an. Eine **Custom App** hat keinen Katalog
+und damit keine Versionen zur Auswahl – das Fenster bleibt deshalb leer und
+lässt sich nicht abschicken. Das ist kein Fehler der App.
+
+Für eine Custom App führen drei Wege zum Ziel:
+
+1. **Feste Version in der YAML** (empfohlen, weil eindeutig): Statt `:latest`
+   eine Nummer eintragen und beim Update hochsetzen. Weil sich das Image-Tag
+   ändert, zieht TrueNAS beim Speichern zwangsläufig das neue Image.
+2. **„⬆ Jetzt aktualisieren" in der App** – siehe unten, muss einmal
+   freigeschaltet werden.
+3. **Über die Shell:** `docker compose pull && docker compose up -d` im
+   Verzeichnis der App, oder `docker pull ghcr.io/zendonir/wanderplaner:latest`
+   und die App danach in der Oberfläche neu starten.
+
 ### Aktualisieren – warum ein Neustart nicht reicht
 
 Ein Neustart startet **dasselbe Image** noch einmal. Damit eine neue Version

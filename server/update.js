@@ -61,22 +61,51 @@ function dockerRequest(method, path, body) {
   });
 }
 
+/** Formt die Antwort der Docker-Engine in das um, was hier gebraucht wird. */
+function describe(details) {
+  return {
+    id: details.Id,
+    name: String(details.Name || '').replace(/^\//, ''),
+    image: (details.Config && details.Config.Image) || '',
+  };
+}
+
 /**
- * Sucht den eigenen Container. Docker setzt den Hostnamen standardmäßig auf
- * die Container-ID; wo das übergangen wurde, hilft CONTAINER_NAME weiter.
+ * Sucht den eigenen Container.
+ *
+ * Der direkte Weg ist der Hostname: Docker setzt ihn auf die Container-ID.
+ * Unter Compose – und damit auch bei einer TrueNAS-App – ist der Hostname
+ * aber der Dienstname aus der YAML, während der Container
+ * `projekt-dienst-1` heißt. Der Nachschlag über den Namen geht dann ins
+ * Leere, deshalb wird anschließend die Containerliste durchsucht.
  */
 async function findSelf() {
-  const candidates = [process.env.CONTAINER_NAME, os.hostname()].filter(Boolean);
-  for (const candidate of candidates) {
+  // Docker setzt HOSTNAME im Container – das ist verlässlicher als
+  // os.hostname(), das ausserhalb eines Containers den Rechnernamen liefert.
+  const hostname = process.env.HOSTNAME || os.hostname();
+
+  for (const candidate of [process.env.CONTAINER_NAME, hostname].filter(Boolean)) {
     const res = await dockerRequest('GET', `/containers/${encodeURIComponent(candidate)}/json`);
-    if (res.status === 200 && res.json) {
-      return {
-        id: res.json.Id,
-        name: String(res.json.Name || '').replace(/^\//, ''),
-        image: (res.json.Config && res.json.Config.Image) || '',
-      };
-    }
+    if (res.status === 200 && res.json) return describe(res.json);
   }
+
+  // Zweiter Anlauf über die Liste: Der Hostname taucht dort als Anfang der
+  // Container-ID, als Teil des Namens oder als Compose-Dienstname auf.
+  const list = await dockerRequest('GET', '/containers/json?limit=0');
+  if (list.status !== 200 || !Array.isArray(list.json)) return null;
+
+  const match = list.json.find((c) => {
+    const labels = c.Labels || {};
+    const names = (c.Names || []).map((n) => n.replace(/^\//, ''));
+    return String(c.Id).startsWith(hostname)
+      || names.includes(hostname)
+      || labels['com.docker.compose.service'] === hostname
+      || names.some((n) => n.includes(hostname));
+  });
+  if (!match) return null;
+
+  const details = await dockerRequest('GET', `/containers/${match.Id}/json`);
+  if (details.status === 200 && details.json) return describe(details.json);
   return null;
 }
 

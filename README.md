@@ -105,7 +105,9 @@ denselben Datenstand sehen.
   gewählt wird statt derselben Strecke zurück. Findet sich kein eigenständiger
   Parallelweg, wird der Rückweg ohne Sperren berechnet und darauf hingewiesen.
 - **Routenvorschlag** – Stempelstellen für die nächste Tour auswählen
-  (⊕ in der Liste oder im Karten-Popup) und „Route vorschlagen“ klicken:
+  (⊕ in der Liste unter *Einstellungen → Daten* oder im Karten-Popup). Sobald
+  etwas ausgewählt ist, erscheint rechts in der Planung der Abschnitt
+  *Stempel-Tour* mit „Route vorschlagen“:
   die Reihenfolge wird automatisch optimiert (Nearest-Neighbor + 2-Opt) und
   die Route entlang echter Wege berechnet. Die ausgewählten Stempelstellen
   landen beim GPX-Export als Wegpunkte mit in der Datei.

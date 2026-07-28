@@ -576,6 +576,16 @@ body {
 
 .import-row,
 .stamp-tools,
+#section-stamp-tour .tour-bar {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+}
+
+#section-stamp-tour .tour-bar button {
+  flex: 1;
+}
+
 .tour-bar {
   display: flex;
   gap: 0.4rem;

@@ -96,6 +96,7 @@
     stampFilter: document.getElementById('stamp-filter'),
     stampList: document.getElementById('stamp-list'),
     tourCount: document.getElementById('tour-count'),
+    stampTourSection: document.getElementById('section-stamp-tour'),
     suggest: document.getElementById('btn-suggest'),
     tourClear: document.getElementById('btn-tour-clear'),
     importHint: document.getElementById('import-hint'),
@@ -915,7 +916,12 @@
 
   function updateTourBar() {
     const n = state.tourSelection.length;
-    el.tourCount.textContent = `${n} für Tour ausgewählt`;
+    // Der Abschnitt taucht erst auf, wenn wirklich etwas ausgewählt ist –
+    // in der Planungsleiste ist der Platz knapp.
+    el.stampTourSection.hidden = n === 0;
+    el.tourCount.textContent = n === 1
+      ? '1 Stempelstelle ausgewählt – ab zwei lässt sich eine Route vorschlagen.'
+      : `${n} Stempelstellen ausgewählt.`;
     el.suggest.disabled = n < 2;
     el.tourClear.disabled = n === 0;
   }
@@ -1428,6 +1434,11 @@
     if (Geo.position) renderNearbyPrompt(Geo.position);
   }
 
+  /**
+   * Wählt eine Stempelstelle für den Routenvorschlag aus. Der Knopf dazu
+   * steht in der Planungsleiste – die liegt hinter dem Einstellungsdialog,
+   * deshalb ein Hinweis beim ersten Mal.
+   */
   function toggleStampTour(id) {
     const index = state.tourSelection.indexOf(id);
     if (index >= 0) state.tourSelection.splice(index, 1);

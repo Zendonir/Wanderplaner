@@ -122,6 +122,16 @@
         </label>
       </section>
 
+      <!-- Erscheint, sobald in den Einstellungen Stempel ausgewählt sind. -->
+      <section class="list-section" id="section-stamp-tour" hidden>
+        <h2>Stempel-Tour</h2>
+        <p class="hint" id="tour-count">0 für Tour ausgewählt</p>
+        <div class="tour-bar">
+          <button id="btn-suggest" disabled title="Ausgewählte Stempelstellen in optimierter Reihenfolge zu einer Route verbinden">Route vorschlagen</button>
+          <button id="btn-tour-clear" disabled>Auswahl leeren</button>
+        </div>
+      </section>
+
       <details class="tool-panel" id="generator-panel">
         <summary>🔄 Rundtour vorschlagen</summary>
         <p class="hint">Erzeugt ab dem ersten Routenpunkt eine Schleife mit
@@ -323,11 +333,8 @@
               <option value="collected">Erhalten</option>
             </select>
           </div>
-          <div class="tour-bar">
-            <span id="tour-count">0 für Tour ausgewählt</span>
-            <button id="btn-suggest" disabled title="Ausgewählte Stempelstellen in optimierter Reihenfolge zu einer Route verbinden">Route vorschlagen</button>
-            <button id="btn-tour-clear" disabled>Auswahl leeren</button>
-          </div>
+          <p class="hint">Mit ⊕ für die nächste Tour auswählen – „Route
+            vorschlagen“ erscheint dann rechts in der Planung.</p>
           <ul id="stamp-list" class="stamp-list"></ul>
         </section>
         </div>

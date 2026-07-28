@@ -277,6 +277,34 @@ module.exports = {
       check.ok(übernommen && übernommen.länge > 0,
         'Und die gelaufene Länge', `${übernommen && übernommen.länge} m`);
 
+      /* ---- Stempel-Tour steht in der Planung ---- */
+      // Auswählen in den Einstellungen, den Knopf gibt es aber rechts bei
+      // der Planung – dort wird die Route ja auch gebaut.
+      check.equal(await page.locator('#settings #btn-suggest').count(), 0,
+        'Der Vorschlagsknopf steht nicht mehr in den Einstellungen');
+      check.ok(await page.locator('#section-stamp-tour').isHidden(),
+        'Ohne Auswahl bleibt der Abschnitt verborgen');
+
+      await openStamps(page);
+      const auswahl = page.locator('#stamp-list .stamp-tour');
+      await auswahl.nth(0).click();
+      await auswahl.nth(1).click();
+      await page.waitForTimeout(400);
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(300);
+
+      check.ok(await page.locator('#section-stamp-tour').isVisible(),
+        'Mit Auswahl erscheint die Stempel-Tour in der Planung');
+      check.contains(await page.textContent('#tour-count'), '2',
+        'Die Zahl der ausgewählten Stempel steht dabei');
+      check.ok(!(await page.locator('#btn-suggest').isDisabled()),
+        'Ab zwei Stempeln lässt sich die Route vorschlagen');
+
+      await page.click('#btn-tour-clear');
+      await page.waitForTimeout(300);
+      check.ok(await page.locator('#section-stamp-tour').isHidden(),
+        'Nach dem Leeren verschwindet der Abschnitt wieder');
+
       /* ---- Popup einer Stempelstelle ---- */
       // Löschen gehört nicht in ein Menü, das beim Planen ständig aufgeht –
       // ein danebengegangener Klick würde den Sammelstand mitnehmen.

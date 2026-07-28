@@ -101,6 +101,13 @@ const MapView = (function () {
       L.DomEvent.preventDefault(e.originalEvent);
       cbs.onMapMenu(e.latlng);
     });
+
+    // Doppelklick ebenso. Am Touchgerät ist das der einzige Weg zum Menü,
+    // dort gibt es keine rechte Maustaste.
+    map.on('dblclick', (e) => {
+      if (!map.doubleClickZoom.enabled()) L.DomEvent.stop(e);
+      cbs.onMapMenu(e.latlng);
+    });
   }
 
   /* ---------- Kontextmenü auf der Karte ---------- */

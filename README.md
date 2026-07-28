@@ -106,11 +106,12 @@ denselben Datenstand sehen.
   die Reihenfolge wird automatisch optimiert (Nearest-Neighbor + 2-Opt) und
   die Route entlang echter Wege berechnet. Die ausgewählten Stempelstellen
   landen beim GPX-Export als Wegpunkte mit in der Datei.
-- **Klick mit Rückfrage** – ein Klick auf die Karte öffnet ein Menü
-  (Routenpunkt anhängen, als neuen Startpunkt einfügen, POI setzen, Parkplatz
-  merken, hier weiterzeichnen), statt sofort einen Punkt zu setzen. Wer zügig
-  eine Route zeichnen will, schaltet auf **✏ Zeichnen** um – dann setzt jeder
-  Klick sofort. Rechtsklick öffnet das Menü in jedem Modus, Esc führt zurück.
+- **Klick mit Rückfrage** – **Doppelklick oder Rechtsklick** auf die Karte
+  öffnet ein Menü (Routenpunkt anhängen, als neuen Startpunkt einfügen, POI
+  setzen, Parkplatz merken, hier weiterzeichnen). Ein einfacher Klick tut
+  nichts – versehentliche Punkte gibt es damit nicht. Wer zügig eine Route
+  zeichnen will, schaltet auf **✏ Zeichnen** um; dann setzt jeder Klick
+  sofort. Rechtsklick öffnet das Menü in jedem Modus, Esc führt zurück.
 - **Punkte bearbeiten** – ein Klick auf einen gesetzten Punkt öffnet sein Menü:
   löschen, zum Startpunkt machen oder die Route dort abschneiden. In der Liste
   lassen sich Punkte per Drag & Drop **oder** mit ▲▼ umsortieren – Letzteres
@@ -626,6 +627,32 @@ setzen; der Server sagt dann über `/api/health`, woran es liegt.
 > blieb dadurch root, und der Dienst konnte nie schreiben. Weil der Server den
 > Schreibfehler nur ins Log geschrieben und trotzdem `200 OK` geantwortet hat,
 > sah es in der App nach einem gelungenen Abgleich aus.
+
+### Doppelte Einträge
+
+Der Abgleich führt Einträge über ihre `id` zusammen. Wer dieselbe GPX-Datei
+auf zwei Geräten importiert hat – etwa weil der Abgleich damals noch nicht
+lief –, hat für jede Stelle zwei verschiedene `id`s. Beim ersten gemeinsamen
+Abgleich taucht dann alles doppelt auf.
+
+Die App räumt das nach jedem Abgleich selbst auf: Einträge mit gleichem Namen
+oder praktisch gleicher Lage (unter 30 m) werden zusammengefasst. Dabei
+gewinnt der informationsreichere Eintrag – ein abgehakter Stempel schlägt
+einen offenen –, und Notiz wie Abhak-Datum des anderen ziehen mit um. Der
+unterlegene Eintrag bleibt als Markierung erhalten, damit ihn das nächste
+Gerät nicht zurückholt. Wie viele zusammengefasst wurden, steht kurz in der
+Statuszeile.
+
+### Alles zurücksetzen
+
+In **Einstellungen → Abgleich und Sicherung** steht ganz unten **⟲ Alles
+zurücksetzen**. Das löscht Stempelstellen, Parkplätze, geplante und
+abgeschlossene Touren sowie sämtliche Einstellungen – und zwar über den
+Abgleich auch auf allen anderen Geräten. Vorher wird automatisch eine
+Sicherung heruntergeladen.
+
+Gelöscht wird über dieselben Markierungen wie sonst auch; bloßes Leeren würde
+ein anderes Gerät beim nächsten Abgleich wieder rückgängig machen.
 
 ### Sicherung
 

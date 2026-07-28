@@ -87,6 +87,34 @@ module.exports = {
         'Der gelöschte Eintrag kommt nach dem Rückabgleich nicht zurück');
       check.equal(await stampCount(b), 2, 'Auch auf B bleibt er gelöscht');
 
+      /* ---- Dubletten aus getrennten Importen ---- */
+      // Der Fall aus der Praxis: Dieselbe Datei wurde auf beiden Geräten
+      // importiert, solange der Abgleich noch nicht lief. Jede Stelle trägt
+      // deshalb zwei verschiedene ids, und beim ersten gemeinsamen Abgleich
+      // wäre alles doppelt da.
+      await b.evaluate(() => {
+        const raw = JSON.parse(localStorage.getItem('wanderplaner.stempelstellen'));
+        const eigene = raw.items
+          .filter((s) => !s.deletedAt)
+          .map((s) => ({ ...s, id: `eigen-${s.id}`, updatedAt: Date.now() }));
+        raw.items = raw.items.concat(eigene);
+        localStorage.setItem('wanderplaner.stempelstellen', JSON.stringify(raw));
+      });
+      await b.reload();
+      await b.waitForSelector('#map.leaflet-container');
+      await b.waitForTimeout(2500);
+      await sync(b);
+      await b.waitForTimeout(1500);
+
+      check.equal(await stampCount(b), 2,
+        'Doppelt importierte Stempelstellen werden wieder zusammengeführt');
+      check.contains(await b.textContent('#stamp-counter'), '1 von 2',
+        'Der Sammelstand übersteht das Zusammenführen');
+
+      await sync(a);
+      check.equal(await stampCount(a), 2,
+        'Und das andere Gerät holt die Dubletten nicht zurück');
+
       /* ---- Tour auf A speichern, auf B laden ---- */
       await startDrawing(a);
       const box = await a.locator('#map').boundingBox();
@@ -120,9 +148,39 @@ module.exports = {
       const stored = JSON.parse(
         fs.readFileSync(path.join(server.dataDir, 'wanderplaner.json'), 'utf8')
       );
-      check.ok(stored.stamps.length === 3, 'Der Server hält alle Einträge vor');
-      check.equal(stored.stamps.filter((s) => s.deletedAt).length, 1,
-        'Der gelöschte Eintrag bleibt als Markierung erhalten');
+      const sichtbar = stored.stamps.filter((s) => !s.deletedAt);
+      check.equal(sichtbar.length, 2, 'Der Server hält den bereinigten Stand vor');
+      // Gelöschtes und Zusammengeführtes bleibt als Markierung liegen, sonst
+      // schiebt es das nächste Gerät wieder herüber.
+      check.ok(stored.stamps.filter((s) => s.deletedAt).length >= 1,
+        'Gelöschte und zusammengeführte Einträge bleiben als Markierung erhalten',
+        `${stored.stamps.length} Einträge gesamt`);
+
+      /* ---- Alles zurücksetzen ---- */
+      // Muss über Grabsteine laufen: Bloßes Leeren würde das andere Gerät
+      // beim nächsten Abgleich rückgängig machen.
+      a.on('dialog', (d) => d.accept());
+      await openSettings(a);
+      const [sicherung] = await Promise.all([
+        a.waitForEvent('download'),
+        a.click('#btn-reset'),
+      ]);
+      check.ok(sicherung, 'Vor dem Zurücksetzen wird eine Sicherung heruntergeladen');
+
+      await a.waitForTimeout(4000);
+      check.equal(await stampCount(a), 0, 'Auf A ist nichts mehr übrig');
+      check.equal(await a.locator('#tour-list li:not(.list-empty)').count(), 0,
+        'Auch die geplanten Touren sind weg');
+
+      await sync(b);
+      await b.waitForTimeout(1200);
+      check.equal(await stampCount(b), 0,
+        'Das Zurücksetzen erreicht auch das andere Gerät');
+
+      await sync(b);
+      await sync(a);
+      check.equal(await stampCount(a), 0,
+        'Und nichts kommt über den Rückabgleich zurück');
 
       check.equal(errors.length, 0, 'Keine Skriptfehler', errors.join(' | '));
     } finally {

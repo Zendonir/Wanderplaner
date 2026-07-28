@@ -42,7 +42,7 @@ function moduleName(file) {
     utils: 'Utils', qrcode: 'QRCode', daylight: 'Daylight', nearby: 'Nearby',
     waytypes: 'WayTypes', clusters: 'Clusters', progress: 'Progress',
     maplinks: 'MapLinks', tracks: 'Tracks', routestyle: 'RouteStyle',
-    roundtrip: 'RoundTrip',
+    roundtrip: 'RoundTrip', places: 'Stamps',
   };
   return map[file] || file;
 }
@@ -52,9 +52,10 @@ module.exports = {
 
   async run(check) {
     const { Utils, QRCode, Daylight, Nearby, WayTypes, Clusters, Progress, MapLinks,
-            RouteStyle, Tracks, RoundTrip } =
+            RouteStyle, Tracks, RoundTrip, Stamps } =
       loadModules(['utils', 'qrcode', 'daylight', 'nearby', 'waytypes', 'clusters',
-                   'progress', 'maplinks', 'routestyle', 'tracks', 'roundtrip']);
+                   'progress', 'maplinks', 'routestyle', 'tracks', 'roundtrip',
+                   'places']);
 
     /* ---- QR-Code: gegen einen unabhängigen Decoder ---- */
     const jsQR = require('jsqr');
@@ -429,6 +430,57 @@ module.exports = {
         { lat: 51.782, lng: 10.60 }, { lat: 51.80, lng: 10.60 },
       ], kurz).length,
       0, 'Ein sehr kurzer Versatz zählt nicht als Stichweg');
+
+    /* ---- Doppelte Stempelstellen zusammenfassen ---- */
+    // Genau die Lage nach dem ersten gemeinsamen Abgleich: Dieselbe
+    // GPX-Datei wurde auf zwei Geräten importiert, jede Stelle trägt
+    // deshalb zwei verschiedene ids.
+    const doppelt = [
+      { id: 'a1', name: 'HWN 1', lat: 51.80, lng: 10.60, collected: true,
+        collectedAt: '2026-05-01', updatedAt: 1000 },
+      { id: 'b1', name: 'HWN 1', lat: 51.80, lng: 10.60, collected: false,
+        updatedAt: 2000 },
+      { id: 'a2', name: 'HWN 2', lat: 51.79, lng: 10.62, note: 'Felsklippe',
+        collected: false, updatedAt: 1000 },
+      { id: 'b2', name: 'HWN 2', lat: 51.79, lng: 10.62, collected: false,
+        updatedAt: 2000 },
+      { id: 'c1', name: 'HWN 3', lat: 51.81, lng: 10.58, collected: false,
+        updatedAt: 1000 },
+    ];
+
+    const bereinigt = Stamps.dedupe(doppelt);
+    const übrig = bereinigt.items.filter((s) => !s.deletedAt);
+    check.equal(übrig.length, 3, 'Aus fünf Einträgen werden wieder drei');
+    check.equal(bereinigt.merged, 2, 'Zwei Dubletten werden gemeldet');
+
+    const hwn1 = übrig.find((s) => s.name === 'HWN 1');
+    check.ok(hwn1.collected,
+      'Ein abgehakter Stempel schlägt den offenen – der Sammelstand bleibt');
+    check.equal(hwn1.collectedAt, '2026-05-01', 'Samt Abhak-Datum');
+
+    const hwn2 = übrig.find((s) => s.name === 'HWN 2');
+    check.equal(hwn2.note, 'Felsklippe',
+      'Die Notiz des unterlegenen Eintrags geht nicht verloren');
+
+    const gräber = bereinigt.items.filter((s) => s.deletedAt);
+    check.equal(gräber.length, 2,
+      'Die Verlierer bleiben als Grabsteine – sonst kommen sie zurück');
+
+    // Zweiter Durchlauf darf nichts mehr finden.
+    check.equal(Stamps.dedupe(bereinigt.items).merged, 0,
+      'Ein erneuter Durchlauf lässt alles unangetastet');
+
+    // Nahe beieinander, aber verschiedene Namen: bis 30 m gilt das als
+    // dieselbe Stelle, darüber nicht.
+    check.equal(Stamps.dedupe([
+      { id: 'x', name: 'Klippe Ost', lat: 51.8000, lng: 10.6000, updatedAt: 1 },
+      { id: 'y', name: 'Klippe West', lat: 51.8010, lng: 10.6010, updatedAt: 2 },
+    ]).merged, 0, 'Weit genug entfernte Stellen bleiben getrennt');
+
+    check.equal(Stamps.dedupe([
+      { id: 'x', name: 'Klippe Ost', lat: 51.80000, lng: 10.60000, updatedAt: 1 },
+      { id: 'y', name: 'Klippe West', lat: 51.80005, lng: 10.60005, updatedAt: 2 },
+    ]).merged, 1, 'Praktisch deckungsgleiche Stellen werden zusammengefasst');
 
     /* ---- Der Service Worker muss alle Programmdateien kennen ---- */
     // Ein vergessener Eintrag fällt sonst erst offline auf, wo die App dann

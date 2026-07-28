@@ -106,6 +106,69 @@ const PointStore = {
         }
         return { items, added, skipped };
       },
+      /**
+       * Beschreiben zwei Einträge dieselbe Stelle? Gleicher Name oder
+       * praktisch dieselben Koordinaten.
+       */
+      sameSpot(a, b) {
+        if (a.name && b.name && a.name === b.name) return true;
+        return Utils.haversine(a, b) < PointStore.DUPLICATE_RADIUS_M;
+      },
+
+      /**
+       * Fasst Einträge zusammen, die dieselbe Stelle beschreiben.
+       *
+       * Nötig, weil der Abgleich zwischen Geräten über die id läuft: Wer
+       * dieselbe GPX-Datei auf zwei Geräten importiert hat, hat für jede
+       * Stelle zwei verschiedene ids – und bekommt beim ersten gemeinsamen
+       * Abgleich alles doppelt.
+       *
+       * Der informationsreichere Eintrag bleibt: Ein abgehakter Stempel
+       * schlägt einen offenen, sonst gewinnt der neuere Stand. Notiz und
+       * Abhak-Datum des anderen ziehen mit um, damit nichts verloren geht.
+       * Der Verlierer bleibt als Grabstein – ohne ihn holt das nächste Gerät
+       * die Dublette beim nächsten Abgleich zurück.
+       *
+       * @returns {{items: Array, merged: number}}
+       */
+      dedupe(items) {
+        const survivors = [];
+        const tombstones = [];
+        let merged = 0;
+
+        for (const item of items || []) {
+          if (item.deletedAt) {
+            tombstones.push(item);
+            continue;
+          }
+
+          const index = survivors.findIndex((s) => store.sameSpot(s, item));
+          if (index < 0) {
+            survivors.push({ ...item });
+            continue;
+          }
+
+          const twin = survivors[index];
+          const itemNewer = (Number(item.updatedAt) || 0) > (Number(twin.updatedAt) || 0);
+          const itemWins = Boolean(item.collected) === Boolean(twin.collected)
+            ? itemNewer
+            : Boolean(item.collected);
+
+          const winner = { ...(itemWins ? item : twin) };
+          const loser = itemWins ? twin : item;
+
+          if (!winner.note && loser.note) winner.note = loser.note;
+          if (!winner.collected && loser.collected) winner.collected = true;
+          if (!winner.collectedAt && loser.collectedAt) winner.collectedAt = loser.collectedAt;
+          winner.updatedAt = Date.now();
+
+          survivors[index] = winner;
+          tombstones.push({ ...loser, deletedAt: Date.now(), updatedAt: Date.now() });
+          merged++;
+        }
+
+        return { items: [...survivors, ...tombstones], merged };
+      },
     };
     return store;
   },

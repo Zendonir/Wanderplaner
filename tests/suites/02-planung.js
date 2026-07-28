@@ -32,10 +32,18 @@ module.exports = {
       check.ok(await page.locator('#mode-menu').evaluate((b) => b.classList.contains('active')),
         'Der Menümodus ist voreingestellt');
 
+      // Ein einfacher Klick tut im Menümodus bewusst gar nichts.
       await clickMap(0.45, 0.5);
+      await page.waitForTimeout(400);
+      check.equal(await page.locator('.map-menu').count(), 0,
+        'Ein einfacher Klick öffnet kein Menü');
+      check.equal(await page.locator('#point-list li:not(.list-empty)').count(), 0,
+        'Und setzt erst recht keinen Punkt');
+
+      await clickMap(0.45, 0.5, { clickCount: 2, delay: 60 });
       await page.waitForSelector('.map-menu', { timeout: 4000 });
       check.equal(await page.locator('#point-list li:not(.list-empty)').count(), 0,
-        'Ein Klick allein setzt keinen Punkt mehr');
+        'Der Doppelklick öffnet das Menü, ohne etwas zu setzen');
       const menuEntries = await page.locator('.map-menu-item').allTextContents();
       check.contains(menuEntries.join(' | '), 'Routenpunkt anhängen',
         'Das Menü bietet den Routenpunkt an');
@@ -50,7 +58,7 @@ module.exports = {
       check.equal(await page.locator('#point-list li:not(.list-empty)').count(), 0,
         'Nach dem Abbrechen ist die Planung unverändert');
 
-      await clickMap(0.45, 0.5);
+      await clickMap(0.45, 0.5, { clickCount: 2, delay: 60 });
       await page.waitForSelector('.map-menu', { timeout: 4000 });
       await page.locator('.map-menu-item').first().click();
       await page.waitForTimeout(500);
@@ -58,7 +66,8 @@ module.exports = {
         'Erst die Auswahl im Menü setzt den Punkt');
 
       /* ---- Zweiter Punkt: Menü bietet jetzt auch den Startpunkt an ---- */
-      await clickMap(0.55, 0.4);
+      // Diesmal per Rechtsklick – der geht in jedem Modus.
+      await clickMap(0.55, 0.4, { button: 'right' });
       await page.waitForSelector('.map-menu', { timeout: 4000 });
       check.contains((await page.locator('.map-menu-item').allTextContents()).join(' | '),
         'Startpunkt', 'Bei bestehender Route lässt sich davor eingefügt werden');

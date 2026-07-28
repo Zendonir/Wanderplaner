@@ -126,6 +126,7 @@
     backupBtn: document.getElementById('btn-backup'),
     restoreBtn: document.getElementById('btn-restore'),
     restoreFile: document.getElementById('restore-file'),
+    reset: document.getElementById('btn-reset'),
     startTime: document.getElementById('start-time'),
     nowBtn: document.getElementById('btn-now'),
     daylightNote: document.getElementById('daylight-note'),
@@ -216,8 +217,40 @@
       state[key] = Sync.mergeList(state[key], merged[name]);
       store.save(state[key]);
     });
+    removeDuplicates();
     renderAll();
     updateSyncStatus();
+  }
+
+  /**
+   * Räumt Dubletten weg, die beim Abgleich entstehen.
+   *
+   * Der Abgleich führt Einträge über ihre id zusammen. Wer dieselbe
+   * GPX-Datei auf zwei Geräten importiert hat, hat für jede Stelle zwei
+   * verschiedene ids – beim ersten gemeinsamen Abgleich ist dann alles
+   * doppelt da. Zusammengefasst wird nach Name und Lage.
+   */
+  function removeDuplicates() {
+    let merged = 0;
+    ['stamps', 'parking'].forEach((name) => {
+      const { store, key } = STORES[name];
+      if (typeof store.dedupe !== 'function') return;
+      const result = store.dedupe(state[key]);
+      if (result.merged === 0) return;
+      state[key] = result.items;
+      store.save(state[key]);
+      merged += result.merged;
+    });
+
+    if (merged > 0) {
+      // Die Grabsteine müssen zu den anderen Geräten, sonst kommen die
+      // Dubletten beim nächsten Abgleich zurück.
+      scheduleSync();
+      showStatus('info',
+        `${merged} doppelte Einträge zusammengefasst – abgehakte Stempel und ` +
+        'Notizen bleiben dabei erhalten.', 9000);
+    }
+    return merged;
   }
 
   const scheduleSync = Utils.debounce(runSync, 1500);
@@ -1546,8 +1579,8 @@
   }
 
   const MODE_HINTS = {
-    menu: 'Ein Klick auf die Karte fragt erst nach – versehentliche Punkte ' +
-      'gibt es damit nicht. Rechtsklick öffnet das Menü in jedem Modus.',
+    menu: 'Doppelklick oder Rechtsklick auf die Karte öffnet das Menü. Ein ' +
+      'einfacher Klick tut nichts – versehentliche Punkte gibt es damit nicht.',
     route: 'Jeder Klick setzt sofort einen Routenpunkt. Esc führt zurück ins Menü.',
     poi: 'Jeder Klick setzt sofort einen POI. Esc führt zurück ins Menü.',
   };
@@ -1570,9 +1603,9 @@
     el.modeHint.textContent = MODE_HINTS[mode] || '';
     localStorage.setItem('wanderplaner.mode', mode);
     MapView.closeMenu();
-    // Beim Zeichnen wäre der Doppelklick-Zoom fatal: Er setzt zwei Punkte
-    // und springt gleichzeitig eine Zoomstufe weiter.
-    MapView.setDoubleClickZoom(mode === 'menu');
+    // Der Doppelklick ist vergeben: im Menümodus ans Menü, beim Zeichnen
+    // würde er zwei Punkte setzen und zugleich eine Zoomstufe springen.
+    MapView.setDoubleClickZoom(false);
   }
 
   /* ---------- Tastatur ---------- */
@@ -2783,6 +2816,47 @@
     }
   }
 
+  /**
+   * Löscht die gesamte Sammlung und alle Einstellungen.
+   *
+   * Gelöscht wird über Grabsteine statt durch bloßes Leeren: Nur so bleibt
+   * die Löschung auch nach dem nächsten Abgleich bestehen – sonst schiebt
+   * ein anderes Gerät seinen alten Stand wieder herüber.
+   */
+  async function resetEverything() {
+    const zahlen = `${items('stamps').length} Stempelstellen, ` +
+      `${items('parking').length} Parkplätze, ${items('tours').length} geplante ` +
+      `und ${items('tracks').length} abgeschlossene Touren`;
+
+    if (!window.confirm(
+      `Wirklich alles zurücksetzen?\n\nGelöscht werden ${zahlen}, die aktuelle ` +
+      'Planung und sämtliche Einstellungen – über den Abgleich auch auf den ' +
+      'anderen Geräten.\n\nVorher wird eine Sicherung heruntergeladen.'
+    )) return;
+
+    el.reset.disabled = true;
+    downloadBackup();
+
+    // Erst Grabsteine setzen und übertragen, dann lokal aufräumen.
+    Object.entries(STORES).forEach(([name, { key }]) => {
+      state[key] = state[key].map((item) =>
+        (item.deletedAt ? item : Sync.tombstone(item)));
+      persist(name);
+    });
+
+    if (Sync.available) {
+      await runSync();
+    }
+
+    ['wanderplaner.routing', 'wanderplaner.preset', 'wanderplaner.places',
+      'wanderplaner.tab', 'wanderplaner.mode', 'wanderplaner.routestyle',
+      'wanderplaner.library', 'wanderplaner.sheet', 'wanderplaner.stampsopen',
+      'wanderplaner.baselayer'].forEach((key) => localStorage.removeItem(key));
+
+    showStatus('info', 'Alles zurückgesetzt – die Seite wird neu geladen.', 4000);
+    setTimeout(() => window.location.reload(), 1200);
+  }
+
   function updateEngineNote(engine) {
     if (engine === 'brouter') {
       el.engineNote.className = 'engine-note ok';
@@ -2827,10 +2901,11 @@
         // Am Handy verdeckt die offene Blende fast die ganze Karte. Wer
         // dorthin tippt, will die Karte – also erst zuklappen.
         if (dismissSheet()) return;
-        // Im Menümodus verändert ein Klick nichts, sondern fragt erst nach.
+        // Im Menümodus tut ein einfacher Klick bewusst nichts; das Menü
+        // kommt erst auf Doppel- oder Rechtsklick.
         if (state.mode === 'poi') addPoi(latlng);
         else if (state.mode === 'route') addPoint(latlng);
-        else openMapMenu(latlng);
+        else MapView.closeMenu();
       },
       onMapMenu: (latlng) => {
         if (dismissSheet()) return;
@@ -2994,6 +3069,7 @@
       await runSync();
     });
     el.backupBtn.addEventListener('click', downloadBackup);
+    el.reset.addEventListener('click', resetEverything);
     el.restoreBtn.addEventListener('click', () => el.restoreFile.click());
     el.restoreFile.addEventListener('change', () => {
       const file = el.restoreFile.files[0];

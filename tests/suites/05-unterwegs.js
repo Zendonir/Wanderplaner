@@ -140,6 +140,18 @@ module.exports = {
       });
       check.ok(swReady, 'Der Service Worker ist aktiv');
 
+      // Nach einem Update ist die häufigste Verwirrung, dass der Container
+      // schon neu ist, der Browser aber die alte Oberfläche zwischengespeichert
+      // hat. Deshalb steht der Stand der Oberfläche mit in den Einstellungen.
+      await page.reload();
+      await page.waitForSelector('#map.leaflet-container');
+      await page.waitForTimeout(900);
+      check.contains(await page.textContent('#shell-version'), 'Oberfläche',
+        'Der Stand der zwischengespeicherten Oberfläche wird angezeigt');
+      check.ok(await page.locator('#btn-reload-shell').isVisible()
+        || await page.locator('#btn-reload-shell').count() === 1,
+        'Es gibt einen Knopf, der den Zwischenspeicher verwirft');
+
       const apiCached = await page.evaluate(async () => {
         for (const name of await caches.keys()) {
           const cache = await caches.open(name);

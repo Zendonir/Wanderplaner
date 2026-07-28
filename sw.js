@@ -11,7 +11,7 @@
  * Der Datenabgleich (/api/…) wird bewusst nie zwischengespeichert – dort
  * zählt immer der aktuelle Stand.
  */
-const VERSION = 'v14';
+const VERSION = 'v15';
 const SHELL_CACHE = `wanderplaner-shell-${VERSION}`;
 const TILE_CACHE = `wanderplaner-tiles-${VERSION}`;
 const MAX_TILES = 1200;
@@ -150,9 +150,17 @@ self.addEventListener('fetch', (event) => {
   }
 });
 
-// Erlaubt der App, den Kachelspeicher gezielt zu leeren.
+// Erlaubt der App, den Kachelspeicher gezielt zu leeren – und zu erfragen,
+// welcher Stand hier eigentlich ausgeliefert wird. Letzteres hilft bei der
+// häufigsten Verwirrung nach einem Update: Der Container läuft längst in der
+// neuen Fassung, während der Browser noch die alte Oberfläche aus dem
+// Zwischenspeicher zeigt.
 self.addEventListener('message', (event) => {
   if (event.data === 'clear-tiles') {
     caches.delete(TILE_CACHE);
+    return;
+  }
+  if (event.data === 'version' && event.ports && event.ports[0]) {
+    event.ports[0].postMessage(VERSION);
   }
 });

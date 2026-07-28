@@ -1628,6 +1628,11 @@ body {
 .about button:hover:not(:disabled) { background: #eef1ec; }
 .about button:disabled { opacity: 0.45; cursor: not-allowed; }
 
+.shell-version {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
 .about-note {
   flex-basis: 100%;
   font-size: 0.74rem;

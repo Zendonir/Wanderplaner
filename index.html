@@ -423,8 +423,14 @@
           <h3>Über</h3>
           <div class="about">
             <span id="app-version" title="Laufende Version dieser Installation">Version …</span>
+            <span id="shell-version" class="shell-version"
+                  title="Stand der Oberfläche im Browser – kann nach einem Update hinterherhinken"></span>
             <button id="btn-check-update" title="Bei GitHub nachsehen, ob es eine neuere Version gibt">
               Auf Updates prüfen
+            </button>
+            <button id="btn-reload-shell"
+                    title="Zwischenspeicher der Oberfläche verwerfen und neu laden">
+              ⟳ Oberfläche neu laden
             </button>
             <button id="btn-run-update" hidden
                     title="Neues Image ziehen und den Container neu erstellen">

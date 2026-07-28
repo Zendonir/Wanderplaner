@@ -336,7 +336,15 @@ Auf TrueNAS SCALE:
 - Bei *Install via YAML* / Dockge / Portainer: erst **Pull**, dann
   **Re-deploy** bzw. **Recreate**.
 
-Danach im Browser einmal neu laden. Die App bringt einen Service Worker mit,
+Danach im Browser einmal neu laden.
+
+**Alte Oberfläche trotz neuem Container?** Der Service Worker hält die
+Programmdateien zwischengespeichert – das ist der Preis für den
+Offline-Betrieb. In **Einstellungen → Über** steht deshalb neben der Version
+des Containers auch der Stand der Oberfläche im Browser (`Oberfläche v14`).
+Passen die nicht zusammen, hilft der Knopf **„⟳ Oberfläche neu laden"**: Er
+verwirft den zwischengespeicherten Programmstand und lädt neu. Die
+gespeicherten Kartenkacheln bleiben erhalten. Die App bringt einen Service Worker mit,
 der die neue Fassung selbst übernimmt (`skipWaiting`); bleibt trotzdem die
 alte Oberfläche stehen, hilft ein harter Reload (Strg+Umschalt+R) oder – auf
 dem Homescreen-Symbol am Handy – die App einmal ganz schließen.

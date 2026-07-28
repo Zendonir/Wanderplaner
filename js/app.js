@@ -159,6 +159,8 @@
     clustersBtn: document.getElementById('btn-clusters'),
     clusterList: document.getElementById('cluster-list'),
     appVersion: document.getElementById('app-version'),
+    shellVersion: document.getElementById('shell-version'),
+    reloadShell: document.getElementById('btn-reload-shell'),
     checkUpdate: document.getElementById('btn-check-update'),
     runUpdate: document.getElementById('btn-run-update'),
     updateSetup: document.getElementById('update-setup'),
@@ -1825,6 +1827,49 @@
     }
   }
 
+  /**
+   * Fragt den Service Worker, welchen Stand der Oberfläche er ausliefert.
+   *
+   * Nach einem Update ist das die häufigste Verwirrung: Der Container läuft
+   * längst in der neuen Fassung – „Version“ zeigt sie an –, während der
+   * Browser die alte Oberfläche aus dem Zwischenspeicher nimmt. Dann stimmen
+   * die beiden Angaben nicht überein.
+   */
+  async function loadShellVersion() {
+    if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) return;
+    const version = await new Promise((resolve) => {
+      const channel = new MessageChannel();
+      channel.port1.onmessage = (e) => resolve(e.data);
+      navigator.serviceWorker.controller.postMessage('version', [channel.port2]);
+      setTimeout(() => resolve(null), 2000);
+    });
+    if (version) el.shellVersion.textContent = `· Oberfläche ${version}`;
+  }
+
+  /**
+   * Verwirft den zwischengespeicherten Programmstand und lädt neu. Der
+   * Kachelspeicher bleibt erhalten – der ist offline unterwegs wertvoll und
+   * hat mit der Programmversion nichts zu tun.
+   */
+  async function reloadShell() {
+    el.reloadShell.disabled = true;
+    try {
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(registrations.map((r) => r.unregister()));
+      }
+      if (window.caches) {
+        const keys = await caches.keys();
+        await Promise.all(keys
+          .filter((k) => k.startsWith('wanderplaner-shell'))
+          .map((k) => caches.delete(k)));
+      }
+    } catch (err) {
+      console.warn('Zwischenspeicher ließ sich nicht leeren:', err);
+    }
+    window.location.reload();
+  }
+
   /** Vergleicht zwei Versionsangaben nach dem Muster 2.3.0. */
   function compareVersions(a, b) {
     const parse = (v) => String(v).replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
@@ -2905,7 +2950,14 @@
 
     el.checkUpdate.addEventListener('click', checkForUpdate);
     el.runUpdate.addEventListener('click', runUpdate);
+    el.reloadShell.addEventListener('click', reloadShell);
     loadVersion();
+    loadShellVersion();
+    // Beim ersten Aufruf übernimmt der Service Worker erst kurz nach dem
+    // Laden – dann noch einmal nachfragen.
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('controllerchange', loadShellVersion);
+    }
     checkUpdateAbility();
 
     el.libraryToggle.addEventListener('click', toggleLibrary);

@@ -1190,10 +1190,27 @@ body {
 .style-row {
   display: flex;
   align-items: center;
+  /* Der Hinweis zum Router steht unter der Auswahl, nicht daneben. */
+  flex-wrap: wrap;
+  gap: 0.35rem;
 }
 
 .style-row .field-inline > span {
   white-space: nowrap;
+}
+
+.router-note {
+  flex: 1 0 100%;
+  font-size: 0.74rem;
+  line-height: 1.35;
+  color: var(--text-muted);
+  border-left: 3px solid var(--border);
+  padding-left: 0.5rem;
+}
+
+.router-note.warn {
+  color: #8a6100;
+  border-left-color: #d8a13a;
 }
 
 .route-legend {

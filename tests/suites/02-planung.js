@@ -354,6 +354,45 @@ module.exports = {
         surfaceLegend.join(' | '));
       check.ok(surfaceLegend.some((t) => t.includes('Wanderweg') || t.includes('Pfad')),
         'Die Legende nennt Wegarten');
+      check.ok(await page.locator('#router-note').isHidden(),
+        'Solange die Wegedaten da sind, steht kein Hinweis in der Leiste');
+      const surfaceColors = await page.locator('#map path.route-line')
+        .evaluateAll((els) => [...new Set(els.map((e) => e.getAttribute('stroke')))]);
+      check.ok(surfaceColors.length >= 2,
+        'Die Route wird tatsächlich in mehreren Farben gezeichnet',
+        surfaceColors.join(' '));
+      check.ok(!surfaceColors.every((c) => c.toLowerCase() === '#c0392b'),
+        'Und nicht durchgehend in der Farbe der einfarbigen Darstellung');
+
+      /* ---- Ohne BRouter: der Grund muss dastehen ---- */
+      // Genau der Fall aus der Praxis: BRouter fällt aus, OSRM springt ein –
+      // und liefert keine Wegedaten. Bisher stand in der Legende nur, dass
+      // welche fehlen, nicht warum.
+      await page.unroute('**/brouter.de/brouter?**');
+      await page.route('**/brouter.de/brouter?**', (route) => route.abort());
+      await page.click('#btn-clear');
+      await page.waitForTimeout(400);
+      await drawRoute(page);
+      await page.waitForTimeout(1200);
+
+      const routerNote = page.locator('#router-note');
+      check.ok(!(await routerNote.isHidden()),
+        'Fehlen die Wegedaten, steht der Grund neben der Auswahl');
+      const noteText = await routerNote.textContent();
+      check.contains(noteText, 'OSRM', 'Der Hinweis nennt den Ersatzrouter');
+      check.contains(noteText, 'BRouter', 'Und wer eigentlich zuständig wäre');
+      check.contains(await page.textContent('.route-legend'), 'OSRM',
+        'Auch die Legende auf der Karte nennt den Grund');
+
+      // Zurück auf BRouter: der Hinweis muss wieder verschwinden.
+      await page.unroute('**/brouter.de/brouter?**');
+      await stubExternals(page);
+      await page.click('#btn-clear');
+      await page.waitForTimeout(400);
+      await drawRoute(page);
+      await page.waitForTimeout(1200);
+      check.ok(await routerNote.isHidden(),
+        'Mit BRouter verschwindet der Hinweis wieder');
 
       // Die Wahl muss einen Neustart überstehen.
       await page.reload();

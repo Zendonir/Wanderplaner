@@ -21,6 +21,7 @@
     preset: localStorage.getItem('wanderplaner.preset') || 'wander',
     geometry: null,     // [[lng, lat], ...] der berechneten Route
     segments: null,     // Wegabschnitte mit OSM-Tags (nur BRouter)
+    engine: null,       // welcher Router die Strecke berechnet hat
     alternatives: [],   // von BRouter angebotene Varianten
     activeAlternative: 0,
     places: [],         // Fundstellen der Umgebungssuche
@@ -112,6 +113,7 @@
     sacLimit: document.getElementById('rs-sacLimit'),
     allowSteps: document.getElementById('rs-allowSteps'),
     engineNote: document.getElementById('engine-note'),
+    routerNote: document.getElementById('router-note'),
     chartEmpty: document.getElementById('chart-empty'),
     searchForm: document.getElementById('search-form'),
     searchInput: document.getElementById('search-input'),
@@ -412,6 +414,7 @@
     if (state.points.length < 2) {
       state.geometry = null;
       state.segments = null;
+      state.engine = null;
       state.distance = 0;
       state.samples = null;
       state.ascent = null;
@@ -482,6 +485,7 @@
   function applyRoute(route) {
     state.geometry = route.coordinates;
     state.segments = route.segments || null;
+    state.engine = route.engine || null;
     state.elevations = route.elevations || null;
     state.distance = route.distance;
     drawRoute();
@@ -496,13 +500,53 @@
     if (!state.geometry) {
       MapView.renderRoute(null, state.points);
       MapView.renderLegend(null, null, null);
+      updateRouterNote();
       return;
     }
     const styled = RouteStyle.build(
-      state.routeStyle, state.geometry, state.elevations, state.segments
+      state.routeStyle, state.geometry, state.elevations, state.segments, state.engine
     );
     MapView.renderRoute(state.geometry, state.points, styled.sections);
     MapView.renderLegend(styled.legend, styled.note, styled.scale);
+    updateRouterNote();
+  }
+
+  /**
+   * Sagt gleich neben der Auswahl „Darstellung“, woran es liegt, wenn sich
+   * die Route nicht nach Wegbedingungen einfärben lässt.
+   *
+   * Der Hinweis dazu stand bisher nur in der Legende am Kartenrand („keine
+   * Wegedaten“) und – als Nebensatz – im Einstellungsdialog, den man beim
+   * Planen zu hat. Wer die Darstellung umstellt und nichts passieren sieht,
+   * schaut aber genau hier hin.
+   */
+  function updateRouterNote() {
+    const note = el.routerNote;
+    if (!note) return;
+
+    const missing = state.geometry
+      && state.routeStyle === 'surface'
+      && (!state.segments || state.segments.length === 0);
+
+    if (missing) {
+      note.hidden = false;
+      note.className = 'router-note warn';
+      note.textContent = RouteStyle.missingDataReason(state.engine);
+      return;
+    }
+
+    // Auch ohne diese Darstellung ist es gut zu wissen, dass gerade der
+    // Ersatzrouter läuft – er ignoriert sämtliche Routing-Einstellungen.
+    if (state.geometry && state.engine === 'osrm') {
+      note.hidden = false;
+      note.className = 'router-note warn';
+      note.textContent = 'Ersatzrouter OSRM: BRouter war nicht erreichbar. ' +
+        'Die Routing-Einstellungen wirken nicht, und es gibt keine Wegedaten.';
+      return;
+    }
+
+    note.hidden = true;
+    note.textContent = '';
   }
 
   /** Höhen übernehmen (vom Router oder per Dienst) und Anzeige auffrischen. */

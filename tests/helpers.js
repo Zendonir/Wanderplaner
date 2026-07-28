@@ -86,6 +86,12 @@ async function stubExternals(page, options = {}) {
     route.fulfill({ json: brouter ? brouter(request.url(), alt) : defaultRoute(alt) });
   });
 
+  // Der Ersatzrouter. Er liefert nur die nackte Geometrie – keine Höhen und
+  // keine Wegedaten; genau darin liegt der Unterschied zu BRouter.
+  await page.route('**/router.project-osrm.org/**', (route) =>
+    route.fulfill({ json: defaultOsrmRoute() })
+  );
+
   await page.route('**/overpass-api.de/**', (route) => {
     onOverpassRequest();
     route.fulfill({ json: overpass ? overpass() : { elements: [] } });
@@ -99,6 +105,20 @@ async function stubExternals(page, options = {}) {
   await page.route('**/nominatim.openstreetmap.org/**', (route) =>
     route.fulfill({ json: [] })
   );
+}
+
+/**
+ * Antwort des Ersatzrouters OSRM: nur Geometrie und Länge. Keine Höhen,
+ * keine Wegedaten – deshalb lässt sich damit weder nach Steigung noch nach
+ * Wegbedingungen einfärben.
+ */
+function defaultOsrmRoute() {
+  const coordinates = [];
+  for (let i = 0; i <= 20; i++) coordinates.push([10.60, 51.80 + i * 0.0006]);
+  return {
+    code: 'Ok',
+    routes: [{ geometry: { type: 'LineString', coordinates }, distance: 4000 }],
+  };
 }
 
 /**
@@ -230,6 +250,7 @@ module.exports = {
   launchBrowser,
   stubExternals,
   defaultRoute,
+  defaultOsrmRoute,
   defaultWeather,
   writeGpxWaypoints,
   waitForRoute,

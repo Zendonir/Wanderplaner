@@ -49,10 +49,11 @@ const RouteStyle = {
    * @param {Array<[number,number]>} coordinates [lng, lat]
    * @param {?number[]} elevations Höhe je Koordinate
    * @param {?Array} segments Wegabschnitte mit OSM-Tags (aus BRouter)
+   * @param {?string} engine Welcher Router die Strecke berechnet hat
    * @returns {{sections: Array<{coordinates:Array, color:string}>,
    *            legend: Array<{color:string, label:string}>, note: ?string}}
    */
-  build(mode, coordinates, elevations, segments) {
+  build(mode, coordinates, elevations, segments, engine) {
     if (!coordinates || coordinates.length < 2) {
       return { sections: [], legend: [], scale: null, note: null };
     }
@@ -75,7 +76,10 @@ const RouteStyle = {
           sections: this._single(coordinates, this.PLAIN_COLOR),
           legend: [],
           scale: null,
-          note: 'Für diese Route liegen keine Wegedaten vor (nur mit BRouter verfügbar).',
+          // Den Grund nennen, nicht nur die Folge: „keine Wegedaten“ allein
+          // ließ offen, ob die App etwas falsch macht oder schlicht nichts
+          // bekommen hat – und wenn ja, von wem nicht.
+          note: this.missingDataReason(engine),
         };
       }
       return this._bySurface(coordinates, segments);
@@ -89,6 +93,24 @@ const RouteStyle = {
 
   _single(coordinates, color) {
     return [{ coordinates: coordinates.slice(), color }];
+  },
+
+  /**
+   * Erklärt, warum es zu einer Route keine Wegedaten gibt. Die Antwort hängt
+   * daran, welcher Router sie berechnet hat – nur BRouter liefert die
+   * OSM-Merkmale der Wege mit.
+   */
+  missingDataReason(engine) {
+    if (engine === 'osrm') {
+      return 'Diese Route stammt vom Ersatzrouter OSRM, weil BRouter nicht ' +
+        'erreichbar war. OSRM liefert keine Wegedaten – ohne sie lässt sich ' +
+        'die Strecke nicht nach Wegbedingungen einfärben.';
+    }
+    if (engine === 'brouter') {
+      return 'BRouter hat diese Route ohne Wegedaten zurückgegeben. Ein neuer ' +
+        'Versuch (Route einmal neu berechnen lassen) hilft meist.';
+    }
+    return 'Für diese Route liegen keine Wegedaten vor (nur mit BRouter verfügbar).';
   },
 
   /* ---------- Nach Steigung ---------- */

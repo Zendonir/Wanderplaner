@@ -11,7 +11,7 @@
  * Der Datenabgleich (/api/…) wird bewusst nie zwischengespeichert – dort
  * zählt immer der aktuelle Stand.
  */
-const VERSION = 'v23';
+const VERSION = 'v24';
 const SHELL_CACHE = `wanderplaner-shell-${VERSION}`;
 const TILE_CACHE = `wanderplaner-tiles-${VERSION}`;
 const MAX_TILES = 1200;
@@ -55,8 +55,11 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(SHELL_CACHE)
       // Einzeln ablegen: eine fehlende Datei soll nicht die ganze
-      // Installation scheitern lassen.
-      .then((cache) => Promise.allSettled(SHELL.map((url) => cache.add(url))))
+      // Installation scheitern lassen. `cache: 'reload'` sorgt dafür, dass
+      // hier die frischen Dateien vom Server landen und nicht das, was der
+      // Browser noch von der Vorgängerfassung herumliegen hat.
+      .then((cache) => Promise.allSettled(
+        SHELL.map((url) => cache.add(new Request(url, { cache: 'reload' })))))
       .then(() => self.skipWaiting())
   );
 });
@@ -104,7 +107,11 @@ async function cacheFirst(request, cacheName, limit) {
 async function networkFirst(request, cacheName) {
   const cache = await caches.open(cacheName);
   try {
-    const response = await fetch(request);
+    // `cache: 'reload'` übergeht den eigenen Zwischenspeicher des Browsers.
+    // Ohne das holte sich der Browser die Programmdateien nach einem Update
+    // weiter aus seinem alten Bestand, ohne den Server überhaupt zu fragen –
+    // die App lief dann tagelang in der alten Fassung weiter.
+    const response = await fetch(new Request(request, { cache: 'reload' }));
     if (response.ok) await cache.put(request, response.clone());
     return response;
   } catch (err) {

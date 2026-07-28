@@ -49,6 +49,21 @@ function readPackageVersion() {
   }
 }
 
+/**
+ * Liest die Fassung der Oberfläche aus dem Service Worker. Der Browser meldet
+ * dieselbe Angabe aus seinem Zwischenspeicher – stimmen beide nicht überein,
+ * zeigt er noch die alte Oberfläche und die App kann das sagen.
+ */
+function readShellVersion() {
+  try {
+    const source = fs.readFileSync(path.join(PUBLIC_DIR, 'sw.js'), 'utf8');
+    const match = source.match(/const VERSION = '([^']+)'/);
+    return match ? match[1] : null;
+  } catch (err) {
+    return null;
+  }
+}
+
 function emptyStore() {
   const store = { revision: 0, updatedAt: 0 };
   COLLECTIONS.forEach((name) => { store[name] = []; });
@@ -186,6 +201,8 @@ async function handleApi(req, res, url) {
   if (url.pathname === '/api/version') {
     return sendJson(res, 200, {
       version: APP_VERSION,
+      // Beim Update wird die Datei ausgetauscht, darum jedes Mal frisch lesen.
+      shell: readShellVersion(),
       node: process.version,
       startedAt: startedAt.toISOString(),
     });
@@ -251,7 +268,15 @@ async function handleApi(req, res, url) {
   res.end();
 }
 
-function serveStatic(req, res, url) {
+/**
+ * Kennung für eine Datei aus Größe und Änderungszeit. Ändert sich die Datei
+ * beim Update, ändert sich die Kennung – und der Browser holt sie neu.
+ */
+function etagFor(stat) {
+  return `W/"${stat.size.toString(16)}-${stat.mtimeMs.toString(16)}"`;
+}
+
+async function serveStatic(req, res, url) {
   const relative = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
   const filePath = path.join(PUBLIC_DIR, relative);
 
@@ -261,17 +286,43 @@ function serveStatic(req, res, url) {
     return res.end();
   }
 
+  let stat;
+  try {
+    stat = await fsp.stat(filePath);
+    if (!stat.isFile()) throw new Error('Kein reguläres Ziel.');
+  } catch (err) {
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+    return res.end('Nicht gefunden');
+  }
+
+  const ext = path.extname(filePath);
+  const etag = etagFor(stat);
+
+  // Kein Zwischenspeichern ohne Rückfrage: Ein „max-age“ auf den
+  // Programmdateien führte dazu, dass der Browser nach einem Update
+  // stundenlang die alte Oberfläche aus seinem eigenen Speicher nahm –
+  // der Server wurde dabei gar nicht erst gefragt. Mit „no-cache“ fragt er
+  // jedes Mal nach und bekommt bei unveränderter Datei ein knappes 304
+  // zurück, das kostet im Heimnetz nichts.
+  const headers = {
+    'Content-Type': MIME[ext] || 'application/octet-stream',
+    'Cache-Control': 'no-cache',
+    ETag: etag,
+    'Last-Modified': stat.mtime.toUTCString(),
+  };
+
+  if (req.headers['if-none-match'] === etag) {
+    res.writeHead(304, headers);
+    return res.end();
+  }
+
   fs.readFile(filePath, (err, data) => {
     if (err) {
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
       return res.end('Nicht gefunden');
     }
-    const ext = path.extname(filePath);
-    res.writeHead(200, {
-      'Content-Type': MIME[ext] || 'application/octet-stream',
-      // index.html nie cachen, damit Updates sofort ankommen.
-      'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=3600',
-    });
+    res.writeHead(200, { ...headers, 'Content-Length': data.length });
+    if (req.method === 'HEAD') return res.end();
     res.end(data);
   });
 }
@@ -291,7 +342,11 @@ const server = http.createServer((req, res) => {
     res.writeHead(405, { Allow: 'GET, HEAD' });
     return res.end();
   }
-  serveStatic(req, res, url);
+  serveStatic(req, res, url).catch((err) => {
+    console.error('Fehler beim Ausliefern von', url.pathname, err);
+    res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('Interner Fehler');
+  });
 });
 
 const startedAt = new Date();

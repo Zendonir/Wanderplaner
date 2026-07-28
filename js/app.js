@@ -1905,10 +1905,12 @@
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
       state.version = data.version;
+      state.serverShell = data.shell || null;
       el.appVersion.textContent = `Version ${data.version}`;
     } catch (err) {
       // Ohne Server (Datei direkt geöffnet) gibt es keine Versionsauskunft.
       state.version = null;
+      state.serverShell = null;
       el.appVersion.textContent = 'Version unbekannt (kein Server)';
       el.checkUpdate.disabled = true;
     }
@@ -1930,7 +1932,44 @@
       navigator.serviceWorker.controller.postMessage('version', [channel.port2]);
       setTimeout(() => resolve(null), 2000);
     });
+    state.shellVersion = version || null;
     if (version) el.shellVersion.textContent = `· Oberfläche ${version}`;
+    return version;
+  }
+
+  // Damit ein hartnäckiger Zwischenspeicher nicht in eine Endlosschleife aus
+  // Neuladen führt, wird pro Fassung höchstens einmal automatisch aufgeräumt.
+  const SHELL_FIX_KEY = 'wanderplaner.shellfix';
+
+  /**
+   * Vergleicht die Oberfläche im Browser mit der, die der Server ausliefert.
+   *
+   * Genau hier ist bisher der Ärger nach jedem Update entstanden: Der
+   * Container lief längst neu, aber der Browser zeigte weiter die alte
+   * Oberfläche – und man musste selbst darauf kommen, den Zwischenspeicher zu
+   * leeren. Stimmen die beiden Angaben nicht überein, räumt die App einmal
+   * selbst auf; hilft das nicht, sagt sie es wenigstens deutlich.
+   */
+  async function checkShellFreshness() {
+    await Promise.all([loadVersion(), loadShellVersion()]);
+    const server = state.serverShell;
+    const running = state.shellVersion;
+    if (!server || !running || server === running) return;
+
+    if (sessionStorage.getItem(SHELL_FIX_KEY) === server) {
+      // Schon versucht – dann nicht noch einmal neu laden, sondern sagen,
+      // was los ist.
+      el.shellVersion.textContent = `· Oberfläche ${running} (veraltet, Server: ${server})`;
+      showStatus('warn',
+        `Der Browser zeigt noch die alte Oberfläche (${running} statt ${server}). ` +
+        'Bitte in den Einstellungen unter „Über“ auf „⟳ Oberfläche neu laden“ tippen.',
+        0);
+      return;
+    }
+
+    sessionStorage.setItem(SHELL_FIX_KEY, server);
+    showStatus('info', 'Neue Fassung gefunden – die Oberfläche wird einmal neu geladen …', 0);
+    await reloadShell();
   }
 
   /**
@@ -1953,6 +1992,17 @@
       }
     } catch (err) {
       console.warn('Zwischenspeicher ließ sich nicht leeren:', err);
+    }
+
+    // Der Service Worker ist nur die eine Hälfte. Die andere ist der
+    // Zwischenspeicher des Browsers selbst – der hält die Programmdateien
+    // sonst weiter fest, und nach dem Neuladen stünde wieder die alte
+    // Oberfläche da. Einmal ausdrücklich neu holen räumt auch den auf.
+    try {
+      await Promise.all(['index.html', 'js/app.js', 'css/style.css', 'sw.js']
+        .map((file) => fetch(file, { cache: 'reload' }).catch(() => null)));
+    } catch (err) {
+      console.warn('Programmdateien ließen sich nicht neu holen:', err);
     }
     window.location.reload();
   }
@@ -3112,10 +3162,11 @@
     el.checkUpdate.addEventListener('click', checkForUpdate);
     el.runUpdate.addEventListener('click', runUpdate);
     el.reloadShell.addEventListener('click', reloadShell);
-    loadVersion();
-    loadShellVersion();
     // Beim ersten Aufruf übernimmt der Service Worker erst kurz nach dem
-    // Laden – dann noch einmal nachfragen.
+    // Laden – deshalb erst nach kurzer Verzögerung vergleichen, sonst meldet
+    // er noch gar keine Fassung.
+    loadVersion();
+    setTimeout(checkShellFreshness, 1500);
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.addEventListener('controllerchange', loadShellVersion);
     }

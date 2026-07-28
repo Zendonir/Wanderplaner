@@ -152,6 +152,41 @@ module.exports = {
         return res.ok ? await res.json() : null;
       });
       check.ok(api && api.version, 'Der Server meldet seine Version über /api/version');
+      check.ok(api && /^v\d+$/.test(String(api.shell)),
+        'Und dazu, welche Fassung der Oberfläche er ausliefert', api && api.shell);
+
+      /* ---- Zwischenspeicher: Updates müssen ankommen ---- */
+      // Die Programmdateien dürfen nicht mit einer Haltbarkeit ausgeliefert
+      // werden. Sonst nimmt der Browser sie nach einem Update stundenlang aus
+      // seinem eigenen Speicher und zeigt weiter die alte Oberfläche.
+      const headers = await page.evaluate(async () => {
+        const out = {};
+        for (const file of ['js/app.js', 'css/style.css', 'index.html', 'sw.js']) {
+          const res = await fetch(file, { cache: 'reload' });
+          out[file] = {
+            cache: res.headers.get('cache-control'),
+            etag: res.headers.get('etag'),
+          };
+        }
+        return out;
+      });
+      Object.entries(headers).forEach(([file, head]) => {
+        check.contains(head.cache || '', 'no-cache',
+          `${file} wird ohne Haltbarkeit ausgeliefert`, head.cache);
+        check.ok(!!head.etag, `${file} trägt eine Kennung zum Nachfragen`, head.etag);
+      });
+
+      // Unveränderte Datei mit derselben Kennung: knappes 304 statt erneutem
+      // Volltext – damit kostet das ständige Nachfragen nichts.
+      const revalidate = await page.evaluate(async () => {
+        const first = await fetch('js/app.js', { cache: 'reload' });
+        const etag = first.headers.get('etag');
+        const again = await fetch('js/app.js', {
+          cache: 'no-store', headers: { 'If-None-Match': etag },
+        });
+        return again.status;
+      });
+      check.equal(revalidate, 304, 'Unveränderte Dateien beantwortet der Server mit 304');
 
       // Update-Prüfung bei nicht erreichbarem GitHub: verständliche Meldung
       // statt stiller Fehler.

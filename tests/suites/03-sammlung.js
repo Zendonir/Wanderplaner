@@ -187,6 +187,19 @@ module.exports = {
         await page.locator('#track-list li .item-label').first().textContent(),
         'Brocken 2024', 'Der Name aus der GPX-Datei wird übernommen');
 
+      // Zweizeilig: oben nur der Name, darunter das Datum und die Knöpfe.
+      check.equal(
+        await page.locator('#track-list li .item-label').first().textContent(),
+        'Brocken 2024', 'In der ersten Zeile steht nur der Name');
+      const trackDate = await page.locator('#track-list li .tour-date').first().textContent();
+      check.contains(trackDate, 'Abgeschlossen',
+        'Die zweite Zeile nennt das Datum der abgeschlossenen Tour');
+      check.ok(/\d{2}\.\d{2}\.\d{4}/.test(trackDate),
+        'Und zwar als lesbares Datum', trackDate);
+      check.equal(
+        await page.locator('#track-list li .tour-meta .item-action').count(), 2,
+        'Die Knöpfe stehen in derselben zweiten Zeile');
+
       /* ---- Hinterlegte Tour als Planung übernehmen ---- */
       await page.locator('#track-list li .item-action').first().click();
       await page.waitForTimeout(1800);
@@ -229,6 +242,25 @@ module.exports = {
         'Gespeicherte Planungen heißen „Geplante Touren“');
       check.contains(await page.textContent('#section-tracks h2'), 'Abgeschlossene Touren',
         'Gelaufene Strecken heißen „Abgeschlossene Touren“');
+
+      check.equal(await page.locator('#tour-list li .item-label').first().textContent(),
+        'Testtour', 'Auch geplante Touren zeigen oben nur den Namen');
+      check.contains(await page.locator('#tour-list li .tour-date').first().textContent(),
+        'Erstellt', 'Bei geplanten Touren steht darunter das Erstelldatum');
+
+      // Die Liste der abgeschlossenen Touren darf mehr zeigen als die
+      // übrigen Listen – dort sammelt sich mit der Zeit am meisten an.
+      const heights = await page.evaluate(() => ({
+        tracks: document.getElementById('track-list').getBoundingClientRect().height,
+        maxTracks: parseFloat(getComputedStyle(document.getElementById('track-list')).maxHeight),
+        maxTours: parseFloat(getComputedStyle(document.getElementById('tour-list')).maxHeight),
+      }));
+      check.ok(heights.maxTracks > 220,
+        'Die abgeschlossenen Touren bekommen mehr Platz als zuvor',
+        `${heights.maxTracks}px`);
+      check.ok(heights.maxTracks > heights.maxTours,
+        'Und mehr als die geplanten Touren',
+        `${heights.maxTracks}px gegen ${heights.maxTours}px`);
 
       // Geplante Touren sind auf der Karte zu sehen, damit man sie im
       // Verhältnis zu den abgeschlossenen einordnen kann.

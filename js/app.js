@@ -1095,6 +1095,22 @@
 
   /* ---------- Hinterlegte (abgeschlossene) Touren ---------- */
 
+  /**
+   * Eine Tourenzeile besteht aus zwei Zeilen: oben der Name, darunter links
+   * das Datum und rechts die Knöpfe. Die beiden Hüllen entstehen hier, damit
+   * geplante und abgeschlossene Touren gleich aussehen.
+   */
+  function tourRow() {
+    const head = document.createElement('div');
+    head.className = 'tour-head';
+    const meta = document.createElement('div');
+    meta.className = 'tour-meta';
+    const date = document.createElement('span');
+    date.className = 'tour-date';
+    meta.appendChild(date);
+    return { head, meta, date };
+  }
+
   function renderTrackList() {
     el.trackList.innerHTML = '';
     const tracks = items('tracks');
@@ -1126,10 +1142,15 @@
 
       const label = document.createElement('span');
       label.className = 'item-label';
-      label.textContent = `${track.name} · ${Utils.formatDistance(track.length)}`;
+      label.textContent = track.name;
       label.title = 'Auf der Karte zeigen · Doppelklick zum Umbenennen';
       label.addEventListener('click', () => MapView.fitTo(Tracks.toLatLngs(track)));
       label.addEventListener('dblclick', () => renameTrack(track.id));
+
+      const { head, meta, date } = tourRow();
+      const day = Tours.formatSavedAt(track.date);
+      date.textContent = [day ? `Abgeschlossen ${day}` : 'Abgeschlossen',
+        Utils.formatDistance(track.length)].join(' · ');
 
       const adoptBtn = document.createElement('button');
       adoptBtn.className = 'item-action';
@@ -1149,7 +1170,9 @@
       deleteBtn.title = 'Hinterlegte Tour löschen';
       deleteBtn.addEventListener('click', () => deleteTrack(track.id));
 
-      li.append(visible, swatch, label, adoptBtn, renameBtn, deleteBtn);
+      head.append(visible, swatch, label);
+      meta.append(adoptBtn, renameBtn, deleteBtn);
+      li.append(head, meta);
       el.trackList.appendChild(li);
     });
   }
@@ -1267,10 +1290,15 @@
 
       const label = document.createElement('span');
       label.className = 'item-label';
-      const distance = tour.distance ? ` · ${Utils.formatDistance(tour.distance)}` : '';
-      label.textContent = `${tour.name}${distance}`;
-      label.title = `Geplant am ${Tours.formatSavedAt(tour.savedAt)} · klicken zum Bearbeiten`;
+      label.textContent = tour.name;
+      label.title = 'Klicken zum Bearbeiten';
       label.addEventListener('click', () => loadTour(tour.id));
+
+      const { head, meta, date } = tourRow();
+      const day = Tours.formatSavedAt(tour.savedAt);
+      date.textContent = [day ? `Erstellt ${day}` : 'Erstellt',
+        tour.distance ? Utils.formatDistance(tour.distance) : null]
+        .filter(Boolean).join(' · ');
 
       const doneBtn = document.createElement('button');
       doneBtn.className = 'item-action';
@@ -1290,7 +1318,9 @@
       deleteBtn.title = 'Geplante Tour löschen';
       deleteBtn.addEventListener('click', () => deleteTour(tour.id));
 
-      li.append(visible, swatch, label, doneBtn, renameBtn, deleteBtn);
+      head.append(visible, swatch, label);
+      meta.append(doneBtn, renameBtn, deleteBtn);
+      li.append(head, meta);
       el.tourList.appendChild(li);
     });
   }

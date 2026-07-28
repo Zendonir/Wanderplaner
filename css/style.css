@@ -1919,6 +1919,17 @@ body {
   overflow-y: auto;
 }
 
+/* Die beiden Tourenlisten sind das Herzstück der linken Leiste und dürfen
+   deutlich mehr Platz einnehmen – die abgeschlossenen Touren am meisten,
+   weil dort mit der Zeit die längste Sammlung entsteht. */
+.tour-list {
+  max-height: min(38vh, 380px);
+}
+
+.track-list {
+  max-height: min(52vh, 620px);
+}
+
 .parking-list li,
 .track-list li,
 .tour-list li {
@@ -1930,6 +1941,49 @@ body {
   border-radius: 6px;
   background: var(--bg);
   font-size: 0.82rem;
+}
+
+/* Touren stehen zweizeilig: oben der Name, darunter links das Datum und
+   rechts die Knöpfe. So bleibt der Name auch bei schmaler Leiste lesbar. */
+.track-list li,
+.tour-list li {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.2rem;
+}
+
+.tour-head {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.tour-head .item-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.tour-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  /* Bündig unter dem Namen, also um Kästchen und Farbfeld eingerückt. */
+  padding-left: 1.75rem;
+}
+
+.tour-date {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: 0.75rem;
 }
 
 .parking-list .item-label,

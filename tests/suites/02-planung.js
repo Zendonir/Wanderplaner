@@ -365,6 +365,32 @@ module.exports = {
       check.ok(!surfaceColors.every((c) => c.toLowerCase() === '#c0392b'),
         'Und nicht durchgehend in der Farbe der einfarbigen Darstellung');
 
+      /* ---- Rundkurs: Wegedaten dürfen nicht verloren gehen ---- */
+      // Hin- und Rückweg werden zu einer Strecke zusammengesetzt. Die
+      // Wegedaten beider Teile blieben dabei liegen – ein Rundkurs hatte
+      // deshalb weder Einfärbung noch Aufschlüsselung noch Warnliste,
+      // während dieselbe Strecke ohne Rundkurs alles hatte.
+      await page.check('#opt-roundtrip');
+      await page.waitForTimeout(1800);
+      check.ok(await page.locator('#router-note').isHidden(),
+        'Auch der Rundkurs bringt Wegedaten mit');
+      const roundLegend = await page.locator('.route-legend .legend-row').allTextContents();
+      check.ok(roundLegend.length >= 2,
+        'Der Rundkurs wird nach Wegbedingungen eingefärbt',
+        roundLegend.join(' | '));
+
+      await page.click('.tab[data-tab=analyse]');
+      await page.waitForTimeout(600);
+      check.ok(await page.locator('#section-waytypes').isVisible(),
+        'Und die Aufschlüsselung bleibt gefüllt');
+      check.contains(
+        (await page.locator('.waytype-legend li').allTextContents()).join(' | '),
+        'Wanderweg', 'Mit denselben Wegarten wie sonst');
+
+      await page.click('.tab[data-tab=planung]');
+      await page.uncheck('#opt-roundtrip');
+      await page.waitForTimeout(1600);
+
       /* ---- Ohne BRouter: der Grund muss dastehen ---- */
       // Genau der Fall aus der Praxis: BRouter fällt aus, OSRM springt ein –
       // und liefert keine Wegedaten. Bisher stand in der Legende nur, dass

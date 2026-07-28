@@ -207,9 +207,18 @@ const Routing = {
         ? outbound.elevations.concat(inbound.elevations.slice(1))
         : null;
 
+    // Die Wegedaten beider Teilstrecken gehören zusammengehängt wie die
+    // Geometrie. Ohne das hatte ein Rundkurs überhaupt keine – und damit
+    // weder Einfärbung nach Wegbedingungen noch Aufschlüsselung noch
+    // Warnliste, während dieselbe Strecke als Hin- und Rückweg alles hatte.
+    const segments = outbound.segments || inbound.segments
+      ? (outbound.segments || []).concat(inbound.segments || [])
+      : null;
+
     return {
       coordinates,
       elevations,
+      segments,
       distance: outbound.distance + inbound.distance,
       engine: 'brouter',
       warning: sameWayBack

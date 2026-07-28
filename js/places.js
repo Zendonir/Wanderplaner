@@ -10,6 +10,36 @@
 const PointStore = {
   DUPLICATE_RADIUS_M: 30,
 
+  // Bis hierhin gelten zwei Stellen als dieselbe, wenn ein Name den anderen
+  // enthält. Dieselbe Stempelstelle steht in verschiedenen Quellen gern
+  // einmal als „HWN143 Köte Schindelkopf“ und einmal als „Köte
+  // Schindelkopf“, dazu mit leicht abweichenden Koordinaten.
+  NEAR_NAME_RADIUS_M: 250,
+
+  /** Namen vergleichbar machen: Groß-/Kleinschreibung, Zeichensetzung, Leerraum. */
+  normalizeName(name) {
+    return String(name || '').toLowerCase().replace(/[^a-z0-9äöüß]/g, '');
+  },
+
+  /**
+   * Beschreiben zwei Einträge dieselbe Stelle?
+   */
+  sameSpot(a, b) {
+    const left = this.normalizeName(a.name);
+    const right = this.normalizeName(b.name);
+    if (left && right && left === right) return true;
+
+    const distance = Utils.haversine(a, b);
+    if (distance < this.DUPLICATE_RADIUS_M) return true;
+
+    // Ein Name steckt im anderen und die Stellen liegen nah beieinander.
+    if (left && right && distance < this.NEAR_NAME_RADIUS_M
+      && (left.includes(right) || right.includes(left))) {
+      return true;
+    }
+    return false;
+  },
+
   /**
    * Liest alle <wpt>-Einträge aus einer GPX-Datei.
    * @returns {Array<{lat:number, lng:number, name:string, note:string}>}
@@ -84,10 +114,7 @@ const PointStore = {
           // Nur gegen sichtbare Einträge prüfen: ein früher gelöschter Eintrag
           // soll durch erneuten Import zurückkommen können.
           const duplicate = items.some(
-            (s) =>
-              !s.deletedAt &&
-              ((w.name && s.name === w.name) ||
-                Utils.haversine(s, w) < PointStore.DUPLICATE_RADIUS_M)
+            (s) => !s.deletedAt && PointStore.sameSpot(s, w)
           );
           if (duplicate) {
             skipped++;
@@ -106,13 +133,8 @@ const PointStore = {
         }
         return { items, added, skipped };
       },
-      /**
-       * Beschreiben zwei Einträge dieselbe Stelle? Gleicher Name oder
-       * praktisch dieselben Koordinaten.
-       */
       sameSpot(a, b) {
-        if (a.name && b.name && a.name === b.name) return true;
-        return Utils.haversine(a, b) < PointStore.DUPLICATE_RADIUS_M;
+        return PointStore.sameSpot(a, b);
       },
 
       /**

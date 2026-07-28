@@ -417,6 +417,16 @@
               <input type="file" id="restore-file" accept=".json,application/json" hidden>
             </div>
           </div>
+          <div class="cleanup-row">
+            <button id="btn-dedupe"
+                    title="Stempelstellen und Parkplätze zusammenfassen, die doppelt vorliegen">
+              ⧉ Doppelte zusammenführen
+            </button>
+            <p class="hint">Findet Einträge, die dieselbe Stelle beschreiben –
+              etwa weil dieselbe GPX-Datei auf zwei Geräten importiert wurde.
+              Abgehakte Stempel und Notizen bleiben erhalten.</p>
+          </div>
+
           <div class="danger-zone">
             <button id="btn-reset" class="danger-btn"
                     title="Sammlung und Einstellungen vollständig löschen">

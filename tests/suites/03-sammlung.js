@@ -266,6 +266,58 @@ module.exports = {
       await page.keyboard.press('Escape');
       await page.waitForTimeout(200);
 
+      /* ---- Doppelte auf Knopfdruck zusammenführen ---- */
+      // Nachgestellt: dieselben Stellen ein zweites Mal, mit anderen ids und
+      // leicht abweichendem Namen – so wie es beim Import auf einem zweiten
+      // Gerät entsteht.
+      await page.evaluate(() => {
+        const raw = JSON.parse(localStorage.getItem('wanderplaner.stempelstellen'));
+        const kopien = raw.items.filter((s) => !s.deletedAt).map((s) => ({
+          ...s,
+          id: `zweitgeraet-${s.id}`,
+          name: `HWN99 ${s.name}`,
+          lat: s.lat + 0.0004,
+          updatedAt: Date.now(),
+          collected: false,
+        }));
+        raw.items = raw.items.concat(kopien);
+        localStorage.setItem('wanderplaner.stempelstellen', JSON.stringify(raw));
+      });
+      await page.reload();
+      await page.waitForSelector('#map.leaflet-container');
+      await page.waitForTimeout(1200);
+
+      // Schon beim Start räumt die App auf – niemand soll erst einen Knopf
+      // suchen müssen. Geprüft wird das Ergebnis, nicht die Meldung: Die
+      // Statuszeile ist flüchtig und für eine Zusicherung zu wackelig.
+      await openStamps(page);
+      check.equal(await page.locator('#stamp-list li:not(.list-empty)').count(), 3,
+        'Beim Start werden Dubletten von selbst zusammengefasst');
+      const gespeichert = await page.evaluate(() => {
+        const raw = JSON.parse(localStorage.getItem('wanderplaner.stempelstellen'));
+        return {
+          sichtbar: raw.items.filter((s) => !s.deletedAt).length,
+          gräber: raw.items.filter((s) => s.deletedAt).length,
+        };
+      });
+      check.equal(gespeichert.sichtbar, 3, 'Auch im Speicher bleiben drei übrig');
+      check.ok(gespeichert.gräber >= 3,
+        'Die Dubletten bleiben als Grabsteine liegen',
+        `${gespeichert.gräber} Grabsteine`);
+      check.contains(await page.textContent('#stamp-counter'), '1 von 3',
+        'Der Sammelstand übersteht das Zusammenführen');
+
+      // Der Knopf sagt auch dann etwas, wenn nichts zu tun war – sonst
+      // weiß niemand, ob überhaupt gesucht wurde.
+      await openSettings(page);
+      await page.click('#btn-dedupe');
+      await page.waitForTimeout(600);
+      check.contains(await page.textContent('#status'), 'Keine Dubletten',
+        'Ohne Fund sagt der Knopf das ausdrücklich');
+      check.contains(await page.textContent('#status'), '3 Stempelstellen',
+        'Und nennt, wie viel geprüft wurde');
+      await page.keyboard.press('Escape');
+
       /* ---- Alles übersteht einen Neustart der Seite ---- */
       await page.reload();
       await page.waitForSelector('#map.leaflet-container');

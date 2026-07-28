@@ -1676,6 +1676,24 @@ body {
   user-select: all;
 }
 
+/* ---------- Doppelte zusammenführen ---------- */
+
+.cleanup-row {
+  margin-top: 0.7rem;
+}
+
+.cleanup-row button {
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.cleanup-row button:hover:not(:disabled) { background: #eef1ec; }
+.cleanup-row .hint { margin-top: 0.35rem; }
+
 /* ---------- Alles zurücksetzen ---------- */
 
 .danger-zone {
@@ -2377,7 +2395,8 @@ body {
   }
 
   /* Ein Knopf, der alles löscht, darf nicht wie ein Beipackzettel aussehen. */
-  .danger-btn {
+  .danger-btn,
+  .cleanup-row button {
     width: 100%;
     padding: 0.6rem;
     font-size: 0.9rem;

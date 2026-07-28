@@ -127,6 +127,7 @@
     restoreBtn: document.getElementById('btn-restore'),
     restoreFile: document.getElementById('restore-file'),
     reset: document.getElementById('btn-reset'),
+    dedupe: document.getElementById('btn-dedupe'),
     startTime: document.getElementById('start-time'),
     nowBtn: document.getElementById('btn-now'),
     daylightNote: document.getElementById('daylight-note'),
@@ -230,7 +231,7 @@
    * verschiedene ids – beim ersten gemeinsamen Abgleich ist dann alles
    * doppelt da. Zusammengefasst wird nach Name und Lage.
    */
-  function removeDuplicates() {
+  function removeDuplicates(announce = false) {
     let merged = 0;
     ['stamps', 'parking'].forEach((name) => {
       const { store, key } = STORES[name];
@@ -246,9 +247,19 @@
       // Die Grabsteine müssen zu den anderen Geräten, sonst kommen die
       // Dubletten beim nächsten Abgleich zurück.
       scheduleSync();
+      renderAll();
       showStatus('info',
         `${merged} doppelte Einträge zusammengefasst – abgehakte Stempel und ` +
         'Notizen bleiben dabei erhalten.', 9000);
+    } else if (announce) {
+      // Auf Knopfdruck auch dann etwas sagen, wenn nichts zu tun war –
+      // sonst weiß niemand, ob überhaupt gesucht wurde.
+      const stempel = items('stamps').length;
+      const parkplaetze = items('parking').length;
+      showStatus('info',
+        'Keine Dubletten gefunden. Geprüft wurden ' +
+        `${stempel} ${stempel === 1 ? 'Stempelstelle' : 'Stempelstellen'} und ` +
+        `${parkplaetze} ${parkplaetze === 1 ? 'Parkplatz' : 'Parkplätze'}.`, 8000);
     }
     return merged;
   }
@@ -2835,17 +2846,37 @@
     )) return;
 
     el.reset.disabled = true;
-    downloadBackup();
 
-    // Erst Grabsteine setzen und übertragen, dann lokal aufräumen.
-    Object.entries(STORES).forEach(([name, { key }]) => {
-      state[key] = state[key].map((item) =>
-        (item.deletedAt ? item : Sync.tombstone(item)));
-      persist(name);
-    });
+    // Die Sicherung darf das Zurücksetzen nicht aufhalten: Auf dem iPhone
+    // scheitert ein Datei-Download in der Homescreen-App unter Umständen,
+    // und ohne diese Klammer bräche danach die ganze Aktion ab – von außen
+    // sähe es aus, als hätte der Knopf nichts getan.
+    try {
+      downloadBackup();
+    } catch (err) {
+      console.warn('Sicherung ließ sich nicht herunterladen:', err);
+      showStatus('warn',
+        'Die Sicherung ließ sich nicht herunterladen – es wird trotzdem ' +
+        'zurückgesetzt.', 6000);
+    }
 
-    if (Sync.available) {
-      await runSync();
+    try {
+      // Erst Grabsteine setzen und übertragen, dann lokal aufräumen.
+      Object.entries(STORES).forEach(([name, { key }]) => {
+        state[key] = state[key].map((item) =>
+          (item.deletedAt ? item : Sync.tombstone(item)));
+        persist(name);
+      });
+
+      if (Sync.available) {
+        await runSync();
+      }
+    } catch (err) {
+      console.warn('Zurücksetzen unvollständig:', err);
+      showStatus('error',
+        `Zurücksetzen fehlgeschlagen: ${err.message}. Bitte erneut versuchen.`);
+      el.reset.disabled = false;
+      return;
     }
 
     ['wanderplaner.routing', 'wanderplaner.preset', 'wanderplaner.places',
@@ -3069,6 +3100,7 @@
       await runSync();
     });
     el.backupBtn.addEventListener('click', downloadBackup);
+    el.dedupe.addEventListener('click', () => removeDuplicates(true));
     el.reset.addEventListener('click', resetEverything);
     el.restoreBtn.addEventListener('click', () => el.restoreFile.click());
     el.restoreFile.addEventListener('change', () => {
@@ -3076,6 +3108,10 @@
       if (file) restoreBackup(file);
       el.restoreFile.value = '';
     });
+
+    // Dubletten aus früheren Abgleichen liegen schon im Speicher – nicht
+    // erst auf den nächsten Abgleich warten.
+    removeDuplicates();
 
     renderAll();
     updateStats();

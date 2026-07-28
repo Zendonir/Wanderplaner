@@ -643,13 +643,19 @@ auf zwei Geräten importiert hat – etwa weil der Abgleich damals noch nicht
 lief –, hat für jede Stelle zwei verschiedene `id`s. Beim ersten gemeinsamen
 Abgleich taucht dann alles doppelt auf.
 
-Die App räumt das nach jedem Abgleich selbst auf: Einträge mit gleichem Namen
-oder praktisch gleicher Lage (unter 30 m) werden zusammengefasst. Dabei
+Die App räumt das beim Start und nach jedem Abgleich selbst auf: Einträge
+werden zusammengefasst, wenn ihr Name übereinstimmt (Groß-/Kleinschreibung und
+Zeichensetzung zählen nicht), wenn sie praktisch an derselben Stelle liegen
+(unter 30 m) oder wenn ein Name im anderen steckt und die Stellen weniger als
+250 m auseinanderliegen – letzteres für Fälle wie „HWN143 Köte Schindelkopf“
+gegenüber „Köte Schindelkopf“. Dabei
 gewinnt der informationsreichere Eintrag – ein abgehakter Stempel schlägt
 einen offenen –, und Notiz wie Abhak-Datum des anderen ziehen mit um. Der
 unterlegene Eintrag bleibt als Markierung erhalten, damit ihn das nächste
 Gerät nicht zurückholt. Wie viele zusammengefasst wurden, steht kurz in der
-Statuszeile.
+Statuszeile. Von Hand anstoßen lässt es sich über **Einstellungen → Abgleich
+und Sicherung → ⧉ Doppelte zusammenführen**; der Knopf meldet auch, wenn er
+nichts gefunden hat, samt Zahl der geprüften Einträge.
 
 ### Alles zurücksetzen
 

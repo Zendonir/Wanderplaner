@@ -17,12 +17,46 @@
  * Alle Aufrufe laufen clientseitig im Browser.
  */
 const Routing = {
-  BROUTER_URL: 'https://brouter.de/brouter',
-  BROUTER_PROFILE_URL: 'https://brouter.de/brouter/profile',
+  PUBLIC_BROUTER: 'https://brouter.de/brouter',
   OSRM_URL: 'https://router.project-osrm.org/route/v1/foot/',
+
+  // Ein eigener BRouter kann unter einer anderen Adresse laufen – etwa als
+  // Container im Heimnetz. Dann hängt die Planung nicht mehr am öffentlichen
+  // Dienst und funktioniert auch ohne Internet, solange man im eigenen Netz
+  // ist. Leer heißt: der öffentliche Dienst.
+  _base: null,
+
+  /** Adresse des BRouter-Dienstes, ohne abschließenden Schrägstrich. */
+  base() {
+    return (this._base || this.PUBLIC_BROUTER).replace(/\/+$/, '');
+  },
+
+  /** Setzt die Adresse; leer stellt auf den öffentlichen Dienst zurück. */
+  setBase(url) {
+    const trimmed = String(url || '').trim();
+    this._base = trimmed || null;
+    // Die Profil-ID gilt nur auf dem Server, der sie vergeben hat.
+    this._profileCache = { text: null, id: null };
+    this._uploadUnsupported = false;
+  },
+
+  /** Läuft die Planung über einen eigenen Dienst? */
+  isCustom() {
+    return this.base() !== this.PUBLIC_BROUTER;
+  },
+
+  profileUrl() {
+    return `${this.base()}/profile`;
+  },
 
   /** Zuletzt hochgeladenes Profil, damit nicht bei jeder Änderung neu geladen wird. */
   _profileCache: { text: null, id: null },
+
+  // Manche eigenen Aufsetzungen nehmen keine Profile entgegen. Dann wird
+  // einmal darauf hingewiesen und fortan das mitgelieferte Wanderprofil
+  // benutzt, statt es bei jeder Berechnung erneut zu versuchen.
+  _uploadUnsupported: false,
+  FALLBACK_PROFILE: 'hiking-beta',
 
   /**
    * Lädt den Profiltext zu BRouter hoch und liefert die Profil-ID.
@@ -33,7 +67,7 @@ const Routing = {
       return this._profileCache.id;
     }
     const response = await Utils.fetchWithTimeout(
-      this.BROUTER_PROFILE_URL,
+      this.profileUrl(),
       {
         method: 'POST',
         // text/plain vermeidet einen CORS-Preflight.
@@ -49,6 +83,69 @@ const Routing = {
 
     this._profileCache = { text: profileText, id: data.profileid };
     return data.profileid;
+  },
+
+  /**
+   * Besorgt die Profil-ID für eine Berechnung.
+   *
+   * Nimmt der Dienst keine eigenen Profile entgegen – bei selbst betriebenen
+   * Aufsetzungen kommt das vor –, wird auf das mitgelieferte Wanderprofil
+   * ausgewichen. Das ist deutlich besser als gar keine Route; dass die
+   * eigenen Gewichtungen dann nicht wirken, meldet die App.
+   */
+  async _profileFor(profileText) {
+    if (this._uploadUnsupported) return this.FALLBACK_PROFILE;
+    try {
+      return await this._uploadProfile(profileText);
+    } catch (err) {
+      if (!this.isCustom()) throw err;
+      console.warn('Eigener BRouter nimmt keine Profile an:', err);
+      this._uploadUnsupported = true;
+      return this.FALLBACK_PROFILE;
+    }
+  },
+
+  /**
+   * Prüft eine Adresse: Antwortet dort ein BRouter, und nimmt er eigene
+   * Profile entgegen? Beides ohne eine Route zu berechnen.
+   * @returns {Promise<{ok:boolean, profiles:boolean, detail:string}>}
+   */
+  async testServer(url) {
+    const base = String(url || '').trim().replace(/\/+$/, '') || this.PUBLIC_BROUTER;
+    // Eine absichtlich unvollständige Anfrage: Ein BRouter antwortet darauf
+    // mit einer Fehlermeldung, etwas anderes mit gar nichts oder mit HTML.
+    try {
+      const response = await Utils.fetchWithTimeout(`${base}?lonlats=&format=geojson`, {}, 15000);
+      const text = (await response.text()).slice(0, 300);
+      const looksLikeBRouter = /lonlat|profile|brouter|datafile|position/i.test(text)
+        || response.ok;
+      if (!looksLikeBRouter) {
+        return { ok: false, profiles: false, detail: 'Dort antwortet kein BRouter.' };
+      }
+    } catch (err) {
+      return { ok: false, profiles: false, detail: 'Nicht erreichbar.' };
+    }
+
+    let profiles = false;
+    try {
+      const probe = await Utils.fetchWithTimeout(`${base}/profile`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: '# Test\nassign validForFoot 1\n',
+      }, 15000);
+      profiles = probe.ok;
+    } catch (err) {
+      profiles = false;
+    }
+
+    return {
+      ok: true,
+      profiles,
+      detail: profiles
+        ? 'Erreichbar, eigene Profile werden angenommen.'
+        : 'Erreichbar, nimmt aber keine eigenen Profile an – die ' +
+          'Routing-Einstellungen wirken dort nicht.',
+    };
   },
 
   /**
@@ -198,13 +295,13 @@ const Routing = {
 
   async _viaBRouter(points, settings, nogos = null, alternativeIdx = 0) {
     const profileText = Profiles.build(settings);
-    const profileId = await this._uploadProfile(profileText);
+    const profileId = await this._profileFor(profileText);
 
     const lonlats = points
       .map((p) => `${p.lng.toFixed(6)},${p.lat.toFixed(6)}`)
       .join('|');
     let url =
-      `${this.BROUTER_URL}?lonlats=${lonlats}` +
+      `${this.base()}?lonlats=${lonlats}` +
       `&profile=${encodeURIComponent(profileId)}` +
       `&alternativeidx=${alternativeIdx}&format=geojson`;
 

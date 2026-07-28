@@ -423,6 +423,26 @@
         <div class="engine-note" id="engine-note"></div>
         </section>
 
+        <section class="settings-block">
+          <h3>Routing-Dienst</h3>
+          <p class="hint">Die Routen werden vom Browser direkt bei BRouter
+            geholt. Wer BRouter selbst betreibt – etwa als Container auf
+            demselben Server –, trägt hier dessen Adresse ein und ist damit
+            unabhängig vom öffentlichen Dienst.</p>
+
+          <label class="field">
+            <span>Adresse</span>
+            <input type="url" id="brouter-url" inputmode="url"
+                   placeholder="https://brouter.de/brouter">
+          </label>
+
+          <div class="cleanup-row">
+            <button id="btn-test-brouter">Verbindung prüfen</button>
+            <button id="btn-reset-brouter">Öffentlichen Dienst nutzen</button>
+          </div>
+          <p class="about-note" id="brouter-note" hidden></p>
+        </section>
+
         </div>
 
         <div class="settings-panel" data-spanel="abgleich" hidden>

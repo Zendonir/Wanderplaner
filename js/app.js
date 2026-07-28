@@ -114,6 +114,10 @@
     allowSteps: document.getElementById('rs-allowSteps'),
     engineNote: document.getElementById('engine-note'),
     routerNote: document.getElementById('router-note'),
+    brouterUrl: document.getElementById('brouter-url'),
+    testBrouter: document.getElementById('btn-test-brouter'),
+    resetBrouter: document.getElementById('btn-reset-brouter'),
+    brouterNote: document.getElementById('brouter-note'),
     chartEmpty: document.getElementById('chart-empty'),
     searchForm: document.getElementById('search-form'),
     searchInput: document.getElementById('search-input'),
@@ -3038,6 +3042,43 @@
     setTimeout(() => window.location.reload(), 1200);
   }
 
+  /* ---------- Eigener Routing-Dienst ---------- */
+
+  const BROUTER_KEY = 'wanderplaner.brouter';
+
+  /** Übernimmt die eingetragene Adresse und rechnet die Route neu. */
+  function applyBrouterUrl() {
+    const url = el.brouterUrl.value.trim();
+    if (url) localStorage.setItem(BROUTER_KEY, url);
+    else localStorage.removeItem(BROUTER_KEY);
+
+    Routing.setBase(url);
+    el.brouterNote.hidden = false;
+    el.brouterNote.className = 'about-note';
+    el.brouterNote.textContent = url
+      ? `Routing läuft jetzt über ${url}.`
+      : 'Routing läuft wieder über den öffentlichen Dienst brouter.de.';
+
+    // Die vorhandene Route stammt noch vom alten Dienst.
+    if (state.points.length >= 2) scheduleRecalc();
+  }
+
+  /** Prüft die eingetragene Adresse, ohne eine Route zu berechnen. */
+  async function testBrouter() {
+    const url = el.brouterUrl.value.trim();
+    el.testBrouter.disabled = true;
+    el.brouterNote.hidden = false;
+    el.brouterNote.className = 'about-note';
+    el.brouterNote.textContent = 'Prüfe die Verbindung …';
+
+    const result = await Routing.testServer(url);
+    el.brouterNote.className = `about-note ${result.ok ? 'ok' : 'update'}`;
+    el.brouterNote.textContent = result.ok
+      ? `✓ ${result.detail}`
+      : `✕ ${url || Routing.PUBLIC_BROUTER}: ${result.detail}`;
+    el.testBrouter.disabled = false;
+  }
+
   function updateEngineNote(engine) {
     if (engine === 'brouter') {
       el.engineNote.className = 'engine-note ok';
@@ -3201,6 +3242,15 @@
       localStorage.setItem('wanderplaner.routestyle', state.routeStyle);
       drawRoute();
       updateChart(); // das Höhenprofil trägt dieselben Farben
+    });
+
+    el.brouterUrl.value = localStorage.getItem(BROUTER_KEY) || '';
+    Routing.setBase(el.brouterUrl.value);
+    el.brouterUrl.addEventListener('change', applyBrouterUrl);
+    el.testBrouter.addEventListener('click', testBrouter);
+    el.resetBrouter.addEventListener('click', () => {
+      el.brouterUrl.value = '';
+      applyBrouterUrl();
     });
 
     el.checkUpdate.addEventListener('click', checkForUpdate);

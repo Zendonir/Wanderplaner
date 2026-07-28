@@ -225,6 +225,49 @@ Schlecht sichtbare Pfade meiden. Dazu die maximale Schwierigkeit nach
 darauf hin: Dieser Dienst folgt überwiegend Straßen und ignoriert die
 Gewichtung. Der Hinweis erscheint als Warnung und im Einstellungs-Panel.
 
+### Eigener BRouter – unabhängig vom öffentlichen Dienst
+
+Standardmäßig holt der **Browser** die Routen direkt bei `brouter.de`. Das
+heißt: Ohne Internet gibt es keine neuen Routen, und wenn der öffentliche
+Dienst gerade streikt, streikt die Planung mit.
+
+Unter **Einstellungen → Routing → Routing-Dienst** lässt sich eine andere
+Adresse eintragen. Trägt man dort einen selbst betriebenen BRouter ein, hängt
+die Planung nur noch am eigenen Netz. „Verbindung prüfen“ sagt, ob dort
+tatsächlich ein BRouter antwortet und ob er eigene Profile annimmt.
+
+Zwei Dinge sind dabei zu wissen:
+
+* **Der Aufruf kommt aus dem Browser, nicht vom Wanderplaner-Server.** Die
+  Adresse muss also von jedem Gerät erreichbar sein, mit dem geplant wird – im
+  Heimnetz etwa `http://192.168.1.50:17777/brouter`.
+* **Gemischte Inhalte.** Läuft der Wanderplaner über HTTPS, blockieren
+  Browser Aufrufe an ein `http://`-Ziel. Dann muss der eigene BRouter
+  ebenfalls über HTTPS erreichbar sein (etwa hinter demselben Reverse Proxy).
+* **CORS.** Der eigene BRouter muss Anfragen von der Wanderplaner-Adresse
+  erlauben, sonst lehnt der Browser die Antwort ab.
+
+Nimmt der eigene Dienst keine hochgeladenen Profile an, weicht die App auf
+BRouters mitgeliefertes `hiking-beta` aus. Es gibt dann weiter Routen, aber
+die Regler in den Einstellungen wirken nicht mehr – die Verbindungsprüfung
+sagt das vorher.
+
+**Was ich geprüft habe und was nicht:** Die Umschaltung selbst ist getestet
+(eigene Adresse wird verwendet, der öffentliche Dienst nicht mehr gefragt,
+Zurücksetzen funktioniert, Einstellung übersteht einen Neustart). **Nicht**
+getestet ist das Aufsetzen eines eigenen BRouter-Containers – dafür fehlten
+in der Entwicklungsumgebung sowohl Docker als auch der Zugang zu den
+Routing-Daten. Die Angaben dazu stammen aus der BRouter-Dokumentation, nicht
+aus einem Durchlauf hier.
+
+Grober Weg dorthin: BRouter aus dem
+[offiziellen Projekt](https://github.com/abrensch/brouter) bauen oder ein
+fertiges Paket verwenden, die `.rd5`-Datendateien der gewünschten Region von
+`https://brouter.de/brouter/segments4/` herunterladen (für den Harz etwa die
+Kachel um 10° Ost / 51° Nord) und den Dienst auf Port 17777 starten. Das sind
+dieselben Datendateien, die auch die Android-App offline verwendet – die
+Rechenmaschine dahinter ist in beiden Fällen dieselbe.
+
 Ein Hinweis zur Vollständigkeit: Das ebenfalls gewünschte Tag `width`
 (Wegbreite) wertet BRouter nicht aus – es steht in seinem Tag-Katalog nicht zur
 Verfügung und kann deshalb nicht in die Kosten einfließen. Die Wegbreite wird

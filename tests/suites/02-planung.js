@@ -4,7 +4,8 @@
  * Routenplanung im Browser: Punkte setzen, Route ziehen, umkehren,
  * Varianten wählen, Wegebeschaffenheit und Hinweise.
  */
-const { startServer, launchBrowser, stubExternals, drawRoute } = require('../helpers');
+const { startServer, launchBrowser, stubExternals, drawRoute, defaultRoute,
+        openSettings } = require('../helpers');
 
 module.exports = {
   name: 'Routenplanung',
@@ -386,13 +387,90 @@ module.exports = {
 
       // Zurück auf BRouter: der Hinweis muss wieder verschwinden.
       await page.unroute('**/brouter.de/brouter?**');
-      await stubExternals(page);
+      // Mit demselben Mitzähler wie am Anfang: Playwright bedient die zuletzt
+      // gesetzte Route zuerst, ein Stub ohne Zähler würde die Zählung
+      // stillschweigend einfrieren.
+      await stubExternals(page, { onBrouterRequest: (url) => brouterUrls.push(url) });
       await page.click('#btn-clear');
       await page.waitForTimeout(400);
       await drawRoute(page);
       await page.waitForTimeout(1200);
       check.ok(await routerNote.isHidden(),
         'Mit BRouter verschwindet der Hinweis wieder');
+
+      /* ---- Eigener BRouter im Heimnetz ---- */
+      // Ein nachgebauter eigener Dienst unter anderer Adresse. Er muss
+      // genauso bedient werden wie der öffentliche – sonst nützt die
+      // Einstellung nichts.
+      let ownCalls = 0;
+      let ownProfileCalls = 0;
+      await page.route('**/brouter.example/**', (route, request) => {
+        const url = request.url();
+        if (url.includes('/profile')) {
+          ownProfileCalls++;
+          return route.fulfill({ json: { profileid: 'eigenes-profil' } });
+        }
+        ownCalls++;
+        const alt = Number((url.match(/alternativeidx=(\d+)/) || [, '0'])[1]);
+        route.fulfill({ json: defaultRoute(alt) });
+      });
+
+      await openSettings(page, 'routing');
+      await page.fill('#brouter-url', 'https://brouter.example/brouter');
+      await page.dispatchEvent('#brouter-url', 'change');
+      await page.waitForTimeout(300);
+      check.contains(await page.textContent('#brouter-note'), 'brouter.example',
+        'Die eingetragene Adresse wird bestätigt');
+
+      await page.click('#btn-test-brouter');
+      await page.waitForTimeout(1200);
+      const testNote = await page.textContent('#brouter-note');
+      check.contains(testNote, '✓', 'Die Verbindungsprüfung meldet Erfolg');
+      check.contains(testNote, 'Profile', 'Und ob eigene Profile angenommen werden');
+
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(250);
+      const brouterDeBefore = brouterUrls.length;
+      await page.click('#btn-clear');
+      await page.waitForTimeout(400);
+      await drawRoute(page);
+      await page.waitForTimeout(1400);
+
+      check.ok(ownCalls > 0, 'Die Route kommt vom eigenen Dienst', `${ownCalls} Aufrufe`);
+      check.ok(ownProfileCalls > 0, 'Auch das Profil geht dorthin');
+      check.equal(brouterUrls.length, brouterDeBefore,
+        'Der öffentliche Dienst wird dabei nicht mehr gefragt');
+      check.ok(await page.locator('#router-note').isHidden(),
+        'Mit dem eigenen Dienst gibt es nichts zu beanstanden');
+
+      // Die Adresse muss einen Neustart überstehen.
+      await page.reload();
+      await page.waitForSelector('#map.leaflet-container');
+      await page.waitForTimeout(800);
+      await openSettings(page, 'routing');
+      check.equal(await page.locator('#brouter-url').inputValue(),
+        'https://brouter.example/brouter', 'Die Adresse bleibt gespeichert');
+
+      // Zurücksetzen führt wieder zum öffentlichen Dienst.
+      await page.click('#btn-reset-brouter');
+      await page.waitForTimeout(400);
+      check.equal(await page.locator('#brouter-url').inputValue(), '',
+        'Der Knopf leert das Feld');
+      check.contains(await page.textContent('#brouter-note'), 'brouter.de',
+        'Und sagt, dass wieder der öffentliche Dienst zählt');
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(250);
+
+      const publicBefore = brouterUrls.length;
+      // Nach dem Neuladen ist die Planung leer – dann gibt es nichts zu leeren.
+      if (await page.locator('#btn-clear').isEnabled()) {
+        await page.click('#btn-clear');
+        await page.waitForTimeout(400);
+      }
+      await drawRoute(page);
+      await page.waitForTimeout(1400);
+      check.ok(brouterUrls.length > publicBefore,
+        'Danach fragt die App wieder brouter.de');
 
       // Die Wahl muss einen Neustart überstehen.
       await page.reload();

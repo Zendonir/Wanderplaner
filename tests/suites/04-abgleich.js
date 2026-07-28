@@ -33,7 +33,7 @@ module.exports = {
     };
 
     const sync = async (page) => {
-      await openSettings(page);
+      await openSettings(page, 'abgleich');
       await page.click('#btn-sync');
       await page.keyboard.press('Escape');
       await page.waitForTimeout(1100);
@@ -51,7 +51,7 @@ module.exports = {
       check.contains(await a.textContent('#sync-badge'), 'synchron',
         'Gerät A erkennt den Abgleich-Dienst');
 
-      await openSettings(a);
+      await openSettings(a, 'daten');
       const [chooser] = await Promise.all([
         a.waitForEvent('filechooser'),
         a.click('#btn-import'),
@@ -130,7 +130,7 @@ module.exports = {
         'Die gespeicherte Tour erscheint auf dem anderen Gerät');
 
       /* ---- Sicherung als Datei ---- */
-      await openSettings(a);
+      await openSettings(a, 'abgleich');
       const [download] = await Promise.all([
         a.waitForEvent('download'),
         a.click('#btn-backup'),
@@ -160,7 +160,7 @@ module.exports = {
       // Muss über Grabsteine laufen: Bloßes Leeren würde das andere Gerät
       // beim nächsten Abgleich rückgängig machen.
       a.on('dialog', (d) => d.accept());
-      await openSettings(a);
+      await openSettings(a, 'abgleich');
       const [sicherung] = await Promise.all([
         a.waitForEvent('download'),
         a.click('#btn-reset'),

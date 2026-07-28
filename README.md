@@ -161,14 +161,15 @@ denselben Datenstand sehen.
 - **Geräteübergreifender Abgleich** – die Sammlung liegt im Container und ist
   auf Laptop, Handy und Tablet gleich. Zusätzlich lässt sich alles als Datei
   sichern und wieder einlesen (siehe unten).
-- **Einklappbare Sammlung** – links liegen gespeicherte und hinterlegte Touren,
-  Parkplätze und – in einem eigenen Untermenü – die Stempelstellen, rechts die
-  aktuelle Planung. Über ☰ oben links lässt sich die linke Leiste ausblenden,
-  wenn die Karte mehr Platz braucht.
-- **Einstellungsseite** – alles, was man einmal einrichtet und dann in Ruhe
-  lässt, liegt hinter ⚙ *Einstellungen* oben rechts: Routing-Gewichtung,
-  GPX-Import, Abgleich und Sicherung sowie Version und Update-Prüfung. Esc
-  oder ein Klick daneben schließt sie wieder.
+- **Einklappbare Tourenliste** – links stehen ausschließlich die Touren:
+  geplante und abgeschlossene. Über ☰ oben links lässt sich die Leiste
+  ausblenden, wenn die Karte mehr Platz braucht.
+- **Einstellungsseite mit Reitern** – alles, was verwaltet statt geplant wird,
+  liegt hinter ⚙ *Einstellungen* oben rechts, gegliedert in vier Reiter:
+  *Daten* (GPX-Import, Parkplätze, Stempelstellen samt Suche, Filter und
+  Tourauswahl), *Routing* (Gewichtung der Wegetypen), *Abgleich* (Abgleich,
+  Sicherung, Doppelte zusammenführen, Alles zurücksetzen) und *Über* (Version,
+  Update-Prüfung). Esc oder ein Klick daneben schließt sie wieder.
 
 Alle Karten-, Routing- und Höhenabfragen laufen clientseitig im Browser – der
 Container braucht dafür keine ausgehenden Verbindungen.

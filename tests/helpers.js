@@ -185,17 +185,24 @@ async function waitForRoute(page, contains = 'km') {
   );
 }
 
-/** Öffnet den Einstellungsdialog (Import, Abgleich, Routing, Version). */
-async function openSettings(page) {
-  if (await page.locator('#settings').isVisible()) return;
-  await page.click('#btn-settings');
-  await page.waitForSelector('#settings:not([hidden])');
+/**
+ * Öffnet den Einstellungsdialog und wählt einen Reiter.
+ * @param {string} tab daten | routing | abgleich | ueber
+ */
+async function openSettings(page, tab = null) {
+  if (!(await page.locator('#settings').isVisible())) {
+    await page.click('#btn-settings');
+    await page.waitForSelector('#settings:not([hidden])');
+  }
+  if (tab) {
+    await page.click(`.settings-tab[data-stab=${tab}]`);
+    await page.waitForSelector(`.settings-panel[data-spanel=${tab}]:not([hidden])`);
+  }
 }
 
-/** Klappt die Stempelliste in der linken Leiste auf. */
+/** Zeigt die Stempelliste – sie liegt im Reiter „Daten“ der Einstellungen. */
 async function openStamps(page) {
-  const open = await page.locator('#stamp-details').evaluate((d) => d.open);
-  if (!open) await page.click('#stamp-details > summary');
+  await openSettings(page, 'daten');
   await page.waitForSelector('#stamp-list', { state: 'visible' });
 }
 

@@ -64,7 +64,7 @@ module.exports = {
       ]);
 
       const importFile = async (type, file) => {
-        await openSettings(page);
+        await openSettings(page, 'daten');
         await page.selectOption('#import-type', type);
         const [chooser] = await Promise.all([
           page.waitForEvent('filechooser'),
@@ -72,6 +72,8 @@ module.exports = {
         ]);
         await chooser.setFiles(file);
         await page.waitForTimeout(800);
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(250);
       };
       await importFile('stempel', gpx);
       await importFile('parkplatz', park);
@@ -106,6 +108,11 @@ module.exports = {
       }
       await page.waitForTimeout(700);
 
+      // Die Stempelliste liegt im Einstellungsdialog – der verdeckt die
+      // rechte Leiste, in der es gleich weitergeht.
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(300);
+
       await page.selectOption('#cluster-length', '12');
       await page.click('#btn-clusters');
       await page.waitForTimeout(900);
@@ -134,7 +141,7 @@ module.exports = {
         'Ein Tourname wird vorgeschlagen');
 
       /* ---- Versionsanzeige ---- */
-      await openSettings(page);
+      await openSettings(page, 'ueber');
       const versionText = await page.textContent('#app-version');
       check.contains(versionText, 'Version', 'Die laufende Version wird angezeigt');
       check.ok(/\d+\.\d+\.\d+/.test(versionText),

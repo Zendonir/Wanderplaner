@@ -1461,7 +1461,7 @@ body {
   display: flex;
   flex-direction: column;
   width: min(640px, 100%);
-  max-height: min(86vh, 900px);
+  max-height: min(90vh, 950px);
   background: var(--panel);
   border-radius: 10px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
@@ -1495,6 +1495,43 @@ body {
 }
 
 .settings-close:hover { background: rgba(255, 255, 255, 0.15); }
+
+.settings-tabs {
+  display: flex;
+  gap: 0.2rem;
+  padding: 0 0.5rem;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+
+.settings-tab {
+  flex: 1;
+  padding: 0.55rem 0.4rem;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.settings-tab:hover { color: var(--text); }
+
+.settings-tab.active {
+  color: var(--green-dark);
+  border-bottom-color: var(--green);
+  font-weight: 600;
+}
+
+.settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.settings-panel[hidden] { display: none; }
 
 .settings-body {
   overflow-y: auto;

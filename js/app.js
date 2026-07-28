@@ -172,7 +172,8 @@
     settings: document.getElementById('settings'),
     settingsBtn: document.getElementById('btn-settings'),
     settingsClose: document.getElementById('btn-settings-close'),
-    stampDetails: document.getElementById('stamp-details'),
+    settingsTabs: document.querySelectorAll('.settings-tab'),
+    settingsPanels: document.querySelectorAll('.settings-panel'),
   };
 
   /* ---------- Sammlungen: speichern, löschen, abgleichen ---------- */
@@ -952,10 +953,10 @@
     }
 
     renderAll();
-    // Der Import steht im Einstellungsdialog – danach soll man sehen,
-    // was angekommen ist.
-    setSettingsOpen(false);
-    if (kind === 'stempel') el.stampDetails.open = true;
+    // Im Dialog bleiben: Stempelstellen und Parkplätze stehen im selben
+    // Reiter wie der Import, das Ergebnis ist also direkt darunter zu sehen.
+    if (kind === 'stempel' || kind === 'parkplatz') setSettingsTab('daten');
+    else setSettingsOpen(false);
     showStatus(hadError ? 'warn' : 'info', messages.join(' '), 9000);
   }
 
@@ -2781,6 +2782,19 @@
 
   /* ---------- Einstellungen ---------- */
 
+  /** Wechselt den Reiter im Einstellungsdialog. */
+  function setSettingsTab(name) {
+    el.settingsTabs.forEach((tab) => {
+      const active = tab.dataset.stab === name;
+      tab.classList.toggle('active', active);
+      tab.setAttribute('aria-selected', String(active));
+    });
+    el.settingsPanels.forEach((panel) => {
+      panel.hidden = panel.dataset.spanel !== name;
+    });
+    localStorage.setItem('wanderplaner.settingstab', name);
+  }
+
   function setSettingsOpen(open) {
     el.settings.hidden = !open;
     el.settingsBtn.setAttribute('aria-expanded', String(open));
@@ -2881,7 +2895,7 @@
 
     ['wanderplaner.routing', 'wanderplaner.preset', 'wanderplaner.places',
       'wanderplaner.tab', 'wanderplaner.mode', 'wanderplaner.routestyle',
-      'wanderplaner.library', 'wanderplaner.sheet', 'wanderplaner.stampsopen',
+      'wanderplaner.library', 'wanderplaner.sheet', 'wanderplaner.settingstab',
       'wanderplaner.baselayer'].forEach((key) => localStorage.removeItem(key));
 
     showStatus('info', 'Alles zurückgesetzt – die Seite wird neu geladen.', 4000);
@@ -3087,12 +3101,10 @@
     });
     document.addEventListener('keydown', onKeyDown);
 
-    // Die Stempelliste bleibt so, wie der Nutzer sie zuletzt hatte.
-    el.stampDetails.open = localStorage.getItem('wanderplaner.stampsopen') === 'open';
-    el.stampDetails.addEventListener('toggle', () => {
-      localStorage.setItem('wanderplaner.stampsopen',
-        el.stampDetails.open ? 'open' : 'closed');
+    el.settingsTabs.forEach((tab) => {
+      tab.addEventListener('click', () => setSettingsTab(tab.dataset.stab));
     });
+    setSettingsTab(localStorage.getItem('wanderplaner.settingstab') || 'daten');
 
     el.syncBtn.addEventListener('click', async () => {
       // Der Knopf prüft auch erneut, ob der Server inzwischen da ist.

@@ -51,13 +51,17 @@ module.exports = {
         { lat: 51.8080, lng: 10.6120, name: '800 m ab' },
         { lat: 52.5000, lng: 13.4000, name: 'Weit weg' },
       ]);
-      await openSettings(page);
+      await openSettings(page, 'daten');
       const [chooser] = await Promise.all([
         page.waitForEvent('filechooser'),
         page.click('#btn-import'),
       ]);
       await chooser.setFiles(gpx);
       await page.waitForTimeout(800);
+      // Der Dialog bleibt nach dem Import offen, damit man das Ergebnis
+      // sieht – für die Karte muss er wieder zu.
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(300);
 
       await drawRoute(page);
       await page.click('.tab[data-tab=unterwegs]');

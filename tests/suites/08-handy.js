@@ -128,6 +128,8 @@ module.exports = {
       // rechten Rand hinausgeschoben; Text war dann abgeschnitten.
       await page.tap('#btn-settings');
       await page.waitForSelector('#settings:not([hidden])');
+      await page.tap('.settings-tab[data-stab=ueber]');
+      await page.waitForTimeout(200);
       await page.tap('#update-setup summary');
       await page.waitForTimeout(400);
 
@@ -145,6 +147,8 @@ module.exports = {
         `Rand bei ${Math.round(dialog.rechts)} von ${dialog.fenster} px`);
       check.ok(!dialog.scrollt, 'Die Seite bekommt dadurch keinen Querbalken');
 
+      await page.tap('.settings-tab[data-stab=abgleich]');
+      await page.waitForTimeout(200);
       const resetBreite = await page.locator('#btn-reset').boundingBox();
       check.ok(resetBreite.width > dialog.fenster * 0.6,
         'Der Zurücksetzen-Knopf ist fingerfreundlich breit',

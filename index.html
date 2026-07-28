@@ -46,35 +46,6 @@
           importierte GPX-Spuren.</p>
         <ul id="track-list" class="track-list"></ul>
       </section>
-
-      <section class="list-section" id="section-parking">
-        <h2>Parkplätze</h2>
-        <p class="hint">Klick auf einen Parkplatz-Marker zeigt einen QR-Code –
-          abgescannt öffnet sich die Karten-App des Handys an dieser Stelle.</p>
-        <ul id="parking-list" class="parking-list"></ul>
-      </section>
-
-      <!-- Die Stempelliste wird schnell sehr lang – deshalb aufklappbar. -->
-      <details class="list-details" id="stamp-details">
-        <summary>
-          <span>Stempelstellen</span>
-          <span class="stamp-counter" id="stamp-counter">Noch keine Stempelstellen importiert</span>
-        </summary>
-        <div class="stamp-tools">
-          <input type="text" id="stamp-search" placeholder="Stempelstelle suchen …">
-          <select id="stamp-filter">
-            <option value="all">Alle</option>
-            <option value="open">Offen</option>
-            <option value="collected">Erhalten</option>
-          </select>
-        </div>
-        <div class="tour-bar">
-          <span id="tour-count">0 für Tour ausgewählt</span>
-          <button id="btn-suggest" disabled title="Ausgewählte Stempelstellen in optimierter Reihenfolge zu einer Route verbinden">Route vorschlagen</button>
-          <button id="btn-tour-clear" disabled>Auswahl leeren</button>
-        </div>
-        <ul id="stamp-list" class="stamp-list"></ul>
-      </details>
     </aside>
 
     <div id="map" class="map-panel"></div>
@@ -311,7 +282,57 @@
         <button id="btn-settings-close" class="settings-close" title="Schließen (Esc)">✕</button>
       </header>
 
+      <nav class="settings-tabs" role="tablist">
+        <button class="settings-tab active" data-stab="daten" role="tab">Daten</button>
+        <button class="settings-tab" data-stab="routing" role="tab">Routing</button>
+        <button class="settings-tab" data-stab="abgleich" role="tab">Abgleich</button>
+        <button class="settings-tab" data-stab="ueber" role="tab">Über</button>
+      </nav>
+
       <div class="settings-body">
+        <div class="settings-panel" data-spanel="daten">
+        <section class="settings-block">
+          <h3>GPX importieren</h3>
+          <div class="import-row">
+            <select id="import-type" title="Art des GPX-Imports">
+              <option value="stempel">Stempelstellen</option>
+              <option value="parkplatz">Parkplätze</option>
+              <option value="track">Abgeschlossene Tour</option>
+              <option value="poi">POIs</option>
+            </select>
+            <button id="btn-import">⬆ Datei wählen</button>
+            <input type="file" id="import-file" accept=".gpx,application/gpx+xml" hidden multiple>
+          </div>
+          <p class="hint" id="import-hint"></p>
+        </section>
+
+        <section class="list-section" id="section-parking">
+          <h2>Parkplätze</h2>
+          <p class="hint">Klick auf einen Parkplatz-Marker zeigt einen QR-Code –
+            abgescannt öffnet sich die Karten-App des Handys an dieser Stelle.</p>
+          <ul id="parking-list" class="parking-list"></ul>
+        </section>
+        <section class="list-section" id="section-stamps">
+          <h2>Stempelstellen</h2>
+          <p class="hint stamp-counter" id="stamp-counter">Noch keine Stempelstellen importiert</p>
+          <div class="stamp-tools">
+            <input type="text" id="stamp-search" placeholder="Stempelstelle suchen …">
+            <select id="stamp-filter">
+              <option value="all">Alle</option>
+              <option value="open">Offen</option>
+              <option value="collected">Erhalten</option>
+            </select>
+          </div>
+          <div class="tour-bar">
+            <span id="tour-count">0 für Tour ausgewählt</span>
+            <button id="btn-suggest" disabled title="Ausgewählte Stempelstellen in optimierter Reihenfolge zu einer Route verbinden">Route vorschlagen</button>
+            <button id="btn-tour-clear" disabled>Auswahl leeren</button>
+          </div>
+          <ul id="stamp-list" class="stamp-list"></ul>
+        </section>
+        </div>
+
+        <div class="settings-panel" data-spanel="routing" hidden>
         <section class="settings-block">
         <h3>Routing <span id="preset-badge" class="preset-badge"></span></h3>
         <p class="hint">Diese Gewichtungen fließen direkt in die Wegekosten ein –
@@ -391,21 +412,9 @@
         <div class="engine-note" id="engine-note"></div>
         </section>
 
-        <section class="settings-block">
-          <h3>GPX importieren</h3>
-          <div class="import-row">
-            <select id="import-type" title="Art des GPX-Imports">
-              <option value="stempel">Stempelstellen</option>
-              <option value="parkplatz">Parkplätze</option>
-              <option value="track">Abgeschlossene Tour</option>
-              <option value="poi">POIs</option>
-            </select>
-            <button id="btn-import">⬆ Datei wählen</button>
-            <input type="file" id="import-file" accept=".gpx,application/gpx+xml" hidden multiple>
-          </div>
-          <p class="hint" id="import-hint"></p>
-        </section>
+        </div>
 
+        <div class="settings-panel" data-spanel="abgleich" hidden>
         <section class="settings-block">
           <h3>Abgleich und Sicherung</h3>
           <div class="sync-section">
@@ -439,6 +448,9 @@
           </div>
         </section>
 
+        </div>
+
+        <div class="settings-panel" data-spanel="ueber" hidden>
         <section class="settings-block">
           <h3>Über</h3>
           <div class="about">
@@ -482,6 +494,7 @@
             </details>
           </div>
         </section>
+        </div>
       </div>
     </div>
   </div>

@@ -33,26 +33,37 @@ module.exports = {
       /* ---- Einstellungsseite ---- */
       check.ok(await page.locator('#settings').isHidden(),
         'Die Einstellungen sind zunächst geschlossen');
-      check.ok(await page.locator('#stamp-list').isHidden(),
-        'Die Stempelliste liegt in einem zugeklappten Untermenü');
+      check.equal(await page.locator('#library #stamp-list').count(), 0,
+        'Die Stempelliste steht nicht mehr in der linken Leiste');
+      check.equal(await page.locator('#library #parking-list').count(), 0,
+        'Die Parkplätze ebenso wenig');
+      check.equal(await page.locator('#library .list-section').count(), 2,
+        'Links stehen nur noch die beiden Tourenlisten');
       check.equal(await page.locator('.tab-panel[data-panel=planung] #rs-preset').count(), 0,
         'Die Routing-Einstellungen liegen nicht mehr in der Planung');
 
       await page.click('#btn-settings');
       await page.waitForSelector('#settings:not([hidden])');
-      for (const [id, was] of [
-        ['#rs-preset', 'Routing'], ['#import-type', 'Import'],
-        ['#btn-sync', 'Abgleich'], ['#app-version', 'Version'],
+      // Jeder Bereich in seinem Reiter.
+      for (const [tab, id, was] of [
+        ['daten', '#import-type', 'Der Import'],
+        ['daten', '#stamp-list', 'Die Stempelstellen'],
+        ['daten', '#parking-list', 'Die Parkplätze'],
+        ['routing', '#rs-preset', 'Die Routing-Einstellungen'],
+        ['abgleich', '#btn-sync', 'Der Abgleich'],
+        ['ueber', '#app-version', 'Die Version'],
       ]) {
+        await page.click(`.settings-tab[data-stab=${tab}]`);
+        await page.waitForTimeout(120);
         check.ok(await page.locator(`#settings ${id}`).isVisible(),
-          `${was} steht in den Einstellungen`);
+          `${was} steht im Reiter „${tab}“`);
       }
       await page.keyboard.press('Escape');
       await page.waitForTimeout(200);
       check.ok(await page.locator('#settings').isHidden(), 'Esc schließt die Einstellungen');
 
       const importFile = async (type, file) => {
-        await openSettings(page);
+        await openSettings(page, 'daten');
         await page.selectOption('#import-type', type);
         const [chooser] = await Promise.all([
           page.waitForEvent('filechooser'),
@@ -69,10 +80,8 @@ module.exports = {
         { lat: 51.810, lng: 10.580, name: 'HWN 3', note: 'Felsklippe' },
       ]);
       await importFile('stempel', stampFile);
-      check.ok(await page.locator('#stamp-details').evaluate((d) => d.open),
-        'Nach dem Import klappt die Stempelliste auf');
-      check.ok(await page.locator('#settings').isHidden(),
-        'Nach dem Import schließt sich der Einstellungsdialog');
+      check.ok(await page.locator('#stamp-list').isVisible(),
+        'Nach dem Import steht die Liste gleich darunter');
       check.equal(await page.locator('#stamp-list li:not(.list-empty)').count(), 3,
         'Drei Stempelstellen importiert');
 
@@ -114,6 +123,7 @@ module.exports = {
         'Die Parkplatzmarke ist kleiner als eine Stempelstelle',
         `Parkplatz ${größen.parkplatz} px, Stempel ${größen.stempel} px`);
 
+      await openSettings(page, 'daten');
       await page.locator('#parking-list li .item-label').first().click();
       await page.waitForSelector('.qr-box svg', { timeout: 5000 });
       await page.waitForTimeout(400);
@@ -134,6 +144,9 @@ module.exports = {
         check.ok(shot.length > 0, 'QR-Code wird gezeichnet (ohne Decoder geprüft)');
       }
       await page.keyboard.press('Escape');
+      await page.waitForTimeout(200);
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(200);
 
       /* ---- Abgeschlossene Tour ---- */
       const trackPoints = Array.from({ length: 40 }, (_, i) =>
@@ -309,7 +322,7 @@ module.exports = {
 
       // Der Knopf sagt auch dann etwas, wenn nichts zu tun war – sonst
       // weiß niemand, ob überhaupt gesucht wurde.
-      await openSettings(page);
+      await openSettings(page, 'abgleich');
       await page.click('#btn-dedupe');
       await page.waitForTimeout(600);
       check.contains(await page.textContent('#status'), 'Keine Dubletten',

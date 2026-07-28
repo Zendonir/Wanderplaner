@@ -741,13 +741,15 @@ body {
   min-width: 200px;
 }
 
+/* Untereinander statt nebeneinander: Die beiden Beschriftungen sind lang,
+   nebeneinander wurden sie gequetscht oder umgebrochen. */
 .stamp-popup .poi-popup-buttons {
-  flex-wrap: wrap;
+  flex-direction: column;
 }
 
 .stamp-popup .poi-popup-buttons button {
-  flex: 1 1 45%;
-  padding: 0.3rem;
+  width: 100%;
+  padding: 0.4rem;
   border: 1px solid var(--border);
   border-radius: 4px;
   cursor: pointer;

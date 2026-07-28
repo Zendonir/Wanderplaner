@@ -350,15 +350,10 @@ const MapView = (function () {
       cbs.onStampTourToggle(stamp.id);
     });
 
-    const deleteBtn = document.createElement('button');
-    deleteBtn.textContent = 'Löschen';
-    deleteBtn.className = 'danger';
-    deleteBtn.addEventListener('click', () => {
-      map.closePopup();
-      cbs.onStampDelete(stamp.id);
-    });
-
-    buttons.append(collectedBtn, tourBtn, deleteBtn);
+    // Bewusst kein Löschen an dieser Stelle: Das Popup öffnet sich beim
+    // Planen ständig, und ein danebengegangener Klick würde eine
+    // Stempelstelle samt Sammelstand entfernen. Gelöscht wird in der Liste.
+    buttons.append(collectedBtn, tourBtn);
     div.appendChild(buttons);
     return div;
   }

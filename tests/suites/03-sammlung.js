@@ -241,6 +241,31 @@ module.exports = {
       check.ok(übernommen && übernommen.länge > 0,
         'Und die gelaufene Länge', `${übernommen && übernommen.länge} m`);
 
+      /* ---- Popup einer Stempelstelle ---- */
+      // Löschen gehört nicht in ein Menü, das beim Planen ständig aufgeht –
+      // ein danebengegangener Klick würde den Sammelstand mitnehmen.
+      await openStamps(page);
+      await page.locator('#stamp-list li .item-label').first().click();
+      await page.waitForSelector('.stamp-popup', { timeout: 5000 });
+      const popupButtons = await page.locator('.stamp-popup button').allTextContents();
+      check.equal(popupButtons.length, 2,
+        'Das Stempel-Popup zeigt genau zwei Knöpfe', popupButtons.join(' | '));
+      check.ok(!popupButtons.join(' ').includes('Löschen'),
+        'Löschen wird dort nicht angeboten');
+
+      const gestapelt = await page.evaluate(() => {
+        const rects = [...document.querySelectorAll('.stamp-popup .poi-popup-buttons button')]
+          .map((b) => b.getBoundingClientRect());
+        return rects.length === 2 && rects[1].top >= rects[0].bottom - 1;
+      });
+      check.ok(gestapelt, 'Die beiden Knöpfe stehen untereinander');
+
+      // In der Liste bleibt das Löschen erreichbar.
+      check.equal(await page.locator('#stamp-list li .item-delete').count(), 3,
+        'Gelöscht wird weiterhin in der Liste');
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(200);
+
       /* ---- Alles übersteht einen Neustart der Seite ---- */
       await page.reload();
       await page.waitForSelector('#map.leaflet-container');

@@ -2844,7 +2844,6 @@
       onPoiDelete: deletePoi,
       onStampCollectedToggle: toggleStampCollected,
       onStampTourToggle: toggleStampTour,
-      onStampDelete: deleteStamp,
       onParkingAsStart: parkingAsStart,
       onParkingDelete: deleteParking,
       getStartName: () => state.tourName || 'Startpunkt der Wanderung',

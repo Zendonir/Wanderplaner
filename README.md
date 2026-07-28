@@ -72,7 +72,10 @@ denselben Datenstand sehen.
   Import überspringt bereits vorhandene Einträge, die Markierungen bleiben
   erhalten.
 - **Parkplätze mit QR-Code** – importierte Parkplätze bleiben dauerhaft
-  gespeichert. Ein Klick auf den Marker zeigt einen QR-Code: mit der
+  gespeichert. Beschreibungen, die in Wahrheit ein Abzug der OSM-Merkmale sind
+  (`amenity=parking surface=gravel …`), werden weder gespeichert noch
+  angezeigt – im Popup steht der Name, eine echte Notiz wie „3 EUR/Tag“ bleibt
+  erhalten. Ein Klick auf den Marker zeigt einen QR-Code: mit der
   Handy-Kamera gescannt öffnet sich die Karten-App am Parkplatz. Wählbar sind
   Apple Karten (iPhone), Google Maps oder ein `geo:`-Link, jeweils als
   „Ort anzeigen“ oder „Route dorthin“. Ein Parkplatz lässt sich mit einem

@@ -482,6 +482,26 @@ module.exports = {
       { id: 'y', name: 'Klippe West', lat: 51.80005, lng: 10.60005, updatedAt: 2 },
     ]).merged, 1, 'Praktisch deckungsgleiche Stellen werden zusammengefasst');
 
+    /* ---- Merkmalslisten aus GPX-Beschreibungen ---- */
+    // Viele GPX-Ausgaben schreiben die rohen OSM-Merkmale in <desc>. Auf der
+    // Karte ist das nur Ballast – eine echte Notiz muss aber stehenbleiben.
+    check.ok(Stamps.isTagDump(
+      'amenity=parking goods=no hgv=no motorcar=yes name=Parkplatz Auerhahn ' +
+      'parking=surface surface=gravel'),
+      'Eine Liste von OSM-Merkmalen wird als solche erkannt');
+    check.ok(Stamps.isTagDump('amenity=parking surface=gravel'),
+      'Auch eine kurze Liste');
+    check.ok(!Stamps.isTagDump('Felsklippe mit Aussicht'),
+      'Eine gewöhnliche Notiz bleibt unangetastet');
+    check.ok(!Stamps.isTagDump('Stempel liegt hinter der Hütte'),
+      'Auch ein ganzer Satz');
+    check.ok(!Stamps.isTagDump('Kosten 3 EUR/Tag'), 'Und eine Preisangabe');
+    check.ok(!Stamps.isTagDump(''), 'Leerer Text ist keine Merkmalsliste');
+    check.equal(Stamps.displayNote('amenity=parking surface=gravel'), '',
+      'Zur Anzeige fällt die Merkmalsliste weg');
+    check.equal(Stamps.displayNote('Felsklippe'), 'Felsklippe',
+      'Die echte Notiz bleibt');
+
     /* ---- Der Service Worker muss alle Programmdateien kennen ---- */
     // Ein vergessener Eintrag fällt sonst erst offline auf, wo die App dann
     // mit „… is not defined“ abbricht.

@@ -105,10 +105,15 @@ module.exports = {
       /* ---- Parkplätze mit QR-Code ---- */
       const parkFile = writeGpxWaypoints(tmp, 'park.gpx', [
         { lat: 51.7712, lng: 10.5934, name: 'Wanderparkplatz Schierke', note: '3 EUR/Tag' },
+        // So kommt es aus vielen GPX-Ausgaben: die rohen OSM-Merkmale als
+        // Beschreibung. Im Popup hat das nichts verloren.
+        { lat: 51.7760, lng: 10.5990, name: 'Parkplatz Auerhahn',
+          note: 'amenity=parking goods=no hgv=no motorcar=yes '
+            + 'name=Parkplatz Auerhahn parking=surface surface=gravel' },
       ]);
       await importFile('parkplatz', parkFile);
-      check.equal(await page.locator('#parking-list li:not(.list-empty)').count(), 1,
-        'Parkplatz importiert');
+      check.equal(await page.locator('#parking-list li:not(.list-empty)').count(), 2,
+        'Parkplätze importiert');
 
       // Parkplätze sind Beiwerk und zahlreich – ihre Marken bleiben deutlich
       // kleiner als die runden Stempelmarken.
@@ -124,9 +129,27 @@ module.exports = {
         `Parkplatz ${größen.parkplatz} px, Stempel ${größen.stempel} px`);
 
       await openSettings(page, 'daten');
-      await page.locator('#parking-list li .item-label').first().click();
+
+      // Der Parkplatz mit der Merkmalsliste: Name ja, Merkmale nein.
+      await page.locator('#parking-list li').filter({ hasText: 'Auerhahn' })
+        .locator('.item-label').click();
+      await page.waitForSelector('.qr-popup', { timeout: 5000 });
+      const popupText = await page.textContent('.qr-popup');
+      check.contains(popupText, 'Parkplatz Auerhahn', 'Der Name steht im Popup');
+      check.ok(!popupText.includes('amenity='),
+        'Die OSM-Merkmale stehen nicht mehr darunter', popupText.slice(0, 90));
+      check.ok(!popupText.includes('surface=gravel'),
+        'Auch nicht einzelne davon');
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(250);
+
+      await openSettings(page, 'daten');
+      await page.locator('#parking-list li').filter({ hasText: 'Schierke' })
+        .locator('.item-label').click();
       await page.waitForSelector('.qr-box svg', { timeout: 5000 });
       await page.waitForTimeout(400);
+      check.contains(await page.textContent('.qr-popup'), '3 EUR/Tag',
+        'Eine echte Notiz bleibt sichtbar');
 
       const shot = await page.locator('.qr-box svg').first().screenshot();
       const { PNG } = requirePng();
@@ -337,7 +360,7 @@ module.exports = {
       await page.waitForTimeout(900);
       check.equal(await page.locator('#stamp-list li:not(.list-empty)').count(), 3,
         'Stempelstellen bleiben nach dem Neuladen erhalten');
-      check.equal(await page.locator('#parking-list li:not(.list-empty)').count(), 1,
+      check.equal(await page.locator('#parking-list li:not(.list-empty)').count(), 2,
         'Parkplätze bleiben erhalten');
       check.equal(await page.locator('#track-list li:not(.list-empty)').count(), 2,
         'Abgeschlossene Touren bleiben erhalten');

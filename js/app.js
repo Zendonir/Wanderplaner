@@ -887,7 +887,8 @@
       const label = document.createElement('span');
       label.className = 'item-label';
       label.textContent = stamp.name;
-      label.title = stamp.note ? `${stamp.name} – ${stamp.note}` : stamp.name;
+      const stampNote = PointStore.displayNote(stamp.note);
+      label.title = stampNote ? `${stamp.name} – ${stampNote}` : stamp.name;
       label.addEventListener('click', () => {
         MapView.setView(stamp.lat, stamp.lng, 15);
         MapView.openStampPopup(stamp.id);

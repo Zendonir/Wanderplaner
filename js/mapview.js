@@ -326,9 +326,10 @@ const MapView = (function () {
     title.textContent = stamp.name;
     div.appendChild(title);
 
-    if (stamp.note) {
+    const stampNote = PointStore.displayNote(stamp.note);
+    if (stampNote) {
       const note = document.createElement('p');
-      note.textContent = stamp.note;
+      note.textContent = stampNote;
       div.appendChild(note);
     }
 
@@ -500,9 +501,12 @@ const MapView = (function () {
     title.textContent = place.name;
     div.appendChild(title);
 
-    if (place.note) {
+    // Schon importierte Einträge tragen die Merkmalsliste noch im Text –
+    // deshalb auch beim Anzeigen filtern, nicht nur beim Import.
+    const placeNote = PointStore.displayNote(place.note);
+    if (placeNote) {
       const note = document.createElement('p');
-      note.textContent = place.note;
+      note.textContent = placeNote;
       div.appendChild(note);
     }
 

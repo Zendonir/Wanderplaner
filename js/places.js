@@ -16,6 +16,23 @@ const PointStore = {
   // Schindelkopf“, dazu mit leicht abweichenden Koordinaten.
   NEAR_NAME_RADIUS_M: 250,
 
+  /**
+   * Erkennt Beschreibungen, die in Wahrheit ein Abzug der OSM-Merkmale sind:
+   * `amenity=parking goods=no hgv=no motorcar=yes …`. Viele GPX-Ausgaben
+   * schreiben so etwas in <desc>; auf der Karte ist es nur Ballast.
+   */
+  isTagDump(text) {
+    const tokens = String(text || '').trim().split(/\s+/).filter(Boolean);
+    if (tokens.length < 2) return false;
+    const pairs = tokens.filter((t) => /^[a-z][a-z0-9_:]*=\S*$/i.test(t)).length;
+    return pairs >= 2 && pairs / tokens.length >= 0.5;
+  },
+
+  /** Beschreibung fürs Anzeigen – Merkmalslisten bleiben weg. */
+  displayNote(text) {
+    return this.isTagDump(text) ? '' : String(text || '');
+  },
+
   /** Namen vergleichbar machen: Groß-/Kleinschreibung, Zeichensetzung, Leerraum. */
   normalizeName(name) {
     return String(name || '').toLowerCase().replace(/[^a-z0-9äöüß]/g, '');
@@ -125,7 +142,7 @@ const PointStore = {
             lat: w.lat,
             lng: w.lng,
             name: w.name || `${namePrefix} ${items.length + 1}`,
-            note: w.note,
+            note: PointStore.displayNote(w.note),
             collected: false,
             updatedAt: Date.now(),
           });
@@ -135,6 +152,14 @@ const PointStore = {
       },
       sameSpot(a, b) {
         return PointStore.sameSpot(a, b);
+      },
+
+      isTagDump(text) {
+        return PointStore.isTagDump(text);
+      },
+
+      displayNote(text) {
+        return PointStore.displayNote(text);
       },
 
       /**

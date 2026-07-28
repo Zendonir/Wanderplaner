@@ -194,18 +194,97 @@ const RouteStyle = {
 
   /* ---------- Nach Wegbeschaffenheit ---------- */
 
-  _bySurface(coordinates, segments) {
-    // Jeden Wegabschnitt auf der Geometrie verorten: Die Koordinate eines
-    // Abschnitts markiert dessen Ende.
+  /** Aufsummierte Streckenlänge bis zu jedem Geometriepunkt, in Metern. */
+  _cumulative(coordinates) {
+    const cum = [0];
+    for (let i = 1; i < coordinates.length; i++) {
+      cum.push(cum[i - 1] + Utils.haversine(
+        { lat: coordinates[i - 1][1], lng: coordinates[i - 1][0] },
+        { lat: coordinates[i][1], lng: coordinates[i][0] }
+      ));
+    }
+    return cum;
+  },
+
+  /**
+   * Ordnet jedem Geometriepunkt die OSM-Tags des dort gültigen Wegabschnitts
+   * zu und liefert eine Nachschlagefunktion `(index) => tags`.
+   *
+   * Zwei Wege dorthin, in dieser Reihenfolge:
+   *
+   *  1. Über die Länge. Der Router nennt zu jedem Abschnitt, wie lang er ist;
+   *     aneinandergereiht ergeben die Längen die Strecke. Das braucht keine
+   *     Koordinaten und ist deshalb unempfindlich dagegen, ob und wie der
+   *     Router sie mitschickt.
+   *  2. Über die Koordinaten, falls die Längen fehlen oder nicht zur Strecke
+   *     passen: Die Koordinate eines Abschnitts markiert dessen Ende.
+   *
+   * Zuvor lag nur Weg 2 vor. Fehlten die Koordinatenspalten in der Antwort,
+   * ließ sich kein einziger Abschnitt verorten und die Route wurde
+   * stillschweigend wieder einfarbig gezeichnet – obwohl die Wegedaten selbst
+   * vollständig da waren und die Aufschlüsselung sie auch auswertete.
+   *
+   * @returns {?{tagsAt: function(number): object, via: string}}
+   */
+  _surfaceLookup(coordinates, segments) {
+    const cum = this._cumulative(coordinates);
+    const total = cum[cum.length - 1];
+
+    /* ---- Weg 1: über die Längen ---- */
+    const lengths = segments.map((s) => Number(s.length));
+    const sum = lengths.reduce((a, b) => a + (Number.isFinite(b) ? b : 0), 0);
+    if (lengths.every((l) => Number.isFinite(l) && l > 0) && sum > 0 && total > 0
+        // Kleine Abweichungen sind normal – der Router misst auf der
+        // ungeglätteten Geometrie. Grobe Abweichungen heißen dagegen, dass
+        // die Längen nicht zu dieser Strecke gehören.
+        && Math.abs(sum - total) / total < 0.25) {
+      const scale = total / sum;
+      const ends = [];
+      let running = 0;
+      lengths.forEach((l) => { running += l * scale; ends.push(running); });
+
+      let k = 0;
+      const byIndex = coordinates.map((_, i) => {
+        while (k < segments.length - 1 && ends[k] < cum[i]) k++;
+        return segments[k].tags || {};
+      });
+      return { tagsAt: (i) => byIndex[Math.min(Math.max(i, 0), byIndex.length - 1)], via: 'länge' };
+    }
+
+    /* ---- Weg 2: über die Koordinaten ---- */
     const marks = [];
     for (const segment of segments) {
       if (segment.lat == null || segment.lng == null) continue;
+      if (!Number.isFinite(segment.lat) || !Number.isFinite(segment.lng)) continue;
       marks.push({
         index: this._nearestIndex(coordinates, segment.lat, segment.lng),
-        tags: segment.tags,
+        tags: segment.tags || {},
       });
     }
-    if (marks.length === 0) {
+    if (marks.length === 0) return null;
+    marks.sort((a, b) => a.index - b.index);
+
+    let m = 0;
+    const byIndex = coordinates.map((_, i) => {
+      while (m < marks.length - 1 && marks[m].index < i) m++;
+      return marks[m].tags;
+    });
+    return { tagsAt: (i) => byIndex[Math.min(Math.max(i, 0), byIndex.length - 1)], via: 'koordinaten' };
+  },
+
+  _surfaceColor(tags) {
+    const category = WayTypes.CATEGORIES.find((c) => c.test(tags));
+    return category ? category.color : '#b0b6ac';
+  },
+
+  _surfaceLabel(tags) {
+    const category = WayTypes.CATEGORIES.find((c) => c.test(tags));
+    return category ? category.label : 'Sonstige';
+  },
+
+  _bySurface(coordinates, segments) {
+    const lookup = this._surfaceLookup(coordinates, segments);
+    if (!lookup) {
       return {
         sections: this._single(coordinates, this.PLAIN_COLOR),
         legend: [],
@@ -213,27 +292,15 @@ const RouteStyle = {
         note: 'Die Wegabschnitte ließen sich der Strecke nicht zuordnen.',
       };
     }
-    marks.sort((a, b) => a.index - b.index);
-
-    const colorFor = (tags) => {
-      const category = WayTypes.CATEGORIES.find((c) => c.test(tags));
-      return category ? category.color : '#b0b6ac';
-    };
-    const labelFor = (tags) => {
-      const category = WayTypes.CATEGORIES.find((c) => c.test(tags));
-      return category ? category.label : 'Sonstige';
-    };
 
     const colors = [];
     const usedLabels = new Map();
-    let markIndex = 0;
 
     for (let i = 1; i < coordinates.length; i++) {
-      // Zum nächsten Abschnitt weiterrücken, sobald er erreicht ist.
-      while (markIndex < marks.length - 1 && marks[markIndex].index < i) markIndex++;
-      const tags = marks[markIndex].tags;
-      colors.push(colorFor(tags));
-      usedLabels.set(colorFor(tags), labelFor(tags));
+      const tags = lookup.tagsAt(i);
+      const color = this._surfaceColor(tags);
+      colors.push(color);
+      usedLabels.set(color, this._surfaceLabel(tags));
     }
 
     return {
@@ -245,7 +312,12 @@ const RouteStyle = {
         .concat(usedLabels.has('#b0b6ac')
           ? [{ color: '#b0b6ac', label: 'Sonstige' }] : []),
       scale: null,
-      note: null,
+      // Nur eine Farbe heißt: Die Wegedaten sind da, sie sagen aber überall
+      // dasselbe. Ohne diesen Hinweis sieht das aus wie „einfarbig“ und
+      // wirkt wie ein Fehler.
+      note: usedLabels.size === 1
+        ? `Die ganze Route läuft über denselben Wegetyp (${[...usedLabels.values()][0]}).`
+        : null,
     };
   },
 
@@ -285,23 +357,14 @@ const RouteStyle = {
 
     if (mode === 'surface') {
       if (!coordinates || !segments || segments.length === 0) return null;
-      const marks = segments
-        .filter((s) => s.lat != null && s.lng != null)
-        .map((s) => ({
-          index: this._nearestIndex(coordinates, s.lat, s.lng),
-          tags: s.tags,
-        }))
-        .sort((a, b) => a.index - b.index);
-      if (marks.length === 0) return null;
+      // Dieselbe Zuordnung wie auf der Karte – sonst zeigten Linie und
+      // Diagramm an derselben Stelle verschiedene Wegetypen an.
+      const lookup = this._surfaceLookup(coordinates, segments);
+      if (!lookup) return null;
 
-      const colors = samples.map((sample) => {
-        // Den Stützpunkt auf der Geometrie verorten und den Wegabschnitt
-        // nehmen, der dort gilt.
-        const index = this._nearestIndex(coordinates, sample.lat, sample.lng);
-        const mark = marks.find((m) => m.index >= index) || marks[marks.length - 1];
-        const category = WayTypes.CATEGORIES.find((c) => c.test(mark.tags));
-        return category ? category.color : '#b0b6ac';
-      });
+      const colors = samples.map((sample) => this._surfaceColor(
+        lookup.tagsAt(this._nearestIndex(coordinates, sample.lat, sample.lng))
+      ));
       colors[0] = colors[1];
       return colors;
     }

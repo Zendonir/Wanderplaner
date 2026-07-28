@@ -306,6 +306,57 @@ module.exports = {
     const noSegments = RouteStyle.build('surface', routeCoords, routeEle, null);
     check.contains(noSegments.note, 'Wegedaten', 'Fehlende Wegedaten werden erklärt');
 
+    /* ---- Wegedaten ohne Koordinaten ---- */
+    // Manche Antworten des Routers enthalten zu den Abschnitten keine
+    // Koordinaten, wohl aber deren Länge. Früher blieb die Route dann
+    // stillschweigend einfarbig, obwohl alles Nötige vorlag.
+    const routeLength = RouteStyle._cumulative(routeCoords).pop();
+    const third = routeLength / 3;
+    const lengthOnly = [
+      { length: third, tags: { highway: 'path', route_hiking_rwn: 'yes' } },
+      { length: third, tags: { highway: 'track' } },
+      { length: third, tags: { highway: 'tertiary' } },
+    ];
+    const byLength = RouteStyle.build('surface', routeCoords, routeEle, lengthOnly);
+    check.ok(byLength.sections.length >= 3,
+      'Auch ohne Koordinaten wird nach Wegart eingefärbt',
+      `${byLength.sections.length} Abschnitte`);
+    check.equal(byLength.note, null, 'Und zwar ohne Ausrede in der Legende');
+    check.equal(
+      byLength.sections.reduce((sum, s) => sum + s.coordinates.length - 1, 0),
+      routeCoords.length - 1, 'Auch dieser Weg deckt die Strecke lückenlos ab');
+    // Die drei gleich langen Drittel müssen der Reihe nach erscheinen.
+    check.equal(byLength.sections[0].color, '#2f6b3f',
+      'Das erste Drittel ist der markierte Wanderweg');
+    check.equal(byLength.sections[byLength.sections.length - 1].color, '#c0392b',
+      'Das letzte Drittel ist die Landstraße');
+    check.equal(
+      RouteStyle.sampleColors('surface', routeCoords.map((c, i) => ({
+        lat: c[1], lng: c[0], dist: i * 100, ele: routeEle[i],
+      })), routeCoords, lengthOnly).length, routeCoords.length,
+      'Das Höhenprofil bekommt dieselbe Zuordnung');
+
+    // Längen, die offensichtlich nicht zu dieser Strecke gehören, dürfen
+    // nicht verwendet werden – dann zählen wieder die Koordinaten.
+    const wrongLengths = styleSegments.map((s) => ({ ...s, length: 5 }));
+    const viaCoords = RouteStyle.build('surface', routeCoords, routeEle, wrongLengths);
+    check.ok(viaCoords.sections.length >= 2,
+      'Unpassende Längen führen zurück auf die Koordinaten',
+      `${viaCoords.sections.length} Abschnitte`);
+
+    /* ---- Durchgehend derselbe Wegetyp ---- */
+    // Sieht aus wie „einfarbig“ und wäre ohne Hinweis nicht von einem
+    // Fehler zu unterscheiden.
+    const uniform = RouteStyle.build('surface', routeCoords, routeEle, [
+      { length: routeLength, tags: { highway: 'track' } },
+    ]);
+    check.equal(uniform.sections.length, 1, 'Ein einziger Wegetyp ergibt ein Teilstück');
+    check.equal(uniform.sections[0].color, '#a9863f', 'Und zwar in dessen Farbe');
+    check.ok(uniform.sections[0].color !== RouteStyle.PLAIN_COLOR,
+      'Das ist nicht die Farbe der einfarbigen Darstellung');
+    check.contains(uniform.note, 'denselben Wegetyp',
+      'Der Hinweis erklärt, warum nur eine Farbe zu sehen ist');
+
     /* ---- Dieselben Farben im Höhenprofil ---- */
     // Stützpunkte, wie sie das Höhenprofil verwendet: Position, gelaufene
     // Strecke und Höhe.

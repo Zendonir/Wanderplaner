@@ -414,6 +414,112 @@ module.exports = {
         'Und nennt, wie viel geprüft wurde');
       await page.keyboard.press('Escape');
 
+      /* ---- POIs importieren: eigene Symbole, Ansicht statt Formular ---- */
+      const poiFile = writeGpxWaypoints(tmp, 'pois.gpx', [
+        { lat: 51.8300, lng: 10.6300, name: 'Einersberg',
+          note: 'ele=591.7 name=Einersberg natural=peak wikipedia=de:Einersberg' },
+        { lat: 51.8320, lng: 10.6340, name: 'Rabenklippe',
+          note: 'tourism=viewpoint name=Rabenklippe ele=560' },
+        { lat: 51.8340, lng: 10.6380, name: 'Molkenhaus',
+          note: 'amenity=restaurant name=Molkenhaus website=molkenhaus.de '
+            + 'opening_hours=Mo-Su 10:00-18:00' },
+      ]);
+      await importFile('poi', poiFile);
+      await page.waitForTimeout(600);
+      check.equal(await page.locator('#poi-list li:not(.list-empty)').count(), 3,
+        'POIs werden importiert');
+
+      // Jede Art bekommt ihr eigenes Zeichen – nicht mehr überall dieselbe Fahne.
+      const poiIcons = await page.locator('#poi-list .poi-type').allTextContents();
+      check.equal(new Set(poiIcons).size, 3,
+        'Die drei Arten haben drei verschiedene Zeichen', poiIcons.join(' '));
+      check.ok(poiIcons.includes('⛰'), 'Der Gipfel bekommt ein Gipfelzeichen');
+
+      const poiLabels = (await page.locator('#poi-list .item-label').allTextContents()).join(' | ');
+      check.ok(!poiLabels.includes('natural='),
+        'In der Liste steht die Art, nicht die Merkmalszeile', poiLabels.slice(0, 80));
+      check.contains(poiLabels, 'Aussichtspunkt', 'Und zwar in Worten');
+
+      // Popup: Ansicht mit Angaben und Verweisen, kein Textfeld.
+      await page.locator('#poi-list li').filter({ hasText: 'Molkenhaus' })
+        .locator('.item-label').click();
+      await page.waitForSelector('.poi-view', { timeout: 5000 });
+      const view = page.locator('.poi-view');
+      check.contains(await view.textContent(), 'Einkehr', 'Das Popup nennt die Art');
+      check.contains(await view.textContent(), 'Öffnungszeiten',
+        'Die Öffnungszeiten stehen als Angabe da');
+      check.equal(await view.locator('textarea').count(), 0,
+        'Ein importierter POI wird nicht mehr zum Bearbeiten geöffnet');
+      const href = await view.locator('.poi-links a').first().getAttribute('href');
+      check.equal(href, 'https://molkenhaus.de', 'Der hinterlegte Verweis ist anklickbar');
+      check.contains(await view.locator('.poi-tags summary').textContent(), 'Merkmale',
+        'Alle übrigen Merkmale bleiben ausklappbar erreichbar');
+
+      // Wer doch ändern will, kommt über „Bearbeiten“ ans Formular.
+      await view.locator('.poi-popup-buttons button').first().click();
+      await page.waitForTimeout(300);
+      check.equal(await page.locator('.poi-popup textarea').count(), 1,
+        'Der Knopf „Bearbeiten“ öffnet das Formular doch noch');
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(250);
+
+      /* ---- POIs überstehen das Neuladen ---- */
+      // Sie lagen früher nur im Arbeitsspeicher – bei einer importierten
+      // Sammlung wäre nach jedem Neustart alles weg.
+      await page.reload();
+      await page.waitForSelector('#map.leaflet-container');
+      await page.waitForTimeout(900);
+      check.equal(await page.locator('#poi-list li:not(.list-empty)').count(), 3,
+        'Importierte POIs sind nach dem Neuladen noch da');
+
+      // Und ein erneuter Import verdoppelt sie nicht.
+      await importFile('poi', poiFile);
+      await page.waitForTimeout(600);
+      check.equal(await page.locator('#poi-list li:not(.list-empty)').count(), 3,
+        'Dieselbe Datei erneut einzulesen ändert nichts');
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(250);
+
+      /* ---- Große Sammlung: nur der Ausschnitt wird gezeichnet ---- */
+      // Mit mehreren tausend Markern wird schon das Verschieben der Karte
+      // zäh; gezeichnet wird deshalb nur, was im Bild liegt.
+      const many = [];
+      for (let i = 0; i < 500; i++) {
+        many.push({
+          lat: 51.5 + (i % 25) * 0.02,
+          lng: 10.2 + Math.floor(i / 25) * 0.02,
+          name: `Punkt ${i}`,
+          note: 'tourism=viewpoint',
+        });
+      }
+      await importFile('poi', writeGpxWaypoints(tmp, 'viele.gpx', many));
+      await page.waitForTimeout(1200);
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(400);
+
+      const listed = await page.locator('#poi-list li:not(.list-empty)').count();
+      check.equal(listed, 503, 'Alle POIs stehen in der Liste');
+      const drawn = await page.locator('.poi-marker').count();
+      check.ok(drawn < listed, 'Auf der Karte wird nur ein Teil gezeichnet',
+        `${drawn} von ${listed}`);
+      check.ok(!(await page.locator('#poi-note').isHidden()),
+        'Dass nicht alle zu sehen sind, steht in der Leiste');
+      check.contains(await page.textContent('#poi-note'), '503',
+        'Der Hinweis nennt die Gesamtzahl');
+
+      // Hineinzoomen bringt die Punkte hervor.
+      await page.evaluate(() => {
+        const el = document.getElementById('map');
+        const key = Object.keys(el).find((k) => k.startsWith('_leaflet_id'));
+        return key;
+      });
+      await page.locator('.leaflet-control-zoom-in').click();
+      await page.waitForTimeout(500);
+      await page.locator('.leaflet-control-zoom-in').click();
+      await page.waitForTimeout(800);
+      check.ok(await page.locator('.poi-marker').count() > 0,
+        'Näher herangezoomt erscheinen die Marken');
+
       /* ---- Alles übersteht einen Neustart der Seite ---- */
       await page.reload();
       await page.waitForSelector('#map.leaflet-container');

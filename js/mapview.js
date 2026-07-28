@@ -108,6 +108,10 @@ const MapView = (function () {
       if (!map.doubleClickZoom.enabled()) L.DomEvent.stop(e);
       cbs.onMapMenu(e.latlng);
     });
+
+    // Große POI-Sammlungen werden nur für den sichtbaren Ausschnitt
+    // gezeichnet – der ändert sich beim Schwenken und Zoomen.
+    map.on('moveend zoomend', () => refreshPois());
   }
 
   /* ---------- Kontextmenü auf der Karte ---------- */
@@ -234,17 +238,144 @@ const MapView = (function () {
 
   /* ---------- POIs ---------- */
 
-  function poiIcon() {
+  function poiIcon(poi) {
+    const type = PoiTypes.typeOf(poi);
     return L.divIcon({
       className: '',
-      html: '<div class="poi-marker"><span>⚑</span></div>',
+      html: `<div class="poi-marker" style="background:${type.color}" ` +
+        `title="${type.label}"><span>${type.icon}</span></div>`,
       iconSize: [28, 28],
       iconAnchor: [14, 28],
       popupAnchor: [0, -26],
     });
   }
 
-  function poiPopupContent(poi) {
+  /**
+   * Ein importierter POI wird gezeigt, nicht bearbeitet.
+   *
+   * Die Merkmale stammen aus der Quelle; sie in einem Textfeld anzubieten
+   * lädt nur dazu ein, sie versehentlich zu zerschießen. Wer doch etwas
+   * ändern will, kommt über „Bearbeiten“ an dasselbe Formular wie bei einem
+   * selbst gesetzten POI.
+   */
+  function poiReadOnlyContent(poi, tags, marker) {
+    const div = document.createElement('div');
+    div.className = 'poi-popup poi-view';
+    const type = PoiTypes.classify(tags);
+
+    const head = document.createElement('div');
+    head.className = 'poi-head';
+    const badge = document.createElement('span');
+    badge.className = 'poi-badge';
+    badge.style.background = type.color;
+    badge.textContent = type.icon;
+    const titles = document.createElement('div');
+    const title = document.createElement('strong');
+    title.textContent = PoiTypes.displayName(poi);
+    const kind = document.createElement('span');
+    kind.className = 'poi-kind';
+    kind.textContent = type.label;
+    titles.append(title, kind);
+    head.append(badge, titles);
+    div.appendChild(head);
+
+    const imageUrl = PoiTypes.imageUrl(tags);
+    if (imageUrl) {
+      const img = document.createElement('img');
+      img.className = 'poi-image';
+      img.loading = 'lazy';
+      img.alt = PoiTypes.displayName(poi);
+      img.src = imageUrl;
+      // Bilder kommen von außerhalb; ohne Netz oder bei totem Verweis darf
+      // kein kaputtes Kästchen stehen bleiben.
+      img.addEventListener('error', () => img.remove());
+      div.appendChild(img);
+    }
+
+    const description = PoiTypes.description(tags);
+    if (description) {
+      const p = document.createElement('p');
+      p.className = 'poi-description';
+      p.textContent = description;
+      div.appendChild(p);
+    }
+
+    const facts = PoiTypes.facts(tags);
+    if (facts.length > 0) {
+      const list = document.createElement('dl');
+      list.className = 'poi-facts';
+      facts.forEach((fact) => {
+        const dt = document.createElement('dt');
+        dt.textContent = fact.label;
+        const dd = document.createElement('dd');
+        dd.textContent = fact.value;
+        list.append(dt, dd);
+      });
+      div.appendChild(list);
+    }
+
+    const links = PoiTypes.links(tags, poi.link);
+    if (links.length > 0) {
+      const row = document.createElement('div');
+      row.className = 'poi-links';
+      links.forEach((link) => {
+        const a = document.createElement('a');
+        a.href = link.url;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.textContent = link.label;
+        row.appendChild(a);
+      });
+      div.appendChild(row);
+    }
+
+    const rest = PoiTypes.rest(tags);
+    if (rest.length > 0) {
+      const details = document.createElement('details');
+      details.className = 'poi-tags';
+      const summary = document.createElement('summary');
+      summary.textContent = `Alle Merkmale (${rest.length})`;
+      details.appendChild(summary);
+      const table = document.createElement('dl');
+      rest.forEach((tag) => {
+        const dt = document.createElement('dt');
+        dt.textContent = tag.key;
+        const dd = document.createElement('dd');
+        dd.textContent = tag.value;
+        table.append(dt, dd);
+      });
+      details.appendChild(table);
+      div.appendChild(details);
+    }
+
+    const buttons = document.createElement('div');
+    buttons.className = 'poi-popup-buttons';
+
+    const editBtn = document.createElement('button');
+    editBtn.textContent = '✎ Bearbeiten';
+    // stopPropagation ist hier nicht kosmetisch: Der Inhaltstausch nimmt den
+    // Knopf aus dem Baum. Steigt das Klickereignis danach weiter auf, findet
+    // Leaflet über dem gelösten Knoten das Popup nicht mehr, hält den Klick
+    // für einen Kartenklick – und schließt das Popup sofort wieder.
+    editBtn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      marker.setPopupContent(poiEditContent(poi, marker));
+    });
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.textContent = 'Löschen';
+    deleteBtn.className = 'danger';
+    deleteBtn.addEventListener('click', () => {
+      map.closePopup();
+      cbs.onPoiDelete(poi.id);
+    });
+
+    buttons.append(editBtn, deleteBtn);
+    div.appendChild(buttons);
+    return div;
+  }
+
+  function poiEditContent(poi, marker) {
     const div = document.createElement('div');
     div.className = 'poi-popup';
 
@@ -281,18 +412,106 @@ const MapView = (function () {
     return div;
   }
 
+  function poiPopupContent(poi, marker) {
+    const tags = PoiTypes.tagsOf(poi);
+    // Merkmale aus einem Import: zeigen. Selbst gesetzt: gleich bearbeiten.
+    return Object.keys(tags).length > 0
+      ? poiReadOnlyContent(poi, tags, marker)
+      : poiEditContent(poi, marker);
+  }
+
+  /**
+   * Zeichnet die POIs.
+   *
+   * Bestehende Marker werden weiterverwendet und nur nachgeführt, statt alles
+   * abzuräumen und neu anzulegen. Der Grund ist handfest: Ein Abgleich mit dem
+   * Server löst ein Neuzeichnen aus – und riss damit jedes gerade geöffnete
+   * Popup weg, mitten im Lesen.
+   */
+  // Ab wie vielen POIs nur noch der Kartenausschnitt gezeichnet wird, und ab
+  // welcher Zoomstufe überhaupt. Eine importierte Sammlung hat schnell einige
+  // tausend Einträge; alle gleichzeitig als Marker zu halten macht schon das
+  // Verschieben der Karte zäh (gemessen: acht Sekunden für einen Schwenk).
+  const POI_VIEWPORT_LIMIT = 300;
+  const POI_MIN_ZOOM = 11;
+  const POI_MAX_VISIBLE = 400;
+
+  let allPois = [];
+
   function renderPois(pois) {
-    poiMarkers.forEach((m) => map.removeLayer(m));
-    poiMarkers = new Map();
+    allPois = pois || [];
+    refreshPois();
+  }
+
+  /**
+   * Wählt aus, was gezeichnet wird: bei kleinen Sammlungen alles, bei großen
+   * nur der sichtbare Ausschnitt – und erst ab einer Zoomstufe, auf der
+   * einzelne Punkte überhaupt unterscheidbar sind.
+   */
+  function visiblePois() {
+    if (allPois.length <= POI_VIEWPORT_LIMIT) return allPois;
+    if (map.getZoom() < POI_MIN_ZOOM) return [];
+    // Etwas über den Rand hinaus, damit beim Schwenken nichts nachploppt.
+    const bounds = map.getBounds().pad(0.25);
+    const inside = allPois.filter((p) => bounds.contains([p.lat, p.lng]));
+    return inside.length > POI_MAX_VISIBLE ? inside.slice(0, POI_MAX_VISIBLE) : inside;
+  }
+
+  function refreshPois() {
+    const shown = visiblePois();
+    drawPois(shown);
+    if (cbs.onPoiVisibility) {
+      cbs.onPoiVisibility({
+        total: allPois.length,
+        shown: shown.length,
+        zoomedOut: allPois.length > POI_VIEWPORT_LIMIT && map.getZoom() < POI_MIN_ZOOM,
+      });
+    }
+  }
+
+  function drawPois(pois) {
+    const seen = new Set();
 
     pois.forEach((poi) => {
-      const marker = L.marker([poi.lat, poi.lng], {
-        draggable: true,
-        icon: poiIcon(),
-      }).addTo(map);
-      marker.bindPopup(() => poiPopupContent(poi));
-      marker.on('dragend', (e) => cbs.onPoiMoved(poi.id, e.target.getLatLng()));
-      poiMarkers.set(poi.id, marker);
+      seen.add(poi.id);
+      // Importierte Stellen sitzen dort, wo die Quelle sie verortet hat –
+      // ein versehentliches Verschieben wäre nur ein stiller Datenverlust.
+      const draggable = Object.keys(PoiTypes.tagsOf(poi)).length === 0;
+      const iconKey = PoiTypes.typeOf(poi).key;
+      let marker = poiMarkers.get(poi.id);
+
+      if (!marker) {
+        marker = L.marker([poi.lat, poi.lng], { draggable, icon: poiIcon(poi) }).addTo(map);
+        marker._wpIconKey = iconKey;
+        marker.on('dragend', (e) => cbs.onPoiMoved(poi.id, e.target.getLatLng()));
+        poiMarkers.set(poi.id, marker);
+      } else {
+        const at = marker.getLatLng();
+        if (at.lat !== poi.lat || at.lng !== poi.lng) marker.setLatLng([poi.lat, poi.lng]);
+        // Nur bei echtem Wechsel neu setzen – setIcon baut das Element neu auf.
+        if (marker._wpIconKey !== iconKey) {
+          marker.setIcon(poiIcon(poi));
+          marker._wpIconKey = iconKey;
+        }
+        if (marker.dragging) {
+          if (draggable) marker.dragging.enable();
+          else marker.dragging.disable();
+        }
+      }
+
+      // Der Popup-Inhalt hängt am jeweiligen Objekt; nach einer Änderung ist
+      // das ein anderes. Neu binden aber nur, solange nichts offen steht –
+      // sonst wechselte die Anzeige unter den Fingern.
+      if (!marker.isPopupOpen()) {
+        marker.unbindPopup();
+        marker.bindPopup(() => poiPopupContent(poi, marker));
+      }
+    });
+
+    [...poiMarkers.keys()].forEach((id) => {
+      if (seen.has(id)) return;
+      map.removeLayer(poiMarkers.get(id));
+      poiMarkers.delete(id);
     });
   }
 

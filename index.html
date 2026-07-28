@@ -124,6 +124,9 @@
              die Route berechnet hat, entscheidet darüber, ob es überhaupt
              Wegedaten zum Einfärben gibt. -->
         <p class="router-note" id="router-note" hidden></p>
+        <!-- Große POI-Sammlungen werden nur ausschnittsweise gezeichnet;
+             ohne diese Zeile sähe das nach verlorenen Daten aus. -->
+        <p class="router-note" id="poi-note" hidden></p>
       </section>
 
       <!-- Erscheint, sobald in den Einstellungen Stempel ausgewählt sind. -->
@@ -551,6 +554,7 @@
   <script src="js/clusters.js"></script>
   <script src="js/routestyle.js"></script>
   <script src="js/places.js"></script>
+  <script src="js/poitypes.js"></script>
   <script src="js/tracks.js"></script>
   <script src="js/tours.js"></script>
   <script src="js/mapview.js"></script>

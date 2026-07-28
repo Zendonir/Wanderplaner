@@ -570,6 +570,134 @@ body {
 .poi-marker span {
   transform: rotate(45deg);
   font-size: 0.85rem;
+  line-height: 1;
+}
+
+/* ---------- POI-Popup: Ansicht statt Formular ---------- */
+
+.poi-view {
+  max-width: 260px;
+  /* Lange Merkmalslisten dürfen das Popup nicht über den Bildschirm
+     hinauswachsen lassen. */
+  max-height: 55vh;
+  overflow-y: auto;
+}
+
+.poi-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.poi-head strong {
+  display: block;
+  font-size: 0.95rem;
+  line-height: 1.25;
+}
+
+.poi-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.8rem;
+  height: 1.8rem;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 0.9rem;
+  flex: 0 0 auto;
+}
+
+.poi-kind {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.poi-image {
+  display: block;
+  width: 100%;
+  max-height: 160px;
+  object-fit: cover;
+  border-radius: 6px;
+  margin-bottom: 0.4rem;
+}
+
+.poi-description {
+  font-size: 0.8rem;
+  line-height: 1.35;
+  margin-bottom: 0.4rem;
+}
+
+.poi-facts,
+.poi-tags dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.1rem 0.5rem;
+  font-size: 0.78rem;
+  margin-bottom: 0.4rem;
+}
+
+.poi-facts dt,
+.poi-tags dt {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.poi-facts dd,
+.poi-tags dd {
+  /* Lange Werte wie Adressen umbrechen, statt das Popup zu dehnen. */
+  overflow-wrap: anywhere;
+}
+
+.poi-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.45rem;
+}
+
+.poi-links a {
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 0.75rem;
+  color: var(--green-dark);
+  text-decoration: none;
+}
+
+.poi-links a:hover {
+  background: #eef1ec;
+}
+
+.poi-tags {
+  font-size: 0.75rem;
+  margin-bottom: 0.45rem;
+}
+
+.poi-tags summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  margin-bottom: 0.3rem;
+}
+
+.poi-tags dt {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.poi-view .poi-popup-buttons button {
+  flex: 1;
+  padding: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--panel);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.poi-type {
+  flex: 0 0 auto;
 }
 
 /* ---------- Stempelstellen ---------- */

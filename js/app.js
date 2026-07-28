@@ -8,7 +8,7 @@
   const state = {
     mode: 'menu',       // 'menu' (Klick fragt nach) | 'route' | 'poi'
     points: [],         // [{id, lat, lng}]
-    pois: [],           // [{id, lat, lng, name, note}]
+    pois: Pois.load(),  // [{id, lat, lng, name, note}] – persistent
     stamps: Stamps.load(), // [{id, lat, lng, name, note, collected}] – persistent
     parking: Parking.load(), // Parkplätze – persistent
     tracks: Tracks.load(),   // abgeschlossene Touren als Spur – persistent
@@ -114,6 +114,7 @@
     allowSteps: document.getElementById('rs-allowSteps'),
     engineNote: document.getElementById('engine-note'),
     routerNote: document.getElementById('router-note'),
+    poiNote: document.getElementById('poi-note'),
     brouterUrl: document.getElementById('brouter-url'),
     testBrouter: document.getElementById('btn-test-brouter'),
     resetBrouter: document.getElementById('btn-reset-brouter'),
@@ -190,6 +191,7 @@
     stamps: { store: Stamps, key: 'stamps' },
     parking: { store: Parking, key: 'parking' },
     tracks: { store: Tracks, key: 'tracks' },
+    pois: { store: Pois, key: 'pois' },
     tours: { store: Tours, key: 'savedTours' },
   };
 
@@ -285,6 +287,7 @@
       parking: state.parking,
       tracks: state.tracks,
       tours: state.savedTours,
+      pois: state.pois,
     });
     if (merged) applyMerged(merged);
     else updateSyncStatus();
@@ -393,6 +396,7 @@
     const parsed = JSON.parse(snapshot);
     state.points = parsed.points;
     state.pois = parsed.pois;
+    persist('pois');
     state.stamps = parsed.stamps || [];
     state.parking = parsed.parking || [];
     state.tracks = parsed.tracks || [];
@@ -607,7 +611,7 @@
     el.reverse.disabled = state.points.length < 2;
     el.generate.disabled = state.points.length === 0;
     el.placesBtn.disabled = !state.geometry || state.placeCategories.length === 0;
-    el.clear.disabled = state.points.length === 0 && state.pois.length === 0;
+    el.clear.disabled = state.points.length === 0 && manualPois().length === 0;
     el.export.disabled = !state.geometry;
   }
 
@@ -857,7 +861,8 @@
   function renderPoiList() {
     el.poiList.innerHTML = '';
 
-    if (state.pois.length === 0) {
+    const pois = items('pois');
+    if (pois.length === 0) {
       const li = document.createElement('li');
       li.className = 'list-empty';
       li.textContent = 'Noch keine POIs gesetzt';
@@ -865,14 +870,16 @@
       return;
     }
 
-    state.pois.forEach((poi) => {
+    pois.forEach((poi) => {
       const li = document.createElement('li');
-      const note = poi.note
-        ? ` <span class="item-note">· ${Utils.escapeHtml(poi.note)}</span>`
-        : '';
+      const type = PoiTypes.typeOf(poi);
+      // Bei importierten Stellen steht in der Notiz die Merkmalsliste – die
+      // gehört nicht in die Liste. Dort zählt die Art der Stelle.
+      const extra = PointStore.displayNote(poi.note) || type.label;
       li.innerHTML =
-        '<span>⚑</span>' +
-        `<span class="item-label">${Utils.escapeHtml(poi.name)}${note}</span>` +
+        `<span class="poi-type" title="${Utils.escapeHtml(type.label)}">${type.icon}</span>` +
+        `<span class="item-label">${Utils.escapeHtml(PoiTypes.displayName(poi))}` +
+        `<span class="item-note"> · ${Utils.escapeHtml(extra)}</span></span>` +
         '<button class="item-delete" title="POI löschen">✕</button>';
       li.querySelector('.item-label').addEventListener('click', () => {
         MapView.setView(poi.lat, poi.lng, 15);
@@ -1058,17 +1065,46 @@
         (result.skipped > 0 ? `, ${result.skipped} bereits vorhanden.` : '.');
     }
 
+    // Dieselbe Datei zweimal einzulesen darf die Sammlung nicht verdoppeln.
+    // Die Prüfung läuft über einen Schlüssel aus Lage und Name statt über
+    // paarweise Abstände: Bei mehreren tausend Punkten wäre der Vergleich
+    // jeder mit jedem sonst spürbar langsam.
+    const key = (p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)},` +
+      `${PointStore.normalizeName(p.name)}`;
+    const known = new Set(items('pois').map(key));
+
+    let added = 0;
+    let skipped = 0;
     waypoints.forEach((w) => {
-      state.pois.push({
+      const poi = {
         id: Utils.uid(),
         lat: w.lat,
         lng: w.lng,
         name: w.name || `POI ${poiCounter++}`,
         note: w.note,
-      });
+        // Verweis auf das Objekt in der Quelle, sofern die GPX-Datei einen
+        // mitbringt.
+        link: w.link || undefined,
+        updatedAt: Date.now(),
+      };
+      const id = key(poi);
+      if (known.has(id)) {
+        skipped++;
+        return;
+      }
+      known.add(id);
+      state.pois.push(poi);
+      added++;
     });
-    MapView.fitTo(state.pois);
-    return `${waypoints.length} POI(s) importiert.`;
+
+    const stored = persist('pois');
+    if (added > 0) MapView.fitTo(items('pois'));
+    if (!stored) {
+      return `${added} POI(s) angezeigt – der Browser-Speicher ist voll, ` +
+        'sie überstehen ein Neuladen nicht.';
+    }
+    return `${added} POI(s) importiert` +
+      (skipped > 0 ? `, ${skipped} bereits vorhanden.` : '.');
   }
 
   /* ---------- Parkplätze ---------- */
@@ -1454,9 +1490,15 @@
     pushUndo();
 
     state.points = tour.points.map((p) => ({ id: Utils.uid(), lat: p.lat, lng: p.lng }));
-    state.pois = (tour.pois || []).map((p) => ({
-      id: Utils.uid(), lat: p.lat, lng: p.lng, name: p.name, note: p.note,
-    }));
+    // Nur die eigenen Notizen der Tour übernehmen – die importierten
+    // Sammlungen sind Nachschlagewerk und gehören keiner einzelnen Tour.
+    manualPois().forEach((poi) => removeItem('pois', poi.id));
+    (tour.pois || []).forEach((p) => {
+      state.pois.push({
+        id: Utils.uid(), lat: p.lat, lng: p.lng, name: p.name, note: p.note,
+      });
+    });
+    persist('pois');
     if (tour.routing) state.routing = { ...Profiles.defaultSettings(), ...tour.routing };
     if (tour.preset) state.preset = tour.preset;
     state.tourName = tour.name;
@@ -1563,7 +1605,7 @@
     MapView.renderTracks(items('tracks'));
     MapView.renderPlannedTours(items('tours'));
     MapView.renderPoints(state.points);
-    MapView.renderPois(state.pois);
+    MapView.renderPois(items('pois'));
     MapView.renderStamps(items('stamps'), state.tourSelection);
     // Sobald ein Startpunkt steht, ist die Parkplatzfrage beantwortet – die
     // Marken würden die Karte beim Planen nur zustellen. Sie kommen zurück,
@@ -1623,8 +1665,31 @@
       note: '',
     };
     state.pois.push(poi);
+    persist('pois');
     renderAll();
     MapView.openPoiPopup(poi.id);
+  }
+
+  /**
+   * Sagt, wenn von einer großen Sammlung gerade nur ein Teil zu sehen ist.
+   * Ohne diesen Hinweis wirkt das Ausdünnen wie verlorene Daten – und genau
+   * dieser Verdacht kostet am meisten Nerven.
+   */
+  function updatePoiNote(info) {
+    const note = el.poiNote;
+    if (!note) return;
+    if (!info || info.total === 0 || info.shown === info.total) {
+      note.hidden = true;
+      note.textContent = '';
+      return;
+    }
+    note.hidden = false;
+    note.className = 'router-note';
+    note.textContent = info.zoomedOut
+      ? `${info.total} POIs vorhanden – sie erscheinen, sobald die Karte ` +
+        'näher herangezoomt ist.'
+      : `${info.shown} von ${info.total} POIs im Bild – die übrigen liegen ` +
+        'außerhalb des Ausschnitts.';
   }
 
   function movePoi(id, latlng) {
@@ -1633,6 +1698,8 @@
     pushUndo();
     poi.lat = latlng.lat;
     poi.lng = latlng.lng;
+    Sync.touch(poi);
+    persist('pois');
     renderAll();
   }
 
@@ -1642,13 +1709,26 @@
     pushUndo();
     poi.name = name;
     poi.note = note;
+    Sync.touch(poi);
+    persist('pois');
     renderAll();
   }
 
   function deletePoi(id) {
     pushUndo();
-    state.pois = state.pois.filter((p) => p.id !== id);
+    removeItem('pois', id);
     renderAll();
+  }
+
+  /**
+   * Selbst gesetzte POIs – die ohne Merkmale aus einer Quelle.
+   *
+   * Nur die gehören zur laufenden Planung und verschwinden mit „Leeren“.
+   * Eine importierte Sammlung mit tausenden Einträgen dabei mitzulöschen
+   * wäre eine böse Überraschung.
+   */
+  function manualPois() {
+    return items('pois').filter((p) => Object.keys(PoiTypes.tagsOf(p)).length === 0);
   }
 
   /** Dreht die Reihenfolge der Routenpunkte um. */
@@ -1672,10 +1752,11 @@
   }
 
   function clearAll() {
-    if (state.points.length === 0 && state.pois.length === 0) return;
+    const own = manualPois();
+    if (state.points.length === 0 && own.length === 0) return;
     pushUndo();
     state.points = [];
-    state.pois = [];
+    own.forEach((poi) => removeItem('pois', poi.id));
     renderAll();
     scheduleRecalc();
   }
@@ -1840,7 +1921,7 @@
     const tourStamps = state.tourSelection
       .map((id) => items('stamps').find((s) => s.id === id))
       .filter(Boolean);
-    Gpx.download(trackPoints, [...state.pois, ...tourStamps]);
+    Gpx.download(trackPoints, [...items('pois'), ...tourStamps]);
     showStatus('info', 'GPX-Datei wurde heruntergeladen.', 4000);
   }
 
@@ -3133,6 +3214,7 @@
         if (dismissSheet()) return;
         openMapMenu(latlng);
       },
+      onPoiVisibility: updatePoiNote,
       onPointMenu: openPointMenu,
       onPointMoved: movePoint,
       onPointDelete: deletePoint,

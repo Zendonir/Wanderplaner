@@ -75,6 +75,10 @@ const PointStore = {
         w.querySelector('cmt')?.textContent ||
         ''
       ).trim(),
+      // OSM-Ausgaben hängen den Verweis auf das Objekt als <link> an. Der ist
+      // nützlich (dort steht die vollständige Beschreibung) und ginge sonst
+      // beim Import verloren.
+      link: (w.querySelector('link')?.getAttribute('href') || '').trim(),
     }));
     return waypoints.filter(
       (w) => Number.isFinite(w.lat) && Number.isFinite(w.lng)
@@ -226,6 +230,12 @@ const Stamps = PointStore.create('wanderplaner.stempelstellen', 'Stempelstelle')
 
 /** Parkplätze. */
 const Parking = PointStore.create('wanderplaner.parkplaetze', 'Parkplatz');
+
+// POIs waren ursprünglich Notizzettel für die laufende Planung und lebten nur
+// im Arbeitsspeicher. Mit importierten Sammlungen – Aussichtspunkte,
+// Schutzhütten, Einkehr – sind sie ein Nachschlagewerk geworden; nach jedem
+// Neuladen wieder bei null anzufangen wäre da unbrauchbar.
+const Pois = PointStore.create('wanderplaner.pois', 'POI');
 
 // Frühere Versionen speicherten Stempelstellen unter {stamps: [...]}, die
 // load()-Funktion oben liest beide Formate.

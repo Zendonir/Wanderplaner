@@ -25,7 +25,7 @@ const MAX_BODY_BYTES = 8 * 1024 * 1024;
 
 // Alle Sammlungen, die synchronisiert werden. Jeder Eintrag trägt eine id,
 // updatedAt (ms) und optional deletedAt für Löschungen.
-const COLLECTIONS = ['stamps', 'parking', 'tracks', 'tours'];
+const COLLECTIONS = ['stamps', 'parking', 'tracks', 'tours', 'pois'];
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',

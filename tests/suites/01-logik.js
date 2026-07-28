@@ -43,7 +43,7 @@ function moduleName(file) {
     waytypes: 'WayTypes', clusters: 'Clusters', progress: 'Progress',
     maplinks: 'MapLinks', tracks: 'Tracks', routestyle: 'RouteStyle',
     roundtrip: 'RoundTrip', places: 'Stamps', profiles: 'Profiles',
-    routing: 'Routing',
+    routing: 'Routing', poitypes: 'PoiTypes',
   };
   return map[file] || file;
 }
@@ -53,10 +53,11 @@ module.exports = {
 
   async run(check) {
     const { Utils, QRCode, Daylight, Nearby, WayTypes, Clusters, Progress, MapLinks,
-            RouteStyle, Tracks, RoundTrip, Stamps, Profiles, Routing } =
+            RouteStyle, Tracks, RoundTrip, Stamps, Profiles, Routing,
+            PoiTypes } =
       loadModules(['utils', 'qrcode', 'daylight', 'nearby', 'waytypes', 'clusters',
                    'progress', 'maplinks', 'routestyle', 'tracks', 'roundtrip',
-                   'places', 'profiles', 'routing']);
+                   'places', 'profiles', 'routing', 'poitypes']);
 
     /* ---- QR-Code: gegen einen unabhängigen Decoder ---- */
     const jsQR = require('jsqr');
@@ -419,6 +420,80 @@ module.exports = {
 
     check.equal(RouteStyle.fade('#4a9a5c', 0.35), 'rgba(74, 154, 92, 0.35)',
       'Die Fläche unter dem Profil nutzt dieselbe Farbe, nur blasser');
+
+    /* ---- Importierte POIs: Merkmale lesbar machen ---- */
+    // So kommt es aus der Praxis (Screenshot des Nutzers): eine Zeile mit
+    // Merkmalen in der Beschreibung.
+    const peakTags = PoiTypes.parseTags(
+      'ele=591.7 name=Einersberg natural=peak wikipedia=de:Einersberg ' +
+      'wikimedia_commons=File:Einersberg Aussicht.jpg');
+    check.equal(peakTags.natural, 'peak', 'Die Art wird aus den Merkmalen gelesen');
+    check.equal(peakTags.ele, '591.7', 'Die Höhe ebenso');
+    check.equal(peakTags.name, 'Einersberg', 'Und der Name');
+    // Werte mit Leerzeichen dürfen nicht zerfallen.
+    check.equal(peakTags.wikimedia_commons, 'File:Einersberg Aussicht.jpg',
+      'Ein Wert mit Leerzeichen bleibt zusammen');
+
+    const peak = PoiTypes.classify(peakTags);
+    check.equal(peak.key, 'peak', 'Ein Gipfel wird als solcher erkannt');
+    check.equal(peak.icon, '⛰', 'Und bekommt ein passendes Zeichen');
+
+    const typeCases = [
+      ['tourism=viewpoint', 'viewpoint'],
+      ['amenity=shelter', 'hut'],
+      ['natural=spring', 'water'],
+      ['historic=ruins', 'castle'],
+      ['amenity=restaurant', 'food'],
+      ['tourism=information information=board', 'info'],
+      ['man_made=tower tower:type=observation', 'tower'],
+      ['natural=cave_entrance', 'cave'],
+      ['highway=bus_stop', 'transit'],
+      ['barrier=gate', 'other'],
+    ];
+    typeCases.forEach(([raw, expected]) => {
+      check.equal(PoiTypes.classify(PoiTypes.parseTags(raw)).key, expected,
+        `„${raw}“ wird als „${expected}“ eingeordnet`);
+    });
+    const icons = new Set(typeCases.map(
+      ([raw]) => PoiTypes.classify(PoiTypes.parseTags(raw)).icon));
+    check.ok(icons.size >= 8, 'Die Arten unterscheiden sich sichtbar voneinander',
+      `${icons.size} verschiedene Zeichen`);
+
+    // Verweise: OSM speichert Kürzel, angezeigt wird eine echte Adresse.
+    const links = PoiTypes.links(PoiTypes.parseTags(
+      'website=beispiel-huette.de wikipedia=de:Brocken wikidata=Q4152'));
+    const byLabel = Object.fromEntries(links.map((l) => [l.label, l.url]));
+    check.equal(byLabel.Webseite, 'https://beispiel-huette.de',
+      'Eine Adresse ohne Vorsatz wird ergänzt');
+    check.equal(byLabel.Wikipedia, 'https://de.wikipedia.org/wiki/Brocken',
+      'Aus dem Wikipedia-Kürzel wird eine Adresse');
+    check.equal(byLabel.Wikidata, 'https://www.wikidata.org/wiki/Q4152',
+      'Wikidata ebenso');
+    check.equal(PoiTypes.links(PoiTypes.parseTags('natural=peak')).length, 0,
+      'Ohne Verweise gibt es keine Knöpfe');
+
+    const image = PoiTypes.imageUrl(peakTags);
+    check.contains(image, 'Special:FilePath', 'Aus dem Commons-Dateinamen wird ein Bild');
+    check.contains(image, 'Einersberg_Aussicht.jpg', 'Der Dateiname steckt darin');
+    check.equal(PoiTypes.imageUrl(PoiTypes.parseTags('natural=peak')), null,
+      'Ohne Bildangabe wird nichts geladen');
+
+    const facts = PoiTypes.facts(peakTags);
+    check.equal(facts[0].label, 'Höhe', 'Die Höhe steht als erste Angabe');
+    check.equal(facts[0].value, '592 m', 'Und zwar gerundet mit Einheit');
+
+    // Der Rest bleibt erhalten, taucht aber nicht doppelt auf.
+    const rest = PoiTypes.rest(peakTags).map((r) => r.key);
+    check.ok(!rest.includes('ele') && !rest.includes('name'),
+      'Schon Gezeigtes wiederholt sich nicht in der Merkmalsliste');
+    check.ok(rest.includes('natural'), 'Alles Übrige bleibt einsehbar');
+
+    // Ein selbst gesetzter POI hat keine Merkmale – dann bleibt es beim
+    // schlichten Formular.
+    check.equal(Object.keys(PoiTypes.tagsOf({ name: 'Mein Punkt', note: 'schöner Blick' })).length,
+      0, 'Eine echte Notiz wird nicht als Merkmalsliste missverstanden');
+    check.ok(Object.keys(PoiTypes.tagsOf({ name: 'X', note: 'natural=peak ele=591' })).length > 0,
+      'Eine Merkmalszeile dagegen schon');
 
     /* ---- Routerprofil: die Wegemerkmale müssen mitkommen ---- */
     // Ohne diesen Schalter gibt BRouter zwar eine Route zurück, aber keine

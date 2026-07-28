@@ -11,7 +11,7 @@
  */
 const Sync = {
   API_URL: 'api/data',
-  COLLECTIONS: ['stamps', 'parking', 'tracks', 'tours'],
+  COLLECTIONS: ['stamps', 'parking', 'tracks', 'tours', 'pois'],
 
   available: false,   // Server erreichbar?
   lastSync: null,

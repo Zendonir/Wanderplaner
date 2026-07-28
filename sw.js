@@ -11,7 +11,7 @@
  * Der Datenabgleich (/api/…) wird bewusst nie zwischengespeichert – dort
  * zählt immer der aktuelle Stand.
  */
-const VERSION = 'v29';
+const VERSION = 'v30';
 const SHELL_CACHE = `wanderplaner-shell-${VERSION}`;
 const TILE_CACHE = `wanderplaner-tiles-${VERSION}`;
 const MAX_TILES = 1200;
@@ -32,6 +32,7 @@ const SHELL = [
   './js/maplinks.js',
   './js/sync.js',
   './js/places.js',
+  './js/poitypes.js',
   './js/tracks.js',
   './js/tours.js',
   './js/daylight.js',

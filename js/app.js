@@ -3162,10 +3162,13 @@
     el.checkUpdate.addEventListener('click', checkForUpdate);
     el.runUpdate.addEventListener('click', runUpdate);
     el.reloadShell.addEventListener('click', reloadShell);
-    // Beim ersten Aufruf übernimmt der Service Worker erst kurz nach dem
-    // Laden – deshalb erst nach kurzer Verzögerung vergleichen, sonst meldet
-    // er noch gar keine Fassung.
+    // Die beiden Angaben sofort anzeigen – sie stehen in den Einstellungen
+    // und sollen dort nicht erst nach Sekunden erscheinen.
     loadVersion();
+    loadShellVersion();
+    // Der Vergleich braucht dagegen etwas Geduld: Beim ersten Aufruf
+    // übernimmt der Service Worker erst kurz nach dem Laden und meldet
+    // vorher noch gar keine Fassung.
     setTimeout(checkShellFreshness, 1500);
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.addEventListener('controllerchange', loadShellVersion);

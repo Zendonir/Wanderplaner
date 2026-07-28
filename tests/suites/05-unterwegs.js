@@ -150,6 +150,12 @@ module.exports = {
       await page.reload();
       await page.waitForSelector('#map.leaflet-container');
       await page.waitForTimeout(900);
+      // Die Angabe kommt über den Service Worker und darf einen Moment
+      // brauchen – aber nicht beliebig lange.
+      await page.waitForFunction(
+        () => (document.getElementById('shell-version').textContent || '').trim() !== '',
+        null, { timeout: 5000 },
+      ).catch(() => {});
       check.contains(await page.textContent('#shell-version'), 'Oberfläche',
         'Der Stand der zwischengespeicherten Oberfläche wird angezeigt');
       check.ok(await page.locator('#btn-reload-shell').isVisible()

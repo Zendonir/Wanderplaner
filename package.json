@@ -1,6 +1,6 @@
 {
   "name": "wanderplaner",
-  "version": "2.17.1",
+  "version": "2.17.2",
   "private": true,
   "description": "Interaktive Web-App zur Planung von Wanderrouten",
   "scripts": {

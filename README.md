@@ -383,6 +383,14 @@ TrueNAS vorbei ersetzt – die Oberfläche zeigt danach unter Umständen weiter
 die alte Version an, bis die App dort einmal bearbeitet und gespeichert wird.
 Wer das nicht will, bleibt bei **Apps → Installed → Update**.
 
+**„Docker nicht erreichbar: connect EACCES"?** Dann ist der Socket zwar
+eingehängt, der Dienst darf ihn aber nicht lesen. Auf dem Host gehört er root
+und einer Gruppe, deren Nummer von Rechner zu Rechner verschieden ist. Der
+Container ordnet sich dieser Gruppe beim Start selbst zu – dafür muss er als
+root starten dürfen. In der App-Konfiguration also **keine feste Nutzer-ID**
+(`user:` in der YAML bzw. *Run As* in der TrueNAS-Oberfläche) vorgeben; der
+Dienst selbst läuft ohnehin unprivilegiert weiter.
+
 **Wie es abläuft:** Ein Container kann sich nicht selbst ersetzen – beim
 Austausch stirbt genau der Prozess, der die Arbeit machen müsste. Der
 Wanderplaner startet deshalb einen kurzlebigen Watchtower-Container

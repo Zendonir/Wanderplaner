@@ -1503,6 +1503,20 @@ body {
   flex-direction: column;
   gap: 1rem;
   min-height: 0;
+  /* Ohne min-width:0 wächst der Dialog mit seinem breitesten Kind – der
+     YAML-Block schob ihn auf dem Handy über den Bildschirmrand hinaus. */
+  min-width: 0;
+}
+
+.settings-block {
+  min-width: 0;
+}
+
+/* Lange Pfade und Bezeichner brechen notfalls mitten im Wort um. */
+.settings-block .hint,
+.settings-block p,
+.update-setup {
+  overflow-wrap: anywhere;
 }
 
 .settings-block > h3 {
@@ -1684,6 +1698,10 @@ body {
 .danger-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .danger-zone .hint { margin-top: 0.35rem; }
+
+.about {
+  min-width: 0;
+}
 
 /* ---------- Aktualisierung einschalten ---------- */
 
@@ -2356,5 +2374,18 @@ body {
 
   .settings-sheet {
     max-height: 92vh;
+  }
+
+  /* Ein Knopf, der alles löscht, darf nicht wie ein Beipackzettel aussehen. */
+  .danger-btn {
+    width: 100%;
+    padding: 0.6rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+
+  /* Der YAML-Block darf scrollen, aber nicht den Dialog aufblähen. */
+  .setup-code {
+    max-width: 100%;
   }
 }

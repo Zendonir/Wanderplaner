@@ -123,6 +123,33 @@ module.exports = {
         'Die Sammlung schiebt sich über die Karte statt sie zu quetschen',
         `${Math.round(lib.width)} px breit`);
 
+      /* ---- Einstellungsdialog passt auf den Bildschirm ---- */
+      // Der YAML-Block in der Update-Anleitung hatte den Dialog über den
+      // rechten Rand hinausgeschoben; Text war dann abgeschnitten.
+      await page.tap('#btn-settings');
+      await page.waitForSelector('#settings:not([hidden])');
+      await page.tap('#update-setup summary');
+      await page.waitForTimeout(400);
+
+      const dialog = await page.evaluate(() => {
+        const sheet = document.querySelector('.settings-sheet');
+        const box = sheet.getBoundingClientRect();
+        return {
+          rechts: box.right,
+          fenster: window.innerWidth,
+          scrollt: document.documentElement.scrollWidth > window.innerWidth + 2,
+        };
+      });
+      check.ok(dialog.rechts <= dialog.fenster + 1,
+        'Der Einstellungsdialog bleibt im Bildschirm',
+        `Rand bei ${Math.round(dialog.rechts)} von ${dialog.fenster} px`);
+      check.ok(!dialog.scrollt, 'Die Seite bekommt dadurch keinen Querbalken');
+
+      const resetBreite = await page.locator('#btn-reset').boundingBox();
+      check.ok(resetBreite.width > dialog.fenster * 0.6,
+        'Der Zurücksetzen-Knopf ist fingerfreundlich breit',
+        `${Math.round(resetBreite.width)} px`);
+
       check.equal(errors.length, 0, 'Keine Skriptfehler', errors.join(' | '));
     } finally {
       await browser.close();

@@ -140,7 +140,17 @@ async function status() {
     }
     return { available: true, reason: null, container: self.name, image: self.image };
   } catch (err) {
-    return { available: false, reason: `Docker nicht erreichbar: ${err.message}`, container: null };
+    // EACCES heißt: Der Socket ist da, aber der Dienst darf nicht ran. Er
+    // gehört auf dem Host einer Gruppe, deren Nummer je Rechner verschieden
+    // ist; das Startskript nimmt den Dienstnutzer dort auf – das geht aber
+    // nur, wenn der Container als root starten darf.
+    const reason = /EACCES/.test(err.message)
+      ? `Der Docker-Socket ${SOCKET} ist eingehängt, aber nicht lesbar (EACCES). ` +
+        'Der Container muss als root starten dürfen, damit er sich beim Start ' +
+        'der Socket-Gruppe zuordnen kann – in der App-Konfiguration also keine ' +
+        'feste Nutzer-ID vorgeben.'
+      : `Docker nicht erreichbar: ${err.message}`;
+    return { available: false, reason, container: null };
   }
 }
 

@@ -42,7 +42,8 @@ function moduleName(file) {
     utils: 'Utils', qrcode: 'QRCode', daylight: 'Daylight', nearby: 'Nearby',
     waytypes: 'WayTypes', clusters: 'Clusters', progress: 'Progress',
     maplinks: 'MapLinks', tracks: 'Tracks', routestyle: 'RouteStyle',
-    roundtrip: 'RoundTrip', places: 'Stamps',
+    roundtrip: 'RoundTrip', places: 'Stamps', profiles: 'Profiles',
+    routing: 'Routing',
   };
   return map[file] || file;
 }
@@ -52,10 +53,10 @@ module.exports = {
 
   async run(check) {
     const { Utils, QRCode, Daylight, Nearby, WayTypes, Clusters, Progress, MapLinks,
-            RouteStyle, Tracks, RoundTrip, Stamps } =
+            RouteStyle, Tracks, RoundTrip, Stamps, Profiles, Routing } =
       loadModules(['utils', 'qrcode', 'daylight', 'nearby', 'waytypes', 'clusters',
                    'progress', 'maplinks', 'routestyle', 'tracks', 'roundtrip',
-                   'places']);
+                   'places', 'profiles', 'routing']);
 
     /* ---- QR-Code: gegen einen unabhängigen Decoder ---- */
     const jsQR = require('jsqr');
@@ -305,6 +306,17 @@ module.exports = {
 
     const noSegments = RouteStyle.build('surface', routeCoords, routeEle, null);
     check.contains(noSegments.note, 'Wegedaten', 'Fehlende Wegedaten werden erklärt');
+    check.contains(RouteStyle.build('surface', routeCoords, routeEle, null, 'osrm').note,
+      'OSRM', 'Beim Ersatzrouter wird er als Grund genannt');
+    check.contains(RouteStyle.build('surface', routeCoords, routeEle, null, 'brouter').note,
+      'BRouter', 'Bei BRouter ohne Wegedaten ebenso');
+
+    // Abschnitte ganz ohne Merkmale: keine graue Einheitslinie, sondern
+    // eine Ansage.
+    const emptyTags = RouteStyle.build('surface', routeCoords, routeEle,
+      [{ length: 3000, tags: {} }, { length: 3000, tags: {} }], 'brouter');
+    check.equal(emptyTags.sections.length, 1, 'Ohne Merkmale wird einfarbig gezeichnet');
+    check.contains(emptyTags.note, 'Merkmale', 'Und der Grund steht dabei');
 
     /* ---- Wegedaten ohne Koordinaten ---- */
     // Manche Antworten des Routers enthalten zu den Abschnitten keine
@@ -407,6 +419,41 @@ module.exports = {
 
     check.equal(RouteStyle.fade('#4a9a5c', 0.35), 'rgba(74, 154, 92, 0.35)',
       'Die Fläche unter dem Profil nutzt dieselbe Farbe, nur blasser');
+
+    /* ---- Routerprofil: die Wegemerkmale müssen mitkommen ---- */
+    // Ohne diesen Schalter gibt BRouter zwar eine Route zurück, aber keine
+    // Angaben darüber, worüber sie führt. Dann ist die Einfärbung nach
+    // Wegbedingungen ebenso leer wie die Aufschlüsselung und die Warnliste.
+    const profileText = Profiles.build(Profiles.defaultSettings());
+    check.ok(/assign\s+processUnusedTags\s+1\b/.test(profileText),
+      'Das Profil lässt BRouter die Wegemerkmale mitschicken',
+      (profileText.match(/assign\s+processUnusedTags\s+\d/) || ['fehlt'])[0]);
+
+    /* ---- Detailtabelle des Routers auswerten ---- */
+    const header = ['Longitude', 'Latitude', 'Elevation', 'Distance', 'CostPerKm',
+      'ElevCost', 'TurnCost', 'NodeCost', 'InitialCost', 'WayTags', 'NodeTags',
+      'Time', 'Energy'];
+    const row = ['10600000', '51801000', '600', '1600', '1000', '0', '0', '0', '0',
+      'highway=path surface=ground', 'ele=600', '0', '0'];
+    const parsed = Routing._parseMessages([header, row]);
+    check.equal(parsed.length, 1, 'Aus der Detailtabelle wird ein Abschnitt');
+    check.equal(parsed[0].tags.highway, 'path', 'Die Wegart wird gelesen');
+    check.equal(parsed[0].tags.surface, 'ground', 'Und die Oberfläche');
+    check.ok(Math.abs(parsed[0].lat - 51.801) < 1e-6, 'Die Koordinate wird umgerechnet');
+
+    // NodeTags darf nicht als WayTags durchgehen, auch nicht wenn es
+    // vorn steht.
+    const swapped = Routing._parseMessages([
+      ['Longitude', 'Latitude', 'Distance', 'NodeTags', 'WayTags'],
+      ['10600000', '51801000', '1600', 'ele=600', 'highway=track'],
+    ]);
+    check.equal(swapped[0].tags.highway, 'track',
+      'Die richtige Spalte wird genommen, egal in welcher Reihenfolge');
+
+    check.equal(Routing._parseMessages(null), null, 'Ohne Tabelle gibt es nichts');
+    check.equal(Routing._parseMessages([header]), null, 'Eine reine Kopfzeile ergibt nichts');
+    check.equal(Routing._parseMessages([['Longitude', 'Latitude'], ['1', '2']]), null,
+      'Fehlen die nötigen Spalten, wird nichts vorgetäuscht');
 
     /* ---- Hinterlegte Spur auf Stützpunkte eindampfen ---- */
     // Eine dichte Spur mit einer klaren Kehre – die muss erhalten bleiben.

@@ -125,7 +125,12 @@ assign allow_steps        ${allowSteps}
 assign shortest_way       ${shortest}
 
 assign turnInstructionMode 0
-assign processUnusedTags   0
+# Muss an bleiben: Nur damit legt BRouter die OSM-Merkmale der Wege in die
+# Detailtabelle der Antwort. Ohne sie kommt zwar eine Route zurück, aber
+# ohne jede Angabe, worüber sie führt – dann lässt sich die Strecke weder
+# nach Wegbedingungen einfärben noch aufschlüsseln noch auf heikle Stellen
+# prüfen.
+assign processUnusedTags   1
 
 # Höhenmeter kosten extra, sobald "steile Wege vermeiden" aktiv ist.
 assign uphillcost      ${uphillCost}

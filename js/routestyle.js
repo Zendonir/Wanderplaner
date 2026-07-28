@@ -82,6 +82,18 @@ const RouteStyle = {
           note: this.missingDataReason(engine),
         };
       }
+      // Abschnitte ohne jedes Merkmal ergeben eine durchgehend graue Linie.
+      // Das sähe aus wie eine Darstellung, die nichts tut – also lieber
+      // sagen, was fehlt.
+      if (segments.every((s) => !s.tags || Object.keys(s.tags).length === 0)) {
+        return {
+          sections: this._single(coordinates, this.PLAIN_COLOR),
+          legend: [],
+          scale: null,
+          note: 'Zu den Wegabschnitten dieser Route stehen keine Merkmale ' +
+            '(Wegart, Oberfläche) in der Antwort des Routers.',
+        };
+      }
       return this._bySurface(coordinates, segments);
     }
 
@@ -107,8 +119,9 @@ const RouteStyle = {
         'die Strecke nicht nach Wegbedingungen einfärben.';
     }
     if (engine === 'brouter') {
-      return 'BRouter hat diese Route ohne Wegedaten zurückgegeben. Ein neuer ' +
-        'Versuch (Route einmal neu berechnen lassen) hilft meist.';
+      return 'BRouter hat diese Route ohne die Merkmale der Wege zurückgegeben. ' +
+        'Bitte die Route einmal neu berechnen lassen; bleibt es dabei, liefert ' +
+        'der Dienst die Angaben gerade nicht mit.';
     }
     return 'Für diese Route liegen keine Wegedaten vor (nur mit BRouter verfügbar).';
   },

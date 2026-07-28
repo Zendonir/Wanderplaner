@@ -268,12 +268,27 @@ const Routing = {
    */
   _parseMessages(messages) {
     if (!Array.isArray(messages) || messages.length < 2) return null;
+    if (!Array.isArray(messages[0])) return null;
 
+    // Die Spalten über einen Namensteil suchen statt über exakte Gleichheit:
+    // Schreibweise und Reihenfolge sind nicht garantiert, und eine einzige
+    // Abweichung hätte sonst die gesamte Auswertung stillgelegt.
     const header = messages[0].map((h) => String(h).toLowerCase());
-    const idxLon = header.indexOf('longitude');
-    const idxLat = header.indexOf('latitude');
-    const idxDist = header.indexOf('distance');
-    const idxTags = header.indexOf('waytags');
+    // Die genaueste Schreibweise zuerst über alle Spalten, erst danach die
+    // lockereren – sonst würde etwa „NodeTags“ als „WayTags“ durchgehen,
+    // wenn es in der Tabelle weiter vorn stünde.
+    const column = (...needles) => {
+      for (const needle of needles) {
+        const found = header.findIndex((name) => name.includes(needle));
+        if (found >= 0) return found;
+      }
+      return -1;
+    };
+
+    const idxLon = column('longitude', 'lon');
+    const idxLat = column('latitude', 'lat');
+    const idxDist = column('distance');
+    const idxTags = column('waytags', 'waytag', 'tags');
     if (idxDist < 0 || idxTags < 0) return null;
 
     const segments = [];

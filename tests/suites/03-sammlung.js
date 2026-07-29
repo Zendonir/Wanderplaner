@@ -426,23 +426,28 @@ module.exports = {
       ]);
       await importFile('poi', poiFile);
       await page.waitForTimeout(600);
-      check.equal(await page.locator('#poi-list li:not(.list-empty)').count(), 3,
+      check.contains(await page.textContent('#poi-filter-count'), '3 POIs',
         'POIs werden importiert');
 
+      // Statt einer Liste einzelner Punkte nur noch die Arten.
+      check.equal(await page.locator('#poi-list').count(), 0,
+        'Die Liste einzelner POIs ist entfallen');
+
       // Jede Art bekommt ihr eigenes Zeichen – nicht mehr überall dieselbe Fahne.
-      const poiIcons = await page.locator('#poi-list .poi-type').allTextContents();
+      const poiIcons = await page.locator('.poi-chip-icon').allTextContents();
       check.equal(new Set(poiIcons).size, 3,
         'Die drei Arten haben drei verschiedene Zeichen', poiIcons.join(' '));
       check.ok(poiIcons.includes('⛰'), 'Der Gipfel bekommt ein Gipfelzeichen');
 
-      const poiLabels = (await page.locator('#poi-list .item-label').allTextContents()).join(' | ');
-      check.ok(!poiLabels.includes('natural='),
-        'In der Liste steht die Art, nicht die Merkmalszeile', poiLabels.slice(0, 80));
+      const poiLabels = (await page.locator('.poi-chip-label').allTextContents()).join(' | ');
+      check.ok(!poiLabels.includes('='),
+        'Dort steht die Art, nicht die Merkmalszeile', poiLabels.slice(0, 80));
       check.contains(poiLabels, 'Aussichtspunkt', 'Und zwar in Worten');
 
       // Popup: Ansicht mit Angaben und Verweisen, kein Textfeld.
-      await page.locator('#poi-list li').filter({ hasText: 'Molkenhaus' })
-        .locator('.item-label').click();
+      // Leaflet ordnet die Marken nach Breitengrad – deshalb über die Art
+      // auswählen statt über die Reihenfolge.
+      await page.locator('.poi-marker[title="Einkehr"]').click();
       await page.waitForSelector('.poi-view', { timeout: 5000 });
       const view = page.locator('.poi-view');
       check.contains(await view.textContent(), 'Einkehr', 'Das Popup nennt die Art');
@@ -469,13 +474,13 @@ module.exports = {
       await page.reload();
       await page.waitForSelector('#map.leaflet-container');
       await page.waitForTimeout(900);
-      check.equal(await page.locator('#poi-list li:not(.list-empty)').count(), 3,
+      check.contains(await page.textContent('#poi-filter-count'), '3 POIs',
         'Importierte POIs sind nach dem Neuladen noch da');
 
       // Und ein erneuter Import verdoppelt sie nicht.
       await importFile('poi', poiFile);
       await page.waitForTimeout(600);
-      check.equal(await page.locator('#poi-list li:not(.list-empty)').count(), 3,
+      check.contains(await page.textContent('#poi-filter-count'), '3 POIs',
         'Dieselbe Datei erneut einzulesen ändert nichts');
       await page.keyboard.press('Escape');
       await page.waitForTimeout(250);
@@ -497,12 +502,6 @@ module.exports = {
       await page.keyboard.press('Escape');
       await page.waitForTimeout(400);
 
-      // Die Liste zeigt nur die ersten 200 – tausende Zeilen aufzubauen
-      // dauert länger als das Zeichnen der Karte und nützt niemandem.
-      const listed = await page.locator('#poi-list li:not(.list-empty)').count();
-      check.equal(listed, 200, 'Die Liste zeigt höchstens 200 Einträge');
-      check.contains(await page.textContent('#poi-list'), 'weitere',
-        'Und sagt, wie viele noch folgen');
       const drawn = await page.locator('.poi-marker').count();
       check.ok(drawn < 503, 'Auf der Karte wird nur ein Teil gezeichnet',
         `${drawn} Marken`);
@@ -545,10 +544,6 @@ module.exports = {
         'Der Knopf zeigt den ausgeblendeten Zustand');
       check.contains(await page.textContent('#poi-filter-count'), '2 von 503',
         'Die Zählung folgt der Auswahl');
-      const remaining = (await page.locator('#poi-list .item-label').allTextContents()).join(' | ');
-      check.ok(!remaining.includes('Rabenklippe'),
-        'Ausgeblendete Arten verschwinden aus der Liste', remaining.slice(0, 80));
-      check.contains(remaining, 'Molkenhaus', 'Die übrigen bleiben');
       check.equal(await page.locator('.poi-marker').count(), 2,
         'Auf der Karte bleiben nur die eingeblendeten Arten');
 
@@ -563,8 +558,8 @@ module.exports = {
       await page.waitForTimeout(600);
       check.equal(await page.locator('.poi-marker').count(), 0,
         '„Keine“ blendet alles aus');
-      check.contains(await page.textContent('#poi-list'), 'ausgeblendet',
-        'Die leere Liste erklärt sich');
+      check.contains(await page.textContent('#poi-filter-count'), '0 von 503',
+        'Die Zählung sagt, dass nichts übrig ist');
 
       await page.click('#btn-poi-all');
       await page.waitForTimeout(700);

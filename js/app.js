@@ -88,7 +88,7 @@
     clear: document.getElementById('btn-clear'),
     export: document.getElementById('btn-export'),
     pointList: document.getElementById('point-list'),
-    poiList: document.getElementById('poi-list'),
+    poiEmpty: document.getElementById('poi-empty'),
     importType: document.getElementById('import-type'),
     importBtn: document.getElementById('btn-import'),
     importFile: document.getElementById('import-file'),
@@ -958,53 +958,15 @@
     renderAll();
   }
 
-  // Wie viele POIs die Liste höchstens zeigt. Bei mehreren tausend Einträgen
-  // baut der Browser sonst ebenso viele Zeilen auf – das dauert länger als
-  // das Zeichnen der Karte und nützt niemandem, der scrollen soll.
-  const POI_LIST_LIMIT = 200;
-
+  /**
+   * Die POI-Liste ist entfallen: Bei importierten Sammlungen standen dort
+   * tausende Zeilen, durch die niemand scrollt – gesucht wird über die
+   * Karte, ausgewählt über die Arten. Übrig bleibt der Filter und, solange
+   * es nichts zu filtern gibt, ein Hinweis.
+   */
   function renderPoiList() {
-    el.poiList.innerHTML = '';
     renderPoiFilter();
-
-    const all = items('pois');
-    const pois = shownPois();
-    if (pois.length === 0) {
-      const li = document.createElement('li');
-      li.className = 'list-empty';
-      li.textContent = all.length === 0
-        ? 'Noch keine POIs gesetzt'
-        : 'Alle Arten ausgeblendet';
-      el.poiList.appendChild(li);
-      return;
-    }
-
-    pois.slice(0, POI_LIST_LIMIT).forEach((poi) => {
-      const li = document.createElement('li');
-      const type = PoiTypes.typeOf(poi);
-      // Bei importierten Stellen steht in der Notiz die Merkmalsliste – die
-      // gehört nicht in die Liste. Dort zählt die Art der Stelle.
-      const extra = PointStore.displayNote(poi.note) || type.label;
-      li.innerHTML =
-        `<span class="poi-type" title="${Utils.escapeHtml(type.label)}">${type.icon}</span>` +
-        `<span class="item-label">${Utils.escapeHtml(PoiTypes.displayName(poi))}` +
-        `<span class="item-note"> · ${Utils.escapeHtml(extra)}</span></span>` +
-        '<button class="item-delete" title="POI löschen">✕</button>';
-      li.querySelector('.item-label').addEventListener('click', () => {
-        MapView.setView(poi.lat, poi.lng, 15);
-        MapView.openPoiPopup(poi.id);
-      });
-      li.querySelector('.item-delete').addEventListener('click', () => deletePoi(poi.id));
-      el.poiList.appendChild(li);
-    });
-
-    if (pois.length > POI_LIST_LIMIT) {
-      const li = document.createElement('li');
-      li.className = 'list-empty';
-      li.textContent =
-        `… und ${pois.length - POI_LIST_LIMIT} weitere. Die Karte zeigt alle.`;
-      el.poiList.appendChild(li);
-    }
+    el.poiEmpty.hidden = items('pois').length > 0;
   }
 
   /* ---------- Stempelstellen ---------- */

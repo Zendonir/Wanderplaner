@@ -111,14 +111,6 @@ const PoiTypes = {
    * Quote sonst durch.
    */
   looksLikeTags(text) {
-    const lines = String(text || '').split('\n').map((l) => l.trim()).filter(Boolean);
-    const tagLines = lines.filter((line) => /^[a-z][a-z0-9_:]*=/i.test(line)).length;
-    if (tagLines >= 2) return true;
-    // Ein einziges Merkmal reicht, wenn sonst nichts dasteht: Ein
-    // Aussichtspunkt ohne Namen trägt nur `tourism=viewpoint`, und das ist
-    // keine Notiz, die jemand geschrieben hätte.
-    if (tagLines === 1 && lines.length === 1) return true;
-    // Einzeilige Schreibweise, durch Leerzeichen getrennt.
     return PointStore.isTagDump(text);
   },
 

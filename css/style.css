@@ -430,25 +430,7 @@ body {
 }
 
 .point-list,
-.poi-list {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
 .point-list li,
-.poi-list li {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  padding: 0.35rem 0.5rem;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg);
-  font-size: 0.82rem;
-}
-
 .point-list li.dragging {
   opacity: 0.4;
 }

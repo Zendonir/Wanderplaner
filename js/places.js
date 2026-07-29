@@ -22,7 +22,24 @@ const PointStore = {
    * schreiben so etwas in <desc>; auf der Karte ist es nur Ballast.
    */
   isTagDump(text) {
-    const tokens = String(text || '').trim().split(/\s+/).filter(Boolean);
+    const raw = String(text || '').trim();
+    if (!raw) return false;
+
+    // Ausgaben aus OSM schreiben je Merkmal eine Zeile. Zwei solche Zeilen
+    // sind ein sicheres Kennzeichen – sicherer als jede Quote, denn ein
+    // langer Hinweistext in einem Wert („Übernachtung nur im Vorraum …“)
+    // bringt mehr gewöhnliche Wörter mit als Merkmale.
+    const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
+    const tagLines = lines.filter((l) => /^[a-z][a-z0-9_:]*=/i.test(l)).length;
+    if (tagLines >= 2) return true;
+
+    // Eine einzige Zeile, die mit `schlüssel=` beginnt, ist ebenfalls keine
+    // Notiz, die jemand geschrieben hätte: Ein Aussichtspunkt ohne Namen
+    // trägt nur `tourism=viewpoint`.
+    if (lines.length === 1 && tagLines === 1) return true;
+
+    // Einzeilig und durch Leerzeichen getrennt.
+    const tokens = raw.split(/\s+/).filter(Boolean);
     if (tokens.length < 2) return false;
     const pairs = tokens.filter((t) => /^[a-z][a-z0-9_:]*=\S*$/i.test(t)).length;
     return pairs >= 2 && pairs / tokens.length >= 0.5;

@@ -173,6 +173,16 @@
 
       <section class="list-section">
         <h2>POIs</h2>
+        <!-- Filter nach Art. Erscheint erst, wenn es mehr als eine Art gibt –
+             bei zwei selbst gesetzten Punkten wäre er nur im Weg. -->
+        <div class="poi-filter" id="poi-filter" hidden>
+          <div class="poi-filter-head">
+            <span id="poi-filter-count"></span>
+            <button id="btn-poi-all" class="link-btn" type="button">Alle</button>
+            <button id="btn-poi-none" class="link-btn" type="button">Keine</button>
+          </div>
+          <div class="poi-chips" id="poi-chips"></div>
+        </div>
         <ul id="poi-list" class="poi-list"></ul>
       </section>
 

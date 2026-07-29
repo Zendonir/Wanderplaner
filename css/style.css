@@ -700,6 +700,91 @@ body {
   flex: 0 0 auto;
 }
 
+/* ---------- POIs nach Art filtern ---------- */
+
+.poi-filter {
+  margin-bottom: 0.45rem;
+}
+
+.poi-filter-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-bottom: 0.35rem;
+}
+
+.poi-filter-head span {
+  margin-right: auto;
+}
+
+.link-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--green-dark);
+  font-size: 0.75rem;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.link-btn:hover {
+  color: var(--green);
+}
+
+.poi-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.poi-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.45rem 0.2rem 0.2rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--panel);
+  font-size: 0.74rem;
+  cursor: pointer;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.poi-chip:hover {
+  background: #eef1ec;
+}
+
+/* Ausgeblendete Arten bleiben lesbar, aber deutlich zurückgenommen –
+   durchgestrichen statt nur blass, damit der Zustand auch bei hellem
+   Sonnenlicht auf dem Handy erkennbar ist. */
+.poi-chip.off {
+  opacity: 0.5;
+  background: var(--bg);
+}
+
+.poi-chip.off .poi-chip-label {
+  text-decoration: line-through;
+}
+
+.poi-chip-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 0.7rem;
+  flex: 0 0 auto;
+}
+
+.poi-chip-count {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------- Stempelstellen ---------- */
 
 .import-row,
@@ -2601,6 +2686,18 @@ body {
 
   .tab {
     padding: 0.6rem 0.4rem;
+  }
+
+  /* Fingerfreundlich: Ein Filterknopf, den man dreimal treffen muss,
+     ist schlimmer als keiner. */
+  .poi-chip {
+    min-height: 34px;
+    padding-right: 0.6rem;
+  }
+
+  .link-btn {
+    min-height: 32px;
+    padding: 0 0.3rem;
   }
 
   .item-delete,

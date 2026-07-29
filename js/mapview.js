@@ -585,21 +585,51 @@ const MapView = (function () {
     return div;
   }
 
+  /** Auch hier: nachführen statt neu anlegen, damit Popups offen bleiben. */
   function renderStamps(stamps, selectedIds) {
     lastStamps = stamps;
     lastSelection = selectedIds;
-    stampMarkers.forEach((m) => map.removeLayer(m));
-    stampMarkers = new Map();
 
     const selected = new Set(selectedIds);
+    const seen = new Set();
+
     stamps.forEach((stamp) => {
+      seen.add(stamp.id);
       const isSelected = selected.has(stamp.id);
-      const marker = L.marker([stamp.lat, stamp.lng], {
-        icon: stampIcon(stamp, isSelected),
-      }).addTo(map);
-      marker.bindTooltip(stamp.name, { direction: 'top', offset: [0, -12] });
-      marker.bindPopup(() => stampPopupContent(stamp, isSelected));
-      stampMarkers.set(stamp.id, marker);
+      // Das Aussehen hängt an drei Dingen – ändert sich keines, bleibt die
+      // Marke unangetastet.
+      const look = `${isSelected}|${stamp.collected}|${highlighted.has(stamp.id)}`;
+      let marker = stampMarkers.get(stamp.id);
+
+      if (!marker) {
+        marker = L.marker([stamp.lat, stamp.lng], {
+          icon: stampIcon(stamp, isSelected),
+        }).addTo(map);
+        marker._wpLook = look;
+        stampMarkers.set(stamp.id, marker);
+      } else {
+        const at = marker.getLatLng();
+        if (at.lat !== stamp.lat || at.lng !== stamp.lng) {
+          marker.setLatLng([stamp.lat, stamp.lng]);
+        }
+        if (marker._wpLook !== look) {
+          marker.setIcon(stampIcon(stamp, isSelected));
+          marker._wpLook = look;
+        }
+      }
+
+      if (!marker.isPopupOpen()) {
+        marker.unbindTooltip();
+        marker.bindTooltip(stamp.name, { direction: 'top', offset: [0, -12] });
+        marker.unbindPopup();
+        marker.bindPopup(() => stampPopupContent(stamp, isSelected));
+      }
+    });
+
+    [...stampMarkers.keys()].forEach((id) => {
+      if (seen.has(id)) return;
+      map.removeLayer(stampMarkers.get(id));
+      stampMarkers.delete(id);
     });
   }
 
@@ -815,15 +845,39 @@ const MapView = (function () {
     return div;
   }
 
+  /**
+   * Wie bei den POIs werden vorhandene Marken nachgeführt statt neu angelegt.
+   * Jeder Abgleich mit dem Server löst ein Neuzeichnen aus; wurden dabei alle
+   * Marken abgeräumt, verschwand ein gerade geöffnetes Popup – etwa der
+   * QR-Code, den man gerade abfotografieren wollte.
+   */
   function renderParking(places) {
-    parkingMarkers.forEach((m) => map.removeLayer(m));
-    parkingMarkers = new Map();
+    const seen = new Set();
 
     places.forEach((place) => {
-      const marker = L.marker([place.lat, place.lng], { icon: parkingIcon() }).addTo(map);
-      marker.bindTooltip(place.name, { direction: 'top', offset: [0, -12] });
-      marker.bindPopup(() => qrPopupContent(place, 'parking'), { maxWidth: 260 });
-      parkingMarkers.set(place.id, marker);
+      seen.add(place.id);
+      let marker = parkingMarkers.get(place.id);
+      if (!marker) {
+        marker = L.marker([place.lat, place.lng], { icon: parkingIcon() }).addTo(map);
+        parkingMarkers.set(place.id, marker);
+      } else {
+        const at = marker.getLatLng();
+        if (at.lat !== place.lat || at.lng !== place.lng) {
+          marker.setLatLng([place.lat, place.lng]);
+        }
+      }
+      if (!marker.isPopupOpen()) {
+        marker.unbindTooltip();
+        marker.bindTooltip(place.name, { direction: 'top', offset: [0, -12] });
+        marker.unbindPopup();
+        marker.bindPopup(() => qrPopupContent(place, 'parking'), { maxWidth: 260 });
+      }
+    });
+
+    [...parkingMarkers.keys()].forEach((id) => {
+      if (seen.has(id)) return;
+      map.removeLayer(parkingMarkers.get(id));
+      parkingMarkers.delete(id);
     });
   }
 

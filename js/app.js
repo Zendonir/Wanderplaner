@@ -115,6 +115,11 @@
     engineNote: document.getElementById('engine-note'),
     routerNote: document.getElementById('router-note'),
     poiNote: document.getElementById('poi-note'),
+    poiFilter: document.getElementById('poi-filter'),
+    poiChips: document.getElementById('poi-chips'),
+    poiFilterCount: document.getElementById('poi-filter-count'),
+    poiAll: document.getElementById('btn-poi-all'),
+    poiNone: document.getElementById('btn-poi-none'),
     brouterUrl: document.getElementById('brouter-url'),
     testBrouter: document.getElementById('btn-test-brouter'),
     resetBrouter: document.getElementById('btn-reset-brouter'),
@@ -858,19 +863,123 @@
     scheduleRecalc();
   }
 
+  /* ---------- POIs nach Art filtern ---------- */
+
+  const POI_FILTER_KEY = 'wanderplaner.poifilter';
+
+  /** Ausgeblendete Arten, als Menge von Schlüsseln. */
+  function hiddenPoiTypes() {
+    if (!state.poiHidden) {
+      try {
+        const raw = JSON.parse(localStorage.getItem(POI_FILTER_KEY) || '[]');
+        state.poiHidden = new Set(Array.isArray(raw) ? raw : []);
+      } catch (err) {
+        state.poiHidden = new Set();
+      }
+    }
+    return state.poiHidden;
+  }
+
+  function savePoiFilter() {
+    localStorage.setItem(POI_FILTER_KEY, JSON.stringify([...hiddenPoiTypes()]));
+  }
+
+  /** Die POIs, die gerade sichtbar sein sollen. */
+  function shownPois() {
+    const hidden = hiddenPoiTypes();
+    if (hidden.size === 0) return items('pois');
+    return items('pois').filter((p) => !hidden.has(PoiTypes.typeOf(p).key));
+  }
+
+  /** Zählt, wie viele POIs es je Art gibt – in fester Reihenfolge. */
+  function poiTypeCounts() {
+    const counts = new Map();
+    items('pois').forEach((poi) => {
+      const type = PoiTypes.typeOf(poi);
+      const entry = counts.get(type.key) || { type, count: 0 };
+      entry.count++;
+      counts.set(type.key, entry);
+    });
+    return [...counts.values()].sort((a, b) => b.count - a.count);
+  }
+
+  function renderPoiFilter() {
+    const groups = poiTypeCounts();
+    // Eine einzige Art braucht keinen Filter.
+    if (groups.length < 2) {
+      el.poiFilter.hidden = true;
+      return;
+    }
+    el.poiFilter.hidden = false;
+
+    const hidden = hiddenPoiTypes();
+    const shown = groups.reduce(
+      (sum, g) => sum + (hidden.has(g.type.key) ? 0 : g.count), 0);
+    const total = groups.reduce((sum, g) => sum + g.count, 0);
+    el.poiFilterCount.textContent = shown === total
+      ? `${total} POIs`
+      : `${shown} von ${total} POIs`;
+
+    el.poiChips.innerHTML = '';
+    groups.forEach(({ type, count }) => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'poi-chip';
+      chip.dataset.type = type.key;
+      const off = hidden.has(type.key);
+      chip.classList.toggle('off', off);
+      chip.setAttribute('aria-pressed', String(!off));
+      chip.title = off
+        ? `${type.label} einblenden`
+        : `${type.label} ausblenden`;
+      chip.innerHTML =
+        `<span class="poi-chip-icon" style="background:${type.color}">${type.icon}</span>` +
+        `<span class="poi-chip-label">${Utils.escapeHtml(type.label)}</span>` +
+        `<span class="poi-chip-count">${count}</span>`;
+      chip.addEventListener('click', () => togglePoiType(type.key));
+      el.poiChips.appendChild(chip);
+    });
+  }
+
+  function togglePoiType(key) {
+    const hidden = hiddenPoiTypes();
+    if (hidden.has(key)) hidden.delete(key);
+    else hidden.add(key);
+    savePoiFilter();
+    renderAll();
+  }
+
+  /** Alle Arten ein- oder ausblenden. */
+  function setAllPoiTypes(visible) {
+    const hidden = hiddenPoiTypes();
+    hidden.clear();
+    if (!visible) poiTypeCounts().forEach(({ type }) => hidden.add(type.key));
+    savePoiFilter();
+    renderAll();
+  }
+
+  // Wie viele POIs die Liste höchstens zeigt. Bei mehreren tausend Einträgen
+  // baut der Browser sonst ebenso viele Zeilen auf – das dauert länger als
+  // das Zeichnen der Karte und nützt niemandem, der scrollen soll.
+  const POI_LIST_LIMIT = 200;
+
   function renderPoiList() {
     el.poiList.innerHTML = '';
+    renderPoiFilter();
 
-    const pois = items('pois');
+    const all = items('pois');
+    const pois = shownPois();
     if (pois.length === 0) {
       const li = document.createElement('li');
       li.className = 'list-empty';
-      li.textContent = 'Noch keine POIs gesetzt';
+      li.textContent = all.length === 0
+        ? 'Noch keine POIs gesetzt'
+        : 'Alle Arten ausgeblendet';
       el.poiList.appendChild(li);
       return;
     }
 
-    pois.forEach((poi) => {
+    pois.slice(0, POI_LIST_LIMIT).forEach((poi) => {
       const li = document.createElement('li');
       const type = PoiTypes.typeOf(poi);
       // Bei importierten Stellen steht in der Notiz die Merkmalsliste – die
@@ -888,6 +997,14 @@
       li.querySelector('.item-delete').addEventListener('click', () => deletePoi(poi.id));
       el.poiList.appendChild(li);
     });
+
+    if (pois.length > POI_LIST_LIMIT) {
+      const li = document.createElement('li');
+      li.className = 'list-empty';
+      li.textContent =
+        `… und ${pois.length - POI_LIST_LIMIT} weitere. Die Karte zeigt alle.`;
+      el.poiList.appendChild(li);
+    }
   }
 
   /* ---------- Stempelstellen ---------- */
@@ -1605,7 +1722,7 @@
     MapView.renderTracks(items('tracks'));
     MapView.renderPlannedTours(items('tours'));
     MapView.renderPoints(state.points);
-    MapView.renderPois(items('pois'));
+    MapView.renderPois(shownPois());
     MapView.renderStamps(items('stamps'), state.tourSelection);
     // Sobald ein Startpunkt steht, ist die Parkplatzfrage beantwortet – die
     // Marken würden die Karte beim Planen nur zustellen. Sie kommen zurück,
@@ -3242,6 +3359,8 @@
     el.modePoi.addEventListener('click', () => setMode('poi'));
     setMode(localStorage.getItem('wanderplaner.mode') || 'menu');
     el.undo.addEventListener('click', undo);
+    el.poiAll.addEventListener('click', () => setAllPoiTypes(true));
+    el.poiNone.addEventListener('click', () => setAllPoiTypes(false));
     el.clear.addEventListener('click', clearAll);
     el.export.addEventListener('click', exportGpx);
     // Am Handy zeigt die Kopfzeile erst nur die Lupe; sie klappt das Feld auf.

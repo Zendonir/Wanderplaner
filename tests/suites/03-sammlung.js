@@ -497,11 +497,15 @@ module.exports = {
       await page.keyboard.press('Escape');
       await page.waitForTimeout(400);
 
+      // Die Liste zeigt nur die ersten 200 – tausende Zeilen aufzubauen
+      // dauert länger als das Zeichnen der Karte und nützt niemandem.
       const listed = await page.locator('#poi-list li:not(.list-empty)').count();
-      check.equal(listed, 503, 'Alle POIs stehen in der Liste');
+      check.equal(listed, 200, 'Die Liste zeigt höchstens 200 Einträge');
+      check.contains(await page.textContent('#poi-list'), 'weitere',
+        'Und sagt, wie viele noch folgen');
       const drawn = await page.locator('.poi-marker').count();
-      check.ok(drawn < listed, 'Auf der Karte wird nur ein Teil gezeichnet',
-        `${drawn} von ${listed}`);
+      check.ok(drawn < 503, 'Auf der Karte wird nur ein Teil gezeichnet',
+        `${drawn} Marken`);
       check.ok(!(await page.locator('#poi-note').isHidden()),
         'Dass nicht alle zu sehen sind, steht in der Leiste');
       check.contains(await page.textContent('#poi-note'), '503',
@@ -519,6 +523,55 @@ module.exports = {
       await page.waitForTimeout(800);
       check.ok(await page.locator('.poi-marker').count() > 0,
         'Näher herangezoomt erscheinen die Marken');
+
+      /* ---- POIs nach Art ausblenden ---- */
+      const chips = page.locator('.poi-chip');
+      check.ok(!(await page.locator('#poi-filter').isHidden()),
+        'Bei mehreren Arten erscheint der Filter');
+      const chipLabels = (await chips.allTextContents()).join(' | ');
+      check.contains(chipLabels, 'Aussichtspunkt', 'Jede vorkommende Art bekommt einen Knopf');
+      check.contains(chipLabels, 'Einkehr', 'Auch die selteneren');
+      check.contains(await page.textContent('#poi-filter-count'), '503',
+        'Der Filter nennt die Gesamtzahl');
+
+      const viewChip = chips.filter({ hasText: 'Aussichtspunkt' });
+      check.contains(await viewChip.textContent(), '501',
+        'Und je Art deren Anzahl');
+
+      // Aussichtspunkte ausblenden: Liste und Karte müssen folgen.
+      await viewChip.click();
+      await page.waitForTimeout(700);
+      check.contains(await viewChip.getAttribute('class'), 'off',
+        'Der Knopf zeigt den ausgeblendeten Zustand');
+      check.contains(await page.textContent('#poi-filter-count'), '2 von 503',
+        'Die Zählung folgt der Auswahl');
+      const remaining = (await page.locator('#poi-list .item-label').allTextContents()).join(' | ');
+      check.ok(!remaining.includes('Rabenklippe'),
+        'Ausgeblendete Arten verschwinden aus der Liste', remaining.slice(0, 80));
+      check.contains(remaining, 'Molkenhaus', 'Die übrigen bleiben');
+      check.equal(await page.locator('.poi-marker').count(), 2,
+        'Auf der Karte bleiben nur die eingeblendeten Arten');
+
+      // Die Auswahl muss einen Neustart überstehen.
+      await page.reload();
+      await page.waitForSelector('#map.leaflet-container');
+      await page.waitForTimeout(1000);
+      check.contains(await page.textContent('#poi-filter-count'), '2 von 503',
+        'Die Auswahl bleibt nach dem Neuladen erhalten');
+
+      await page.click('#btn-poi-none');
+      await page.waitForTimeout(600);
+      check.equal(await page.locator('.poi-marker').count(), 0,
+        '„Keine“ blendet alles aus');
+      check.contains(await page.textContent('#poi-list'), 'ausgeblendet',
+        'Die leere Liste erklärt sich');
+
+      await page.click('#btn-poi-all');
+      await page.waitForTimeout(700);
+      check.contains(await page.textContent('#poi-filter-count'), '503 POIs',
+        '„Alle“ holt alles zurück');
+      check.ok(await page.locator('.poi-marker').count() > 0,
+        'Und die Marken sind wieder da');
 
       /* ---- Alles übersteht einen Neustart der Seite ---- */
       await page.reload();

@@ -505,6 +505,63 @@ module.exports = {
       check.equal(await page.locator('#route-style').inputValue(), 'surface',
         'Die gewählte Darstellung bleibt gespeichert');
 
+      /* ---- GPX-Export: die Strecke muss den Wegen folgen ---- */
+      // Exportiert wurde bisher das Raster des Höhenprofils – höchstens 100
+      // Punkte. Auf einer langen Tour schnitt die Spur damit im
+      // Navigationsgerät jede Kurve ab und lief quer durchs Gelände.
+      // Deshalb hier eine Route mit deutlich mehr Stützpunkten als das
+      // Raster fassen kann.
+      const DETAIL_POINTS = 400;
+      await page.unroute('**/brouter.de/brouter?**');
+      await page.route('**/brouter.de/brouter?**', (route) => {
+        const coordinates = [];
+        for (let i = 0; i < DETAIL_POINTS; i++) {
+          // Ein Zickzack: Eine gerade Linie ließe sich nicht von einer
+          // grob abgetasteten unterscheiden.
+          coordinates.push([
+            10.60 + (i % 2) * 0.0004,
+            51.80 + i * 0.00012,
+            600 + (i % 40),
+          ]);
+        }
+        route.fulfill({ json: {
+          type: 'FeatureCollection',
+          features: [{
+            type: 'Feature',
+            properties: { 'track-length': '5400' },
+            geometry: { type: 'LineString', coordinates },
+          }],
+        } });
+      });
+      if (await page.locator('#btn-clear').isEnabled()) {
+        await page.click('#btn-clear');
+        await page.waitForTimeout(400);
+      }
+      await drawRoute(page);
+      await page.waitForTimeout(1600);
+
+      const gpx = await page.evaluate(async () => {
+        // Den Download abfangen, statt eine Datei zu schreiben.
+        const original = URL.createObjectURL;
+        let blob = null;
+        URL.createObjectURL = (b) => { blob = b; return 'blob:test'; };
+        document.getElementById('btn-export').click();
+        URL.createObjectURL = original;
+        return blob ? await blob.text() : null;
+      });
+      check.ok(gpx !== null, 'Der Export erzeugt eine Datei');
+
+      const trkpts = (gpx.match(/<trkpt/g) || []).length;
+      check.equal(trkpts, DETAIL_POINTS,
+        'Jeder Stützpunkt der berechneten Route landet in der Datei');
+      check.ok(trkpts > 100,
+        'Und damit mehr als das Raster des Höhenprofils fasst', `${trkpts}`);
+      check.contains(gpx, '<ele>', 'Höhenangaben sind dabei');
+
+      // Die Wegpunkte dürfen nicht die ganze Sammlung sein.
+      check.equal((gpx.match(/<wpt/g) || []).length, 0,
+        'Ohne POIs an der Route stehen keine Wegpunkte in der Datei');
+
       check.equal(errors.length, 0, 'Keine Skriptfehler',
         errors.join(' | '));
     } finally {

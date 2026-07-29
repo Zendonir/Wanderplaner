@@ -1991,17 +1991,50 @@
     scheduleRecalc();
   }
 
+  // Bis zu diesem Abstand von der Route gilt ein POI als zur Tour gehörig
+  // und kommt mit in die Datei.
+  const EXPORT_POI_RADIUS_M = 250;
+
   function exportGpx() {
     if (!state.geometry) return;
-    const trackPoints = state.samples && state.samples.some((s) => s.ele != null)
-      ? state.samples
-      : state.geometry.map((c) => ({ lat: c[1], lng: c[0] }));
-    // POIs plus die für die Tour ausgewählten Stempelstellen als Wegpunkte
+
+    // Die volle Geometrie des Routers, nicht das Raster des Höhenprofils.
+    // Letzteres hat höchstens 100 Stützpunkte – auf einer 17-km-Tour also
+    // alle 170 Meter einen. Auf dem Navigationsgerät schnitt die Spur damit
+    // sichtbar Kurven ab und lief quer durchs Gelände statt über den Weg.
+    const coords = state.geometry.map((c) => ({ lat: c[1], lng: c[0] }));
+    const trackPoints = Elevation.attachElevations(
+      coords, state.elevations, state.samples);
+
+    // Wegpunkte: die selbst gesetzten, die für die Tour gewählten Stempel –
+    // und aus einer importierten Sammlung nur, was nah an der Route liegt
+    // und gerade eingeblendet ist. Alles mitzugeben hieße, ein
+    // Navigationsgerät mit tausenden Punkten zu fluten.
+    const own = manualPois();
+    const ownIds = new Set(own.map((p) => p.id));
+    const along = Nearby.alongRoute(
+      shownPois().filter((p) => !ownIds.has(p.id)),
+      state.geometry,
+      EXPORT_POI_RADIUS_M
+    );
     const tourStamps = state.tourSelection
       .map((id) => items('stamps').find((s) => s.id === id))
       .filter(Boolean);
-    Gpx.download(trackPoints, [...items('pois'), ...tourStamps]);
-    showStatus('info', 'GPX-Datei wurde heruntergeladen.', 4000);
+
+    // Für die Datei aufbereiten: sprechender Name statt „node/32600612“ und
+    // keine rohen Merkmalslisten als Beschreibung – auf einem
+    // Navigationsgerät ist `tourism=viewpoint` nur Ballast.
+    const waypoints = [...own, ...along, ...tourStamps].map((p) => ({
+      lat: p.lat,
+      lng: p.lng,
+      name: PoiTypes.displayName(p),
+      note: PointStore.displayNote(p.note),
+    }));
+
+    Gpx.download(trackPoints, waypoints);
+    showStatus('info',
+      `GPX-Datei heruntergeladen: ${trackPoints.length} Streckenpunkte, ` +
+      `${waypoints.length} Wegpunkte.`, 6000);
   }
 
   /* ---------- Routing-Einstellungen ---------- */

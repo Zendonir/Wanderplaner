@@ -16,6 +16,42 @@ const Elevation = {
    * @param {Array<[number,number]>} coordinates  [lng, lat]-Paare der Route
    * @returns {Array<{lat:number, lng:number, dist:number}>} dist in Metern ab Start
    */
+  /**
+   * Hängt an jeden Punkt einer Strecke seine Höhe.
+   *
+   * Erste Wahl sind die Höhen des Routers – er liefert je Stützpunkt eine.
+   * Passen die nicht (etwa nach dem Ersatzrouter), wird zwischen den
+   * Stützpunkten des Höhenprofils interpoliert. Bleibt beides aus, kommt die
+   * Strecke ohne Höhen zurück; ein Export ohne Höhenangaben ist besser als
+   * einer mit erfundenen.
+   *
+   * @param {Array<{lat:number,lng:number}>} points
+   * @param {?number[]} elevations Höhe je Punkt, vom Router
+   * @param {?Array<{dist:number, ele:?number}>} samples Stützpunkte des Profils
+   */
+  attachElevations(points, elevations, samples) {
+    if (Array.isArray(elevations) && elevations.length === points.length) {
+      return points.map((p, i) => (
+        Number.isFinite(elevations[i]) ? { ...p, ele: elevations[i] } : { ...p }
+      ));
+    }
+
+    const grid = (samples || []).filter((s) => s && Number.isFinite(s.ele));
+    if (grid.length < 2) return points.map((p) => ({ ...p }));
+
+    let run = 0;
+    let k = 0;
+    return points.map((p, i) => {
+      if (i > 0) run += Utils.haversine(points[i - 1], p);
+      while (k < grid.length - 1 && grid[k + 1].dist < run) k++;
+      const a = grid[k];
+      const b = grid[Math.min(k + 1, grid.length - 1)];
+      const span = b.dist - a.dist;
+      const t = span > 0 ? Math.min(1, Math.max(0, (run - a.dist) / span)) : 0;
+      return { ...p, ele: Math.round((a.ele + (b.ele - a.ele) * t) * 10) / 10 };
+    });
+  },
+
   sampleAlong(coordinates) {
     const pts = coordinates.map((c) => ({ lat: c[1], lng: c[0] }));
     if (pts.length === 0) return [];

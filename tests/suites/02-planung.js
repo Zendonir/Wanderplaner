@@ -5,7 +5,7 @@
  * Varianten wählen, Wegebeschaffenheit und Hinweise.
  */
 const { startServer, launchBrowser, stubExternals, drawRoute, defaultRoute,
-        openSettings } = require('../helpers');
+        openSettings, startDrawing } = require('../helpers');
 
 module.exports = {
   name: 'Routenplanung',
@@ -504,6 +504,70 @@ module.exports = {
       await page.waitForTimeout(700);
       check.equal(await page.locator('#route-style').inputValue(), 'surface',
         'Die gewählte Darstellung bleibt gespeichert');
+
+      /* ---- Stempel als Zwischenziel im Zeichenmodus ---- */
+      // Eine Stempelrunde soll sich direkt auf der Karte zusammenklicken
+      // lassen, ohne Umweg über die Auswahlliste.
+      await page.evaluate(() => {
+        localStorage.setItem('wanderplaner.stempelstellen', JSON.stringify({
+          items: [{ id: 'st-1', name: 'Prüfstempel', lat: 51.7700, lng: 10.6500,
+                    collected: false, updatedAt: Date.now() }],
+        }));
+      });
+      await page.reload();
+      await page.waitForSelector('#map.leaflet-container');
+      await page.waitForTimeout(900);
+
+      // Über die Liste auf die Stelle zentrieren – sonst liegt die Marke
+      // unter den Routenpunkten oder außerhalb des Ausschnitts.
+      await openSettings(page, 'daten');
+      await page.locator('#stamp-list li').filter({ hasText: 'Prüfstempel' })
+        .locator('.item-label').click();
+      await page.waitForTimeout(700);
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(300);
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(400);
+
+      const stampMarker = page.locator('.stamp-marker');
+      await stampMarker.waitFor({ timeout: 5000 });
+
+      // Im Menümodus bleibt es beim Popup.
+      await stampMarker.click();
+      await page.waitForSelector('.stamp-popup', { timeout: 5000 });
+      check.ok(true, 'Im Menümodus öffnet ein Klick weiter das Stempel-Popup');
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(400);
+
+      // Der Fall aus der Praxis: Erst ein Startpunkt, dann Stempel dazu.
+      await startDrawing(page);
+      const mapBox2 = await page.locator('#map').boundingBox();
+      await page.locator('#map').click({
+        position: { x: mapBox2.width * 0.3, y: mapBox2.height * 0.3 } });
+      await page.waitForTimeout(800);
+      const beforeStamp = await page.locator('#point-list li:not(.list-empty)').count();
+      check.equal(beforeStamp, 1, 'Ein Startpunkt ist gesetzt');
+
+      await stampMarker.click();
+      await page.waitForTimeout(1000);
+      check.equal(await page.locator('#point-list li:not(.list-empty)').count(),
+        beforeStamp + 1, 'Im Zeichenmodus wird die Stempelstelle Zwischenziel');
+      check.equal(await page.locator('.stamp-popup').count(), 0,
+        'Und es öffnet sich kein Popup mehr');
+
+      // Der Routenmarker liegt jetzt genau auf der Stempelmarke. Ein Nutzer
+      // klickt dieselbe Stelle noch einmal – also auf die Position zielen,
+      // nicht auf ein bestimmtes Element.
+      const spot = await stampMarker.boundingBox();
+      await page.mouse.click(spot.x + spot.width / 2, spot.y + spot.height / 2);
+      await page.waitForTimeout(1000);
+      check.equal(await page.locator('#point-list li:not(.list-empty)').count(),
+        beforeStamp, 'Ein zweiter Klick auf dieselbe Stelle nimmt es wieder heraus');
+      check.equal(await page.locator('.map-menu').count(), 0,
+        'Und öffnet dabei kein Punktmenü');
+
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(300);
 
       /* ---- GPX-Export: die Strecke muss den Wegen folgen ---- */
       // Exportiert wurde bisher das Raster des Höhenprofils – höchstens 100

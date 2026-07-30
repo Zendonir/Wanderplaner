@@ -217,6 +217,12 @@ const MapView = (function () {
       // jeder andere Punkt sein Menü. Vorher ging Löschen nur per
       // Rechtsklick – auf dem Handy also gar nicht.
       if (isStart) {
+        // Auch der Startpunkt kann aus einer Stempelstelle entstanden sein.
+        // Dann muss ein Klick ihn wieder herausnehmen können – sonst wäre
+        // die Marke darunter für immer verdeckt.
+        marker.on('click', () => {
+          if (cbs.onPointClick && cbs.onPointClick(p, 0)) marker.closePopup();
+        });
         marker.bindPopup(
           () => qrPopupContent({ ...p, name: cbs.getStartName() }, 'start'),
           { maxWidth: 260 }
@@ -620,9 +626,21 @@ const MapView = (function () {
 
       if (!marker.isPopupOpen()) {
         marker.unbindTooltip();
-        marker.bindTooltip(stamp.name, { direction: 'top', offset: [0, -12] });
+        marker.bindTooltip(cbs.stampHint ? cbs.stampHint(stamp) : stamp.name,
+          { direction: 'top', offset: [0, -12] });
         marker.unbindPopup();
         marker.bindPopup(() => stampPopupContent(stamp, isSelected));
+
+        // Das Popup bleibt gebunden – die Liste öffnet es weiterhin gezielt.
+        // Im Zeichenmodus soll ein Klick auf der Karte aber die Stelle als
+        // Zwischenziel setzen; dann wird das eben geöffnete Popup sofort
+        // wieder geschlossen. Der eigene Handler läuft nach dem von Leaflet,
+        // deshalb schließen statt vorbeugen.
+        if (marker._wpClick) marker.off('click', marker._wpClick);
+        marker._wpClick = () => {
+          if (cbs.onStampClick && cbs.onStampClick(stamp)) marker.closePopup();
+        };
+        marker.on('click', marker._wpClick);
       }
     });
 
@@ -1036,12 +1054,40 @@ const MapView = (function () {
         zIndexOffset: 900,
       }).addTo(map);
 
-      const onMove = (e) => ghost.setLatLng(e.latlng);
+      // Gummiband zu den beiden Nachbarpunkten: So sieht man beim Ziehen,
+      // wohin die Strecke laufen wird. Vorher schwebte nur ein Punkt unter
+      // dem Zeiger und die Linie sprang erst beim Loslassen um – man zog
+      // im Blindflug.
+      const before = routePoints[index - 1] || null;
+      const after = routePoints[index] || null;
+      const rubber = L.polyline([], {
+        color: '#1d5fbf',
+        weight: 3,
+        opacity: 0.9,
+        dashArray: '7 6',
+        interactive: false,
+        className: 'route-rubber',
+      }).addTo(map);
+
+      const drawRubber = (latlng) => {
+        const line = [];
+        if (before) line.push([before.lat, before.lng]);
+        line.push([latlng.lat, latlng.lng]);
+        if (after) line.push([after.lat, after.lng]);
+        rubber.setLatLngs(line);
+      };
+      drawRubber(event.latlng);
+
+      const onMove = (e) => {
+        ghost.setLatLng(e.latlng);
+        drawRubber(e.latlng);
+      };
       const onUp = (e) => {
         map.off('mousemove', onMove);
         map.off('mouseup', onUp);
         map.dragging.enable();
         map.removeLayer(ghost);
+        map.removeLayer(rubber);
         suppressNextClick = true;
         cbs.onRouteDrag(e.latlng, index);
       };

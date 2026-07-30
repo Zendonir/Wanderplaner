@@ -1717,10 +1717,58 @@
     scheduleRecalc();
   }
 
+  /**
+   * Klick auf eine Stempelmarke.
+   *
+   * Im Zeichenmodus ist eine Stempelstelle ein Zwischenziel: Der erste
+   * Klick hängt sie an die Route, der zweite nimmt sie wieder heraus. So
+   * lässt sich eine Stempelrunde direkt auf der Karte zusammenstellen,
+   * ohne den Umweg über die Auswahlliste.
+   *
+   * @returns {boolean} true, wenn der Klick hier erledigt ist – dann öffnet
+   *   die Karte kein Popup mehr.
+   */
+  function onStampClick(stamp) {
+    if (state.mode !== 'route') return false;
+
+    const existing = state.points.findIndex((p) => p.stampId === stamp.id);
+    pushUndo();
+    if (existing >= 0) {
+      state.points.splice(existing, 1);
+      showStatus('info', `„${stamp.name}“ ist nicht mehr Teil der Route.`, 4000);
+    } else {
+      state.points.push({
+        id: Utils.uid(),
+        lat: stamp.lat,
+        lng: stamp.lng,
+        // Merkt sich die Herkunft: Nur so lässt sich derselbe Stempel per
+        // erneutem Klick gezielt wieder entfernen.
+        stampId: stamp.id,
+        name: stamp.name,
+      });
+      showStatus('info',
+        `„${stamp.name}“ als Zwischenziel ${state.points.length} gesetzt.`, 4000);
+    }
+    renderAll();
+    scheduleRecalc();
+    return true;
+  }
+
+  /** Beschriftung der Stempelmarke – im Zeichenmodus sagt sie, was ein Klick tut. */
+  function stampHint(stamp) {
+    if (state.mode !== 'route') return stamp.name;
+    return state.points.some((p) => p.stampId === stamp.id)
+      ? `${stamp.name} · klicken entfernt das Zwischenziel`
+      : `${stamp.name} · klicken setzt ein Zwischenziel`;
+  }
+
   function movePoint(id, latlng) {
     const point = state.points.find((p) => p.id === id);
     if (!point) return;
     pushUndo();
+    // Verschoben heißt: nicht mehr die Stempelstelle. Sonst würde ein Klick
+    // auf die Marke einen Punkt entfernen, der längst woanders liegt.
+    delete point.stampId;
     point.lat = latlng.lat;
     point.lng = latlng.lng;
     renderAll();
@@ -1934,6 +1982,19 @@
 
   /** Menü an einem gesetzten Routenpunkt. */
   function openPointMenu(point, index) {
+    // Ein Zwischenziel, das aus einer Stempelstelle entstanden ist, liegt
+    // genau auf deren Marke – die ist danach nicht mehr anklickbar. Im
+    // Zeichenmodus nimmt der Klick es deshalb direkt wieder heraus, statt
+    // ein Menü zu öffnen. Sonst wäre das Setzen eine Einbahnstraße.
+    if (state.mode === 'route' && point.stampId) {
+      pushUndo();
+      state.points = state.points.filter((p) => p.id !== point.id);
+      showStatus('info', `„${point.name || 'Zwischenziel'}“ wieder entfernt.`, 4000);
+      renderAll();
+      scheduleRecalc();
+      return;
+    }
+
     MapView.openMenu({ lat: point.lat, lng: point.lng }, [
       {
         label: `✕ Punkt ${index + 1} löschen`,
@@ -3327,12 +3388,21 @@
         openMapMenu(latlng);
       },
       onPoiVisibility: updatePoiNote,
+      onPointClick: (point) => {
+        // Nur der Sonderfall „Zwischenziel aus einer Stempelstelle“ –
+        // alles andere läuft weiter über das Punktmenü.
+        if (state.mode !== 'route' || !point.stampId) return false;
+        openPointMenu(point, 0);
+        return true;
+      },
       onPointMenu: openPointMenu,
       onPointMoved: movePoint,
       onPointDelete: deletePoint,
       onPoiMoved: movePoi,
       onPoiEdit: editPoi,
       onPoiDelete: deletePoi,
+      onStampClick,
+      stampHint,
       onStampCollectedToggle: toggleStampCollected,
       onStampTourToggle: toggleStampTour,
       onParkingAsStart: parkingAsStart,

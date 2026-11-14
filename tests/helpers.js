@@ -17,10 +17,12 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..');
 
 /** Startet den Wanderplaner-Server auf einem freien Port. */
-async function startServer(port) {
+async function startServer(port, extraEnv = {}) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wanderplaner-test-'));
   const proc = spawn('node', [path.join(ROOT, 'server', 'server.js')], {
-    env: { ...process.env, PORT: String(port), DATA_DIR: dataDir, PUBLIC_DIR: ROOT },
+    env: {
+      ...process.env, PORT: String(port), DATA_DIR: dataDir, PUBLIC_DIR: ROOT, ...extraEnv,
+    },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   proc.stderr.on('data', (d) => console.error('  [server]', d.toString().trim()));

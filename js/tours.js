@@ -54,7 +54,14 @@ const Tours = {
       distance: Math.round(state.distance || 0),
       color: this.COLORS[existingCount % this.COLORS.length],
       visible: true,
-      points: state.points.map((p) => ({ lat: p.lat, lng: p.lng })),
+      // Name und Stempel-Bezug mitspeichern, damit die Punktliste nach dem
+      // Laden wieder „Brockenhaus“ zeigt statt einer Koordinate.
+      points: state.points.map((p) => {
+        const point = { lat: p.lat, lng: p.lng };
+        if (p.name) point.name = p.name;
+        if (p.stampId) point.stampId = p.stampId;
+        return point;
+      }),
       // Der berechnete Verlauf, ausgedünnt und auf ~1 m gerundet.
       line: this.lineFrom(state.geometry),
       pois: state.pois.map((p) => ({

@@ -1382,6 +1382,27 @@ body {
 
 /* ---------- Darstellung der Route ---------- */
 
+/* Durchsichtige Route: Die Karte darunter (Wegmarkierungen, Pfadnamen)
+   bleibt lesbar. CSS-opacity wirkt zusätzlich zu Leaflets stroke-opacity. */
+.route-transparent .route-line { opacity: 0.35; }
+.route-transparent .route-casing { opacity: 0.12; }
+
+.style-row .route-see-through {
+  flex: 1 0 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.style-row .route-see-through input {
+  accent-color: var(--green);
+  cursor: pointer;
+}
+
 .style-row {
   display: flex;
   align-items: center;
@@ -1917,6 +1938,24 @@ body {
   background: var(--bg);
   border: 1px solid var(--border);
 }
+
+.offline-tiles {
+  list-style: none;
+  margin: 0.4rem 0;
+  padding: 0;
+  font-size: 0.8rem;
+}
+
+.offline-tiles li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.offline-tiles .tile-name { font-weight: 600; min-width: 5.5rem; }
+.offline-tiles .tile-info { flex: 1; color: var(--text-muted); }
 
 .about-note.ok     { background: #e7f0e9; border-color: #c3dbc9; color: var(--green-dark); }
 .about-note.update { background: #fdf3dd; border-color: #e8d6a8; color: #8a6100; }

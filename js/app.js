@@ -124,6 +124,10 @@
     testBrouter: document.getElementById('btn-test-brouter'),
     resetBrouter: document.getElementById('btn-reset-brouter'),
     brouterNote: document.getElementById('brouter-note'),
+    offlineStatus: document.getElementById('offline-status'),
+    offlineTiles: document.getElementById('offline-tiles'),
+    offlineLoad: document.getElementById('btn-offline-load'),
+    offlineRefresh: document.getElementById('btn-offline-refresh'),
     chartEmpty: document.getElementById('chart-empty'),
     searchForm: document.getElementById('search-form'),
     searchInput: document.getElementById('search-input'),
@@ -182,6 +186,7 @@
     updateReason: document.getElementById('update-reason'),
     updateNote: document.getElementById('update-note'),
     routeStyle: document.getElementById('route-style'),
+    routeTransparent: document.getElementById('opt-route-transparent'),
     settings: document.getElementById('settings'),
     settingsBtn: document.getElementById('btn-settings'),
     settingsClose: document.getElementById('btn-settings-close'),
@@ -465,7 +470,7 @@
 
       state.activeAlternative = 0;
       applyRoute(route);
-      updateEngineNote(route.engine);
+      updateEngineNote(route.engine, route.offline);
 
       if (route.warning) showStatus('warn', route.warning, 10000);
       else if (pendingNote) showStatus('info', pendingNote, 12000);
@@ -790,6 +795,41 @@
 
   /* ---------- Listen in der Seitenleiste ---------- */
 
+  /** Entfernung, bis zu der ein Routenpunkt als „an der Stempelstelle“ gilt. */
+  const POINT_NAME_RADIUS_M = 30;
+
+  /**
+   * Name eines Routenpunkts für die Liste. Ein gezielt gesetzter Stempel
+   * oder Parkplatz trägt seinen Namen mit; ein Punkt, der nur zufällig genau
+   * auf einer Stempelstelle oder einem Parkplatz liegt (etwa aus einer
+   * älteren gespeicherten Tour), bekommt deren Namen ebenfalls. Erst wenn
+   * nichts passt, bleiben die Koordinaten.
+   */
+  function pointName(p) {
+    if (p.name) return p.name;
+    let best = null;
+    let bestDist = POINT_NAME_RADIUS_M;
+    [...items('stamps'), ...items('parking')].forEach((place) => {
+      const d = Utils.haversine(p, place);
+      if (d <= bestDist) {
+        best = place;
+        bestDist = d;
+      }
+    });
+    return best ? best.name : null;
+  }
+
+  function pointLabel(p) {
+    return pointName(p) || `${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}`;
+  }
+
+  function pointTitle(p) {
+    const coords = `${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}`;
+    return pointName(p)
+      ? `${pointName(p)} (${coords}) – auf der Karte zeigen`
+      : 'Auf der Karte zeigen';
+  }
+
   function renderPointList() {
     el.pointList.innerHTML = '';
 
@@ -810,7 +850,7 @@
       li.innerHTML =
         '<span class="drag-handle" title="Zum Sortieren ziehen">≡</span>' +
         `<span class="point-num">${i + 1}</span>` +
-        `<span class="item-label" title="Auf der Karte zeigen">${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}</span>` +
+        `<span class="item-label" title="${Utils.escapeHtml(pointTitle(p))}">${Utils.escapeHtml(pointLabel(p))}</span>` +
         `<button class="item-action point-up" title="Nach oben"${i === 0 ? ' disabled' : ''}>▲</button>` +
         `<button class="item-action point-down" title="Nach unten"${i === state.points.length - 1 ? ' disabled' : ''}>▼</button>` +
         '<button class="item-delete" title="Punkt löschen">✕</button>';
@@ -1240,7 +1280,9 @@
     const place = state.parking.find((p) => p.id === id && !p.deletedAt);
     if (!place) return;
     pushUndo();
-    state.points.unshift({ id: Utils.uid(), lat: place.lat, lng: place.lng });
+    state.points.unshift({
+      id: Utils.uid(), lat: place.lat, lng: place.lng, name: place.name,
+    });
     if (!state.tourName) {
       el.tourNameInput.value = `Tour ab ${place.name}`;
       state.tourName = el.tourNameInput.value;
@@ -1568,7 +1610,7 @@
     if (!tour) return;
     pushUndo();
 
-    state.points = tour.points.map((p) => ({ id: Utils.uid(), lat: p.lat, lng: p.lng }));
+    state.points = tour.points.map((p) => withName({ id: Utils.uid(), lat: p.lat, lng: p.lng }, p));
     // Nur die eigenen Notizen der Tour übernehmen – die importierten
     // Sammlungen sind Nachschlagewerk und gehören keiner einzelnen Tour.
     manualPois().forEach((poi) => removeItem('pois', poi.id));
@@ -1672,7 +1714,9 @@
     }
     pushUndo();
     const ordered = Utils.optimizeOrder(selected);
-    state.points = ordered.map((s) => ({ id: Utils.uid(), lat: s.lat, lng: s.lng }));
+    state.points = ordered.map((s) => ({
+      id: Utils.uid(), lat: s.lat, lng: s.lng, name: s.name, stampId: s.id,
+    }));
     renderAll();
     MapView.fitTo(state.points);
     scheduleRecalc();
@@ -1702,6 +1746,33 @@
   }
 
   /* ---------- Aktionen ---------- */
+
+  /** Übernimmt Name und Stempel-Bezug eines Quellpunkts, sofern vorhanden. */
+  function withName(point, source) {
+    if (source && source.name) point.name = source.name;
+    if (source && source.stampId) point.stampId = source.stampId;
+    return point;
+  }
+
+  /**
+   * Hängt eine Stempelstelle gezielt als Routenpunkt an – aus dem Popup,
+   * unabhängig vom Zeichenmodus. Der Punkt trägt den Namen der Stelle, damit
+   * in der Liste „Brockenhaus“ steht und nicht eine Koordinate.
+   */
+  function addStampToRoute(stamp) {
+    if (state.points.some((p) => p.stampId === stamp.id)) {
+      showStatus('info', `„${stamp.name}“ ist schon Teil der Route.`, 4000);
+      return;
+    }
+    pushUndo();
+    state.points.push({
+      id: Utils.uid(), lat: stamp.lat, lng: stamp.lng, name: stamp.name, stampId: stamp.id,
+    });
+    showStatus('info',
+      `„${stamp.name}“ als Routenpunkt ${state.points.length} gesetzt.`, 4000);
+    renderAll();
+    scheduleRecalc();
+  }
 
   /**
    * Setzt einen Routenpunkt.
@@ -1769,6 +1840,7 @@
     // Verschoben heißt: nicht mehr die Stempelstelle. Sonst würde ein Klick
     // auf die Marke einen Punkt entfernen, der längst woanders liegt.
     delete point.stampId;
+    delete point.name;
     point.lat = latlng.lat;
     point.lng = latlng.lng;
     renderAll();
@@ -2594,12 +2666,17 @@
 
     pushUndo();
     const points = [];
-    if (cluster.start) points.push({ lat: cluster.start.lat, lng: cluster.start.lng });
-    cluster.stamps.forEach((s) => points.push({ lat: s.lat, lng: s.lng }));
+    const start = cluster.start
+      ? { lat: cluster.start.lat, lng: cluster.start.lng, name: cluster.start.name }
+      : null;
+    if (start) points.push(start);
+    cluster.stamps.forEach((s) => points.push({
+      lat: s.lat, lng: s.lng, name: s.name, stampId: s.id,
+    }));
     // Zurück zum Ausgangspunkt, damit eine Runde entsteht.
-    if (cluster.start) points.push({ lat: cluster.start.lat, lng: cluster.start.lng });
+    if (start) points.push(start);
 
-    state.points = points.map((p) => ({ id: Utils.uid(), lat: p.lat, lng: p.lng }));
+    state.points = points.map((p) => withName({ id: Utils.uid(), lat: p.lat, lng: p.lng }, p));
     state.tourSelection = cluster.stamps.map((s) => s.id);
     if (!el.tourNameInput.value.trim() && cluster.start) {
       el.tourNameInput.value = `Stempelrunde ab ${cluster.start.name}`;
@@ -3187,12 +3264,16 @@
       panel.hidden = panel.dataset.spanel !== name;
     });
     localStorage.setItem('wanderplaner.settingstab', name);
+    // Der Kartenausschnitt hat sich seit dem letzten Blick vielleicht
+    // geändert – damit stimmt auch die angebotene Kachel nicht mehr.
+    if (name === 'routing' && !el.settings.hidden) refreshOffline();
   }
 
   function setSettingsOpen(open) {
     el.settings.hidden = !open;
     el.settingsBtn.setAttribute('aria-expanded', String(open));
     if (open) el.settingsClose.focus();
+    if (open && localStorage.getItem('wanderplaner.settingstab') === 'routing') refreshOffline();
   }
 
   /* ---------- Sicherung als Datei ---------- */
@@ -3290,7 +3371,7 @@
     ['wanderplaner.routing', 'wanderplaner.preset', 'wanderplaner.places',
       'wanderplaner.tab', 'wanderplaner.mode', 'wanderplaner.routestyle',
       'wanderplaner.library', 'wanderplaner.sheet', 'wanderplaner.settingstab',
-      'wanderplaner.baselayer'].forEach((key) => localStorage.removeItem(key));
+      'wanderplaner.baselayer', 'wanderplaner.routetransparent'].forEach((key) => localStorage.removeItem(key));
 
     showStatus('info', 'Alles zurückgesetzt – die Seite wird neu geladen.', 4000);
     setTimeout(() => window.location.reload(), 1200);
@@ -3311,10 +3392,181 @@
     el.brouterNote.className = 'about-note';
     el.brouterNote.textContent = url
       ? `Routing läuft jetzt über ${url}.`
-      : 'Routing läuft wieder über den öffentlichen Dienst brouter.de.';
+      : Routing.isLocal()
+        ? 'Routing läuft wieder über den eigenen BRouter-Container.'
+        : 'Routing läuft wieder über den öffentlichen Dienst brouter.de.';
 
     // Die vorhandene Route stammt noch vom alten Dienst.
     if (state.points.length >= 2) scheduleRecalc();
+  }
+
+  /* ---------- Offline-Routing (BRouter-Container) ---------- */
+
+  let offlinePoll = null;
+
+  /** Kachelname zur Koordinate: Südwestecke der 5°-Kachel, z. B. E10_N50. */
+  function brouterTile(lat, lng) {
+    const lon5 = Math.floor(lng / 5) * 5;
+    const lat5 = Math.floor(lat / 5) * 5;
+    return `${lon5 < 0 ? `W${-lon5}` : `E${lon5}`}_${lat5 < 0 ? `S${-lat5}` : `N${lat5}`}`;
+  }
+
+  /** Alle Kacheln, die der sichtbare Kartenausschnitt berührt. */
+  function tilesInView() {
+    const b = MapView.getBounds();
+    const tiles = new Set();
+    for (let lat = Math.floor(b.getSouth() / 5) * 5; lat <= b.getNorth(); lat += 5) {
+      for (let lng = Math.floor(b.getWest() / 5) * 5; lng <= b.getEast(); lng += 5) {
+        tiles.add(brouterTile(lat, lng));
+      }
+    }
+    // Weit herausgezoomt wären das Dutzende Dateien mit vielen Gigabyte –
+    // dann lieber gar nichts anbieten als versehentlich alles laden.
+    return tiles.size <= 4 ? [...tiles] : [];
+  }
+
+  function formatMb(bytes) {
+    return `${(bytes / 1024 / 1024).toLocaleString('de-DE', { maximumFractionDigits: 0 })} MB`;
+  }
+
+  /**
+   * Fragt den Server nach dem BRouter-Container. Meldet er einen, rechnet
+   * die Planung künftig dort (sofern keine eigene Adresse eingetragen ist).
+   */
+  async function refreshOffline() {
+    let info;
+    try {
+      const response = await Utils.fetchWithTimeout('api/brouter', {}, 6000);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      info = await response.json();
+    } catch (err) {
+      // Ohne Wanderplaner-Server (Datei direkt geöffnet) gibt es keinen
+      // Container – das ist kein Fehler.
+      Routing.setLocal(null);
+      el.offlineStatus.className = 'about-note';
+      el.offlineStatus.textContent =
+        'Kein BRouter-Container eingerichtet – die Planung nutzt brouter.de.';
+      el.offlineTiles.innerHTML = '';
+      el.offlineLoad.hidden = true;
+      return;
+    }
+
+    const wasLocal = Routing.isLocal();
+    Routing.setLocal(info.configured ? new URL('brouter', document.baseURI).href : null);
+
+    if (!info.configured) {
+      el.offlineStatus.className = 'about-note';
+      el.offlineStatus.textContent =
+        'Kein BRouter-Container eingerichtet – die Planung nutzt brouter.de. ' +
+        'Wie er sich einrichten lässt, steht im README unter „Offline-Routing“.';
+    } else if (!info.reachable) {
+      el.offlineStatus.className = 'about-note update';
+      el.offlineStatus.textContent =
+        'Der BRouter-Container ist eingerichtet, antwortet aber nicht – bis dahin ' +
+        'springt brouter.de ein.';
+    } else {
+      el.offlineStatus.className = 'about-note ok';
+      el.offlineStatus.textContent = info.tiles.length > 0
+        ? `✓ Offline-Routing aktiv – ${info.tiles.length} Kachel(n) vorhanden.`
+        : '✓ BRouter-Container läuft, aber es sind noch keine Kartendaten geladen.';
+    }
+    if (Routing.isCustom() && !Routing.isLocal() && info.configured) {
+      el.offlineStatus.textContent +=
+        ' Unten ist eine andere Adresse eingetragen – sie hat Vorrang.';
+    }
+
+    renderOfflineTiles(info);
+
+    // Die Route kam bisher vom öffentlichen Dienst – jetzt neu rechnen.
+    if (!wasLocal && Routing.isLocal() && state.points.length >= 2) scheduleRecalc();
+
+    const busy = (info.downloads || []).some((d) => !d.done);
+    clearTimeout(offlinePoll);
+    if (busy) offlinePoll = setTimeout(refreshOffline, 2000);
+  }
+
+  function renderOfflineTiles(info) {
+    el.offlineTiles.innerHTML = '';
+    const rows = new Map();
+    (info.tiles || []).forEach((t) => rows.set(t.tile, { ...t, present: true }));
+    (info.downloads || []).forEach((d) => {
+      const row = rows.get(d.tile) || { tile: d.tile, present: false };
+      if (!d.done || d.error) row.download = d;
+      rows.set(d.tile, row);
+    });
+
+    [...rows.values()].sort((a, b) => a.tile.localeCompare(b.tile)).forEach((row) => {
+      const li = document.createElement('li');
+      const name = document.createElement('span');
+      name.className = 'tile-name';
+      name.textContent = row.tile;
+      const infoEl = document.createElement('span');
+      infoEl.className = 'tile-info';
+      const d = row.download;
+      if (d && !d.done) {
+        infoEl.textContent = d.total
+          ? `wird geladen … ${Math.round((d.received / d.total) * 100)} %`
+          : `wird geladen … ${formatMb(d.received)}`;
+      } else if (d && d.error) {
+        infoEl.textContent = `Laden fehlgeschlagen: ${d.error}`;
+      } else {
+        infoEl.textContent = `${formatMb(row.bytes)} · ${new Date(row.modified).toLocaleDateString('de-DE')}`;
+      }
+      li.append(name, infoEl);
+
+      if (row.present && !(d && !d.done)) {
+        const del = document.createElement('button');
+        del.className = 'item-delete';
+        del.title = 'Kachel löschen';
+        del.textContent = '✕';
+        del.addEventListener('click', () => deleteOfflineTile(row.tile));
+        li.appendChild(del);
+      }
+      el.offlineTiles.appendChild(li);
+    });
+
+    // Laden anbieten, wenn der Ausschnitt Kacheln berührt, die noch fehlen.
+    const present = new Set((info.tiles || []).map((t) => t.tile));
+    const missing = tilesInView().filter((t) => !present.has(t));
+    el.offlineLoad.hidden = !info.configured || !info.manageable;
+    el.offlineLoad.disabled = missing.length === 0;
+    el.offlineLoad.textContent = missing.length > 0
+      ? `⬇ Daten für den Kartenausschnitt laden (${missing.join(', ')})`
+      : '⬇ Ausschnitt bereits vorhanden (oder zu weit herausgezoomt)';
+    el.offlineLoad.dataset.tiles = missing.join(',');
+  }
+
+  async function loadOfflineTiles() {
+    const tiles = (el.offlineLoad.dataset.tiles || '').split(',').filter(Boolean);
+    if (tiles.length === 0) return;
+    if (!window.confirm(
+      `Kartendaten ${tiles.join(', ')} laden? Eine Kachel ist meist ` +
+      'zwischen 100 und 500 MB groß; der Server lädt sie bei brouter.de.')) return;
+    for (const tile of tiles) {
+      try {
+        const response = await fetch(`api/brouter/tiles/${encodeURIComponent(tile)}`,
+          { method: 'POST' });
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          throw new Error(data.error || `HTTP ${response.status}`);
+        }
+      } catch (err) {
+        showStatus('error', `Kachel ${tile} lässt sich nicht laden: ${err.message}`);
+      }
+    }
+    refreshOffline();
+  }
+
+  async function deleteOfflineTile(tile) {
+    if (!window.confirm(`Kartendaten ${tile} löschen? Dort rechnet dann wieder brouter.de.`)) {
+      return;
+    }
+    try {
+      await fetch(`api/brouter/tiles/${encodeURIComponent(tile)}`, { method: 'DELETE' });
+    } catch (err) {
+      showStatus('error', `Löschen fehlgeschlagen: ${err.message}`);
+    }
+    refreshOffline();
   }
 
   /** Prüft die eingetragene Adresse, ohne eine Route zu berechnen. */
@@ -3333,11 +3585,13 @@
     el.testBrouter.disabled = false;
   }
 
-  function updateEngineNote(engine) {
+  function updateEngineNote(engine, offline) {
     if (engine === 'brouter') {
       el.engineNote.className = 'engine-note ok';
-      el.engineNote.textContent =
-        'Routing über BRouter – die Einstellungen wirken direkt auf die Wegekosten.';
+      el.engineNote.textContent = offline
+        ? 'Routing über den eigenen BRouter – die Einstellungen wirken direkt ' +
+          'auf die Wegekosten, ohne öffentlichen Dienst.'
+        : 'Routing über BRouter – die Einstellungen wirken direkt auf die Wegekosten.';
     } else if (engine === 'osrm') {
       el.engineNote.className = 'engine-note warn';
       el.engineNote.textContent =
@@ -3402,6 +3656,7 @@
       onPoiEdit: editPoi,
       onPoiDelete: deletePoi,
       onStampClick,
+      onStampAddToRoute: addStampToRoute,
       stampHint,
       onStampCollectedToggle: toggleStampCollected,
       onStampTourToggle: toggleStampTour,
@@ -3510,10 +3765,24 @@
       updateChart(); // das Höhenprofil trägt dieselben Farben
     });
 
+    // Durchsichtige Route: Die Karte darunter bleibt lesbar – etwa um eine
+    // Wegmarkierung oder einen Pfadnamen unter der Linie zu erkennen.
+    el.routeTransparent.checked =
+      localStorage.getItem('wanderplaner.routetransparent') === '1';
+    MapView.setRouteTransparent(el.routeTransparent.checked);
+    el.routeTransparent.addEventListener('change', () => {
+      const on = el.routeTransparent.checked;
+      localStorage.setItem('wanderplaner.routetransparent', on ? '1' : '0');
+      MapView.setRouteTransparent(on);
+    });
+
     el.brouterUrl.value = localStorage.getItem(BROUTER_KEY) || '';
     Routing.setBase(el.brouterUrl.value);
     el.brouterUrl.addEventListener('change', applyBrouterUrl);
     el.testBrouter.addEventListener('click', testBrouter);
+    el.offlineLoad.addEventListener('click', loadOfflineTiles);
+    el.offlineRefresh.addEventListener('click', refreshOffline);
+    refreshOffline();
     el.resetBrouter.addEventListener('click', () => {
       el.brouterUrl.value = '';
       applyBrouterUrl();

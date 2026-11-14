@@ -11,7 +11,7 @@
  * Der Datenabgleich (/api/…) wird bewusst nie zwischengespeichert – dort
  * zählt immer der aktuelle Stand.
  */
-const VERSION = 'v35';
+const VERSION = 'v36';
 const SHELL_CACHE = `wanderplaner-shell-${VERSION}`;
 const TILE_CACHE = `wanderplaner-tiles-${VERSION}`;
 const MAX_TILES = 1200;
@@ -142,6 +142,9 @@ self.addEventListener('fetch', (event) => {
     ? url.pathname.slice(scope.length)
     : url.pathname.replace(/^\//, '');
   if (relative.startsWith('api/')) return;
+  // Der eigene BRouter-Container hinter dem Wanderplaner-Server: Routen
+  // dürfen nie aus dem Zwischenspeicher kommen.
+  if (relative === 'brouter' || relative.startsWith('brouter/')) return;
 
   // Routing- und Höhendienste nie zwischenspeichern.
   if (/brouter\.de|project-osrm\.org|open-elevation\.com|opentopodata\.org|nominatim|overpass|open-meteo/.test(url.hostname)) {

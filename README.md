@@ -47,6 +47,13 @@ denselben Datenstand sehen.
   Wie viele Stichwege entfernt wurden, steht in der Meldung.
 - **Wetter** – Vorhersage für den Startpunkt zur geplanten Zeit
   (Open-Meteo), zusammengefasst auf das ungünstigste Wetter der Tour.
+- **Offline-Routing** – ein eigener BRouter-Container neben dem Wanderplaner
+  rechnet die Routen mit denselben Gewichtungen, aber ohne den öffentlichen
+  Dienst. Die Kartendaten für den aktuellen Ausschnitt lassen sich unter
+  *Einstellungen → Routing* mit einem Klick laden (siehe unten).
+- **Durchsichtige Route** – ein Haken unter *Darstellung* zeichnet die
+  geplante Strecke halbtransparent, damit Wegmarkierungen und Pfadnamen der
+  Karte darunter lesbar bleiben. Die Wahl wird gemerkt.
 - **Route umkehren** – ein Knopf dreht die Richtung; bei Rundkursen
   entscheidet das, ob der steile Teil Auf- oder Abstieg wird.
 - **Zeitmarken** – im Höhenprofil zeigt der Tooltip neben der Höhe auch die
@@ -111,6 +118,12 @@ denselben Datenstand sehen.
   die Reihenfolge wird automatisch optimiert (Nearest-Neighbor + 2-Opt) und
   die Route entlang echter Wege berechnet. Die ausgewählten Stempelstellen
   landen beim GPX-Export als Wegpunkte mit in der Datei.
+- **Stempel gezielt zur Route** – im Popup einer Stempelstelle hängt
+  „➜ Zur Route hinzufügen“ sie als Routenpunkt an (im Zeichenmodus genügt
+  ein Klick auf die Marke). In der Punktliste steht dann ihr Name statt einer
+  Koordinate – ebenso bei Parkplätzen als Startpunkt, Stempel-Touren und
+  Vorschlägen. Der Name wird mit der Tour gespeichert; ältere Punkte, die
+  genau auf einer Stempelstelle liegen, bekommen deren Namen ebenfalls.
 - **Klick mit Rückfrage** – **Doppelklick oder Rechtsklick** auf die Karte
   öffnet ein Menü (Routenpunkt anhängen, als neuen Startpunkt einfügen, POI
   setzen, Parkplatz merken, hier weiterzeichnen). Ein einfacher Klick tut
@@ -225,7 +238,71 @@ Schlecht sichtbare Pfade meiden. Dazu die maximale Schwierigkeit nach
 darauf hin: Dieser Dienst folgt überwiegend Straßen und ignoriert die
 Gewichtung. Der Hinweis erscheint als Warnung und im Einstellungs-Panel.
 
-### Eigener BRouter – unabhängig vom öffentlichen Dienst
+### Offline-Routing mit eigenem BRouter-Container
+
+Die mitgelieferte `docker-compose.yml` startet neben dem Wanderplaner einen
+BRouter aus dem offiziellen Image `ghcr.io/abrensch/brouter`. Das ist
+dieselbe Rechenmaschine wie bei brouter.de – nur im eigenen Netz.
+
+* Der Wanderplaner reicht `/brouter` an den Container durch
+  (`BROUTER_URL=http://brouter:17777`). Für den Browser kommt die Route also
+  vom selben Server wie die App: keine CORS- oder HTTPS-Probleme, kein
+  zusätzlicher Port nach außen.
+* Die App erkennt den Container beim Start selbst und rechnet dort. Das
+  Wanderprofil mit allen Reglern wird wie gewohnt hochgeladen.
+* BRouter braucht die Kartendaten der Region als `.rd5`-Dateien, je eine pro
+  5°×5°-Kachel (der Harz liegt in `E10_N50`, ganz Deutschland in vier bis
+  sechs Kacheln, je etwa 100–500 MB). Unter **Einstellungen → Routing →
+  Offline-Routing** bietet die App die Kacheln für den sichtbaren
+  Kartenausschnitt an; der Server lädt sie von brouter.de in das gemeinsame
+  Volume `brouter-segments`. Danach wird ohne Internet gerechnet.
+* Fehlen für ein Gebiet die Daten oder ist der Container aus, springt
+  automatisch brouter.de ein – erst danach das straßenlastige OSRM. Die App
+  sagt jeweils, woher die Route kam.
+* Die Kartendaten werden bei brouter.de wöchentlich neu erzeugt. Wer
+  aktuelle Wege will, löscht eine Kachel ab und zu (✕) und lädt sie neu.
+
+Ohne die Variable `BROUTER_URL` (bzw. ohne den `brouter`-Dienst) läuft
+alles wie bisher über brouter.de.
+
+Für TrueNAS / Dockge / Portainer als YAML:
+
+```yaml
+services:
+  wanderplaner:
+    image: ghcr.io/zendonir/wanderplaner:latest
+    ports:
+      - "8080:8080"
+    environment:
+      BROUTER_URL: http://brouter:17777
+      BROUTER_SEGMENTS_DIR: /segments
+    volumes:
+      - /mnt/tank/wanderplaner:/data
+      - /mnt/tank/wanderplaner-brouter:/segments
+    restart: unless-stopped
+  brouter:
+    image: ghcr.io/abrensch/brouter:latest
+    environment:
+      MAXTHREADS: "4"
+      JAVA_OPTS: "-Xmx768M -Xms256M -Xmn32M -DmaxRunningTime=300 -DuseRFCMimeType=false"
+    volumes:
+      - /mnt/tank/wanderplaner-brouter:/segments4
+    restart: unless-stopped
+```
+
+Die `.rd5`-Dateien lassen sich auch von Hand in das Verzeichnis legen
+(`https://brouter.de/brouter/segments4/`). Rechnet der Container nach dem
+Laden einer neuen Kachel dort trotzdem nicht, hilft ein Neustart des
+`brouter`-Dienstes.
+
+**Geprüft und nicht geprüft:** Durchreichung, Profil-Upload, Laden und
+Löschen der Kacheln, Erkennen des Containers und das Ausweichen auf
+brouter.de sind mit einem nachgebauten BRouter getestet. Einen echten
+BRouter-Container mit echten Kartendaten konnte ich in der
+Entwicklungsumgebung nicht starten (kein Docker-Dienst, kein Zugriff auf
+brouter.de) – die Angaben zum Image stammen aus der BRouter-Dokumentation.
+
+### Eigener BRouter unter anderer Adresse
 
 Standardmäßig holt der **Browser** die Routen direkt bei `brouter.de`. Das
 heißt: Ohne Internet gibt es keine neuen Routen, und wenn der öffentliche

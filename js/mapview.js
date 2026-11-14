@@ -583,10 +583,19 @@ const MapView = (function () {
       cbs.onStampTourToggle(stamp.id);
     });
 
+    // Unabhängig vom Modus: die Stelle gezielt als Routenpunkt anhängen.
+    const routeBtn = document.createElement('button');
+    routeBtn.textContent = '➜ Zur Route hinzufügen';
+    routeBtn.className = 'stamp-to-route';
+    routeBtn.addEventListener('click', () => {
+      map.closePopup();
+      if (cbs.onStampAddToRoute) cbs.onStampAddToRoute(stamp);
+    });
+
     // Bewusst kein Löschen an dieser Stelle: Das Popup öffnet sich beim
     // Planen ständig, und ein danebengegangener Klick würde eine
     // Stempelstelle samt Sammelstand entfernen. Gelöscht wird in der Liste.
-    buttons.append(collectedBtn, tourBtn);
+    buttons.append(collectedBtn, routeBtn, tourBtn);
     div.appendChild(buttons);
     return div;
   }
@@ -1097,6 +1106,15 @@ const MapView = (function () {
   }
 
   /**
+   * Schaltet die geplante Route durchsichtig. Über eine Klasse am
+   * Kartencontainer statt über die Linienoptionen: So gilt es auch für jede
+   * neu berechnete Route, ohne dass renderRoute davon wissen muss.
+   */
+  function setRouteTransparent(on) {
+    map.getContainer().classList.toggle('route-transparent', Boolean(on));
+  }
+
+  /**
    * Zeichnet die Route. `sections` sind farbige Teilstücke; ohne Angabe
    * wird die Strecke einfarbig dargestellt.
    */
@@ -1346,6 +1364,8 @@ const MapView = (function () {
     renderPoints,
     renderPois,
     renderRoute,
+    setRouteTransparent,
+    getBounds: () => map.getBounds(),
     renderLegend,
     openMenu,
     closeMenu,

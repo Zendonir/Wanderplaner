@@ -27,7 +27,7 @@ module.exports = {
   name: 'Offline-Routing und Routenpunkte',
 
   async run(check) {
-    const fake = { requests: [], profiles: 0, missingData: false };
+    const fake = { requests: [], profiles: 0, missingData: false, mismatch: false, slowProbe: false };
     const brouter = await listen((req, res) => {
       if (req.method === 'POST' && req.url === '/brouter/profile') {
         req.resume();
@@ -37,9 +37,19 @@ module.exports = {
       }
       if (req.url.startsWith('/brouter?')) {
         fake.requests.push(req.url);
+        // Probestrecke des Servers absichtlich langsam – so wie ein BRouter,
+        // der gerade erst startet und Kacheln lädt.
+        if (fake.slowProbe && /profile=trekking/.test(req.url)) {
+          setTimeout(() => { res.writeHead(400); res.end('slow'); }, 7000);
+          return;
+        }
         if (!/lonlats=\d/.test(req.url)) {
           res.writeHead(400, { 'Content-Type': 'text/plain' });
           return res.end('lonlats parameter not set');
+        }
+        if (fake.mismatch) {
+          res.writeHead(400, { 'Content-Type': 'text/plain' });
+          return res.end('lookup version mismatch (old rd5?) lookups.dat=10 E10_N50.rd5=11');
         }
         if (fake.missingData) {
           res.writeHead(400, { 'Content-Type': 'text/plain' });
@@ -68,6 +78,8 @@ module.exports = {
       BROUTER_URL: 'http://localhost:9181',
       BROUTER_SEGMENTS_DIR: segments,
       BROUTER_SEGMENTS_SOURCE: 'http://localhost:9182',
+      // Im Test sofort neu prüfen statt das Ergebnis eine Minute zu merken.
+      BROUTER_PROBE_MAX_AGE_MS: '0',
     });
     const browser = await launchBrowser();
     const context = await browser.newContext({
@@ -156,6 +168,43 @@ module.exports = {
       check.contains(await page.textContent('#status'), 'keine Kartendaten',
         'Und die App sagt, warum');
       fake.missingData = false;
+
+      /* ---- Kartendaten passen nicht zum Container ---- */
+      // So meldet es BRouter, wenn das Image älter ist als die Kartendaten.
+      // Eine langsame Probe darf die Statusabfrage nicht aufhalten – der
+      // Browser bricht nach 6 s ab und hielte den Container sonst für weg.
+      fake.slowProbe = true;
+      const start = Date.now();
+      await (await fetch(`${server.url}/api/brouter`)).json();
+      check.ok(Date.now() - start < 3000,
+        'Die Statusabfrage wartet nicht auf eine langsame Probestrecke',
+        `${Date.now() - start} ms`);
+      await new Promise((r) => setTimeout(r, 7500));
+      fake.slowProbe = false;
+
+      fake.mismatch = true;
+      let probeStatus = {};
+      for (let i = 0; i < 20 && !probeStatus.problem; i++) {
+        probeStatus = await (await fetch(`${server.url}/api/brouter`)).json();
+        if (!probeStatus.problem) await new Promise((r) => setTimeout(r, 250));
+      }
+      check.contains(probeStatus.problem || '', 'lookup version mismatch',
+        'Die Statusabfrage erkennt, dass Kartendaten und BRouter nicht zusammenpassen');
+      await page.click('#btn-reverse');
+      await waitForRoute(page);
+      await page.waitForFunction(() =>
+        document.getElementById('status').textContent.includes('nightly'),
+        null, { timeout: 8000 }).catch(() => {});
+      check.contains(await page.textContent('#status'), 'brouter:nightly',
+        'Die App nennt die Ursache und wie sie sich beheben lässt');
+      await openSettings(page, 'routing');
+      await page.waitForFunction(() =>
+        document.getElementById('offline-status').textContent.includes('nightly'),
+        null, { timeout: 8000 }).catch(() => {});
+      check.contains(await page.textContent('#offline-status'), 'passen nicht',
+        'Auch die Offline-Einstellungen zeigen das Problem');
+      await page.keyboard.press('Escape');
+      fake.mismatch = false;
 
       /* ---- Durchsichtige Route ---- */
       const opacityOf = () => page.evaluate(() =>

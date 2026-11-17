@@ -39,8 +39,15 @@ services:
   # brouter.de, nur im eigenen Netz. Er ist nur für den Wanderplaner
   # erreichbar (kein Port nach außen nötig).
   brouter:
-    image: ghcr.io/abrensch/brouter:latest
+    # :nightly statt :latest – die Kartendaten auf brouter.de haben ein
+    # neueres Format (lookups 11), das der letzte Release noch nicht kennt
+    # („lookup version mismatch“).
+    image: ghcr.io/abrensch/brouter:nightly
     container_name: wanderplaner-brouter
+    # BRouter legt hochgeladene Profile unter /profiles2/customprofiles ab;
+    # /profiles2 gehört im Image root. Ohne das scheitert das Wanderprofil
+    # mit den Reglern der App, und es bliebe nur ein Ersatzprofil.
+    user: "0:0"
     environment:
       MAXTHREADS: "4"
       # Hochgeladene Profile und mehrere Kacheln brauchen etwas mehr Speicher

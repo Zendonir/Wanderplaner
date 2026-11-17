@@ -67,13 +67,63 @@ function ping() {
   });
 }
 
+/**
+ * Rechnet eine kurze Probestrecke mitten in einer vorhandenen Kachel. So
+ * fällt auf, wenn Kartendaten und BRouter-Programm nicht zusammenpassen
+ * („lookup version mismatch“) – das sieht man sonst erst an jeder Route.
+ * Gemeldet wird nur genau dieser Fall; dass an der Probestelle kein Weg
+ * liegt, ist kein Problem der Aufsetzung.
+ */
+function probe(tile) {
+  return new Promise((resolve) => {
+    const m = String(tile).match(/^([EW])(\d+)_([NS])(\d+)$/);
+    if (!m || !configured()) return resolve(null);
+    const lon = (m[1] === 'W' ? -1 : 1) * Number(m[2]) + 2.5;
+    const lat = (m[3] === 'S' ? -1 : 1) * Number(m[4]) + 2.5;
+    const lonlats = `${lon.toFixed(4)},${lat.toFixed(4)}|${(lon + 0.01).toFixed(4)},${(lat + 0.01).toFixed(4)}`;
+    const req = http.get(
+      `${BROUTER_URL}/brouter?lonlats=${lonlats}&profile=trekking&format=geojson`,
+      (res) => {
+        let body = '';
+        res.on('data', (chunk) => { if (body.length < 4000) body += chunk; });
+        res.on('end', () => {
+          const hit = body.match(/lookup version mismatch[^\n]*/i);
+          resolve(hit ? hit[0].trim() : null);
+        });
+      });
+    req.setTimeout(15000, () => { req.destroy(); resolve(null); });
+    req.on('error', () => resolve(null));
+  });
+}
+
+// Ergebnis der letzten Probestrecke. Die Probe kann dauern – ein BRouter,
+// der gerade startet, lädt erst die Kacheln. Darauf darf die Statusabfrage
+// nicht warten, sonst bricht der Browser sie ab und hält den Container für
+// nicht vorhanden. Also im Hintergrund prüfen und das Ergebnis merken.
+const PROBE_MAX_AGE_MS = Number(process.env.BROUTER_PROBE_MAX_AGE_MS ?? 60 * 1000);
+const lastProbe = { tile: null, problem: null, at: 0, running: false };
+
+function refreshProbe(tile) {
+  if (lastProbe.running) return;
+  if (lastProbe.tile === tile && Date.now() - lastProbe.at < PROBE_MAX_AGE_MS) return;
+  lastProbe.running = true;
+  probe(tile).then((problem) => {
+    Object.assign(lastProbe, { tile, problem, at: Date.now(), running: false });
+  });
+}
+
 async function status() {
   const tiles = await listTiles();
+  const reachable = await ping();
+  if (reachable && tiles.length > 0) refreshProbe(tiles[0].tile);
   return {
     configured: configured(),
-    reachable: await ping(),
+    reachable,
     manageable: Boolean(SEGMENTS_DIR),
     tiles,
+    // Zuletzt bekanntes Ergebnis – beim allerersten Aufruf noch keins.
+    problem: reachable && tiles.length > 0 && lastProbe.tile === tiles[0].tile
+      ? lastProbe.problem : null,
     downloads: [...downloads.entries()].map(([tile, d]) => ({ tile, ...d })),
   };
 }

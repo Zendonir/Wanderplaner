@@ -292,7 +292,8 @@ services:
       - /mnt/tank/wanderplaner-brouter:/segments
     restart: unless-stopped
   brouter:
-    image: ghcr.io/abrensch/brouter:latest
+    image: ghcr.io/abrensch/brouter:nightly
+    user: "0:0"
     environment:
       MAXTHREADS: "4"
       JAVA_OPTS: "-Xmx768M -Xms256M -Xmn32M -DmaxRunningTime=300 -DuseRFCMimeType=false"
@@ -300,6 +301,14 @@ services:
       - /mnt/tank/wanderplaner-brouter:/segments4
     restart: unless-stopped
 ```
+
+**Warum `:nightly` und `user: "0:0"`?** Die Kartendaten auf brouter.de haben
+inzwischen das Datenformat 11, der letzte BRouter-Release (`:latest`) kennt
+nur 10 und bricht mit „lookup version mismatch“ ab; `:nightly` passt dazu.
+Hochgeladene Profile legt BRouter unter `/profiles2/customprofiles` ab, und
+`/profiles2` gehört im Image root – ohne `user: "0:0"` kann das Wanderprofil
+mit den Reglern der App nicht gespeichert werden. Passen Daten und Programm
+nicht zusammen, sagt das *Einstellungen → Routing → Offline-Routing*.
 
 Die `.rd5`-Dateien lassen sich auch von Hand in das Verzeichnis legen
 (`https://brouter.de/brouter/segments4/`). Rechnet der Container nach dem
@@ -336,7 +345,7 @@ Zwei Dinge sind dabei zu wissen:
   erlauben, sonst lehnt der Browser die Antwort ab.
 
 Nimmt der eigene Dienst keine hochgeladenen Profile an, weicht die App auf
-BRouters mitgeliefertes `hiking-beta` aus. Es gibt dann weiter Routen, aber
+BRouters mitgeliefertes `hiking-mountain` aus. Es gibt dann weiter Routen, aber
 die Regler in den Einstellungen wirken nicht mehr – die Verbindungsprüfung
 sagt das vorher.
 

@@ -67,7 +67,9 @@ const Routing = {
   // Manche eigenen Aufsetzungen tun das nicht – dann wird fortan das
   // mitgelieferte Wanderprofil benutzt, statt es jedes Mal neu zu versuchen.
   _servers: new Map(),
-  FALLBACK_PROFILE: 'hiking-beta',
+  // Muss im Container mitgeliefert sein: „hiking-beta“ gibt es nur auf
+  // brouter.de, ein selbst betriebener BRouter kennt es nicht.
+  FALLBACK_PROFILE: 'hiking-mountain',
 
   _server(base) {
     if (!this._servers.has(base)) {
@@ -143,9 +145,14 @@ const Routing = {
       if (primary === this.PUBLIC_BROUTER) throw err;
       console.warn('Eigener BRouter fehlgeschlagen, versuche brouter.de:', err);
       const result = await run(this.PUBLIC_BROUTER);
-      const missingData = /datafile|rd5|not found|segment/i.test(err.message);
+      const mismatch = /lookup version mismatch/i.test(err.message);
+      const missingData = !mismatch && /datafile|rd5|not found|segment/i.test(err.message);
       result.warning = [
-        missingData
+        mismatch
+          ? 'Die Kartendaten passen nicht zur Version des BRouter-Containers ' +
+            '(„lookup version mismatch“) – die Route kommt vom öffentlichen BRouter. ' +
+            'In der YAML das Image auf ghcr.io/abrensch/brouter:nightly umstellen.'
+          : missingData
           ? 'Für dieses Gebiet liegen dem Offline-Routing keine Kartendaten vor – ' +
             'die Route kommt vom öffentlichen BRouter. Unter Einstellungen → Routing ' +
             'lassen sich die Daten für den Kartenausschnitt laden.'
@@ -185,7 +192,15 @@ const Routing = {
         headers: { 'Content-Type': 'text/plain' },
         body: '# Test\nassign validForFoot 1\n',
       }, 15000);
-      profiles = probe.ok;
+      // Der Server schreibt „200 OK“, bevor er die Datei anlegt. Scheitert
+      // das, ist die Antwort trotzdem 200 – erst die Profil-ID beweist,
+      // dass es geklappt hat.
+      const text = probe.ok ? await probe.text() : '';
+      try {
+        profiles = Boolean(JSON.parse(text).profileid);
+      } catch (err) {
+        profiles = false;
+      }
     } catch (err) {
       profiles = false;
     }

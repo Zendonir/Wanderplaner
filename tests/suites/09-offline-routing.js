@@ -261,6 +261,49 @@ module.exports = {
         getComputedStyle(document.querySelector('#point-list li')).opacity);
       check.equal(faded, '1', 'Die Punktliste ist nicht mehr ausgegraut');
 
+      /* ---- Namensvorschlag aus den Stempeln: „HWN 10 12 110 (Ort)“ ---- */
+      await page.unroute('**/nominatim.openstreetmap.org/reverse**');
+      await page.route('**/nominatim.openstreetmap.org/reverse**', (route, request) => {
+        const town = /zoom=10/.test(request.url());
+        route.fulfill({ json: town
+          ? { address: { town: 'Braunlage', county: 'Landkreis Goslar' } }
+          : { category: 'highway', name: '', address: { road: 'Kaiserweg', village: 'Schierke' } } });
+      });
+      await page.evaluate(() => {
+        // Entlang der Testroute (10,60° Ost, 51,800–51,812° Nord); die
+        // Nummern absichtlich durcheinander und mit führenden Nullen.
+        localStorage.setItem('wanderplaner.stempelstellen', JSON.stringify({ items: [
+          { id: 'h-110', name: 'HWN110 Oberer Stempel', lat: 51.8100, lng: 10.6002, updatedAt: Date.now() },
+          { id: 'h-12', name: 'HWN012 Mitte', lat: 51.8050, lng: 10.5998, updatedAt: Date.now() },
+          { id: 'h-10', name: 'HWN 10 Unten', lat: 51.8010, lng: 10.6001, updatedAt: Date.now() },
+          { id: 'h-x', name: 'HWN999 Weit weg', lat: 52.5000, lng: 13.4000, updatedAt: Date.now() },
+        ] }));
+        localStorage.setItem('wanderplaner.touren', JSON.stringify({ items: [] }));
+        localStorage.removeItem('wanderplaner.ortsnamen');
+      });
+      await page.reload();
+      await page.waitForSelector('#map.leaflet-container');
+      await page.waitForTimeout(900);
+      await page.evaluate(() => MapView.setView(51.80, 10.60, 13));
+      await page.click('#mode-route');
+      const flaeche = await page.locator('#map').boundingBox();
+      await page.locator('#map').click({ position: { x: flaeche.width * 0.5, y: flaeche.height * 0.7 } });
+      await page.locator('#map').click({ position: { x: flaeche.width * 0.55, y: flaeche.height * 0.3 } });
+      await waitForRoute(page);
+      await page.waitForFunction(() =>
+        document.getElementById('tour-name').value.includes('('), null, { timeout: 8000 })
+        .catch(() => {});
+      check.equal(await page.inputValue('#tour-name'), 'HWN 10 12 110 (Braunlage)',
+        'Der Name kommt aus den Stempeln an der Route, mit der nächsten Stadt');
+
+      // Ein selbst getippter Name wird nicht überschrieben.
+      await page.fill('#tour-name', 'Meine Runde');
+      await page.click('#btn-reverse');
+      await waitForRoute(page);
+      await page.waitForTimeout(600);
+      check.equal(await page.inputValue('#tour-name'), 'Meine Runde',
+        'Ein eigener Name bleibt bei einer Neuberechnung stehen');
+
       check.equal(errors.length, 0, 'Keine Skriptfehler', errors.join(' | '));
     } finally {
       await browser.close();

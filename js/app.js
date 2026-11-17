@@ -14,6 +14,9 @@
     tracks: Tracks.load(),   // abgeschlossene Touren als Spur – persistent
     savedTours: Tours.load(), // benannte Planungen – persistent
     tourName: '',
+    // Stammt der Name aus einem Vorschlag der App? Dann darf ein besserer
+    // ihn ersetzen. Selbst getippte oder geladene Namen bleiben unangetastet.
+    tourNameAuto: true,
     version: null,
     routeStyle: localStorage.getItem('wanderplaner.routestyle') || 'plain',
     tourSelection: [],  // Stempel-IDs, die in den Routenvorschlag sollen
@@ -1300,10 +1303,7 @@
       // Eine OSM-Kennung als Name bleibt weg – dann sucht die Liste selbst.
       ...(PointNames.isUsable(place.name) ? { name: place.name } : {}),
     });
-    if (!state.tourName) {
-      el.tourNameInput.value = `Tour ab ${parkingName(place)}`;
-      state.tourName = el.tourNameInput.value;
-    }
+    if (!state.tourName) setAutoTourName(`Tour ab ${parkingName(place)}`);
     renderAll();
     scheduleRecalc();
     showStatus('info', `„${parkingName(place)}“ ist jetzt Startpunkt der Route.`, 5000);
@@ -1445,6 +1445,7 @@
     state.points = adoptPoints(latlngs)
       .map((p) => ({ id: Utils.uid(), lat: p.lat, lng: p.lng }));
     state.tourName = track.name;
+    state.tourNameAuto = false;
     el.tourNameInput.value = track.name;
 
     setTab('planung');
@@ -1600,6 +1601,8 @@
     }
 
     state.tourName = name;
+    // Gespeichert ist der Name festgelegt – kein Vorschlag ersetzt ihn mehr.
+    state.tourNameAuto = false;
     const entry = Tours.fromState(name, state, items('tours').length);
 
     // Gleicher Name überschreibt den bestehenden Eintrag.
@@ -1641,6 +1644,7 @@
     if (tour.routing) state.routing = { ...Profiles.defaultSettings(), ...tour.routing };
     if (tour.preset) state.preset = tour.preset;
     state.tourName = tour.name;
+    state.tourNameAuto = false;
     el.tourNameInput.value = tour.name;
 
     syncRoutingUi();
@@ -1977,8 +1981,41 @@
     pushUndo();
     state.points = [];
     own.forEach((poi) => removeItem('pois', poi.id));
+    // Ein vorgeschlagener Name gehörte zur alten Route.
+    if (state.tourNameAuto) setAutoTourName('');
     renderAll();
     scheduleRecalc();
+  }
+
+  /** Setzt einen vorgeschlagenen Tournamen – nie über einen eigenen hinweg. */
+  function setAutoTourName(name) {
+    if (!state.tourNameAuto && el.tourNameInput.value.trim()) return;
+    if (el.tourNameInput.value === name) return;
+    el.tourNameInput.value = name;
+    state.tourName = name;
+    state.tourNameAuto = true;
+    // Der Startpunkt-QR trägt den Tournamen.
+    MapView.renderPoints(state.points);
+  }
+
+  let lastAlongStamps = [];
+
+  /**
+   * Namensvorschlag aus den Stempeln an der Route: „HWN 10 12 110 (Ort)“.
+   * Der Ort ist die nächstgelegene Stadt am Startpunkt; bis er von
+   * OpenStreetMap kommt (oder ohne Netz), steht der Name ohne Klammer.
+   */
+  function suggestTourName(stamps) {
+    lastAlongStamps = stamps;
+    if (!state.tourNameAuto && el.tourNameInput.value.trim()) return;
+    const numbers = PointNames.stampNumbers(stamps);
+    const start = state.points[0];
+    if (numbers.length === 0 || !start) return;
+    const town = PointNames.cached(start, 'town');
+    if (town === undefined) {
+      PointNames.request(start, () => suggestTourName(lastAlongStamps), 'town');
+    }
+    setAutoTourName(PointNames.tourName(numbers, town || ''));
   }
 
   // Am Touchgerät gibt es weder Rechtsklick noch Esc – die Hinweise reden
@@ -2711,8 +2748,7 @@
     state.points = points.map((p) => withName({ id: Utils.uid(), lat: p.lat, lng: p.lng }, p));
     state.tourSelection = cluster.stamps.map((s) => s.id);
     if (!el.tourNameInput.value.trim() && cluster.start) {
-      el.tourNameInput.value = `Stempelrunde ab ${parkingName(cluster.start)}`;
-      state.tourName = el.tourNameInput.value;
+      setAutoTourName(`Stempelrunde ab ${parkingName(cluster.start)}`);
     }
 
     renderAll();
@@ -3130,6 +3166,7 @@
 
     const radius = Number(el.alongRadius.value);
     const found = Nearby.alongRoute(items('stamps'), state.geometry, radius);
+    suggestTourName(found);
 
     section.hidden = false;
     el.alongList.innerHTML = '';
@@ -3749,6 +3786,9 @@
 
     el.tourNameInput.addEventListener('input', () => {
       state.tourName = el.tourNameInput.value.trim();
+      // Selbst getippt bleibt stehen; ein geleertes Feld darf wieder
+      // vorgeschlagen werden.
+      state.tourNameAuto = !state.tourName;
       // Der Startpunkt-QR trägt den Tournamen – Marker neu zeichnen.
       MapView.renderPoints(state.points);
     });

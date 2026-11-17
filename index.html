@@ -461,10 +461,11 @@
 
         <section class="settings-block">
           <h3>Routing-Dienst</h3>
-          <p class="hint">Die Routen werden vom Browser direkt bei BRouter
-            geholt. Wer BRouter selbst betreibt – etwa als Container auf
-            demselben Server –, trägt hier dessen Adresse ein und ist damit
-            unabhängig vom öffentlichen Dienst.</p>
+          <p class="hint">Nur nötig, wenn ein BRouter unter einer
+            <em>anderen</em> Adresse laufen soll. Der BRouter-Container aus der
+            mitgelieferten docker-compose.yml wird automatisch genutzt (siehe
+            „Offline-Routing“ oben) – dafür hier nichts eintragen. Leer
+            bedeutet: Container, falls vorhanden, sonst brouter.de.</p>
 
           <label class="field">
             <span>Adresse</span>

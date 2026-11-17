@@ -219,6 +219,34 @@ module.exports = {
       await page.evaluate(() => document.getElementById('mode-menu').click());
       await page.waitForTimeout(200);
 
+      /* ---- Route „nach Steigung“ bei zugeklappter Blende ---- */
+      // Das Höhenprofil hat in der zugeklappten Blende keine Breite. Der
+      // Farbverlauf darunter rechnete dann mit 0/0, Safari brach mit „The
+      // provided value is non-finite“ ab – und Anstieg/Abstieg fehlten.
+      await page.evaluate(() => {
+        localStorage.setItem('wanderplaner.routestyle', 'slope');
+        localStorage.setItem('wanderplaner.mode', 'route');
+        localStorage.setItem('wanderplaner.sheet', 'closed');
+        localStorage.removeItem('wanderplaner.pois');
+      });
+      await page.reload();
+      await page.waitForSelector('#map.leaflet-container');
+      await page.waitForTimeout(800);
+      await page.click('#btn-clear').catch(() => {});
+      const flaeche = await page.locator('#map').boundingBox();
+      await page.touchscreen.tap(flaeche.x + flaeche.width * 0.5, flaeche.y + flaeche.height * 0.7);
+      await page.waitForTimeout(300);
+      await page.touchscreen.tap(flaeche.x + flaeche.width * 0.55, flaeche.y + flaeche.height * 0.3);
+      await page.waitForFunction(() =>
+        document.getElementById('stat-ascent').textContent.includes('Hm')
+        || /non-finite/.test(document.getElementById('status').textContent),
+      null, { timeout: 15000 }).catch(() => {});
+      check.ok(!/non-finite/.test(await page.textContent('#status')),
+        'Nach Steigung eingefärbt bricht die Berechnung am Handy nicht ab',
+        await page.textContent('#status'));
+      check.contains(await page.textContent('#stat-ascent'), 'Hm',
+        'Anstieg und Abstieg werden dabei berechnet');
+
       /* ---- Einstellungsdialog passt auf den Bildschirm ---- */
       // Der YAML-Block in der Update-Anleitung hatte den Dialog über den
       // rechten Rand hinausgeschoben; Text war dann abgeschnitten.

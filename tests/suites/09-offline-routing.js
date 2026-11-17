@@ -296,6 +296,22 @@ module.exports = {
       check.equal(await page.inputValue('#tour-name'), 'HWN 10 12 110 (Braunlage)',
         'Der Name kommt aus den Stempeln an der Route, mit der nächsten Stadt');
 
+      // Ohne Stempel an der Route verschwindet der Vorschlag wieder – der
+      // Name würde sonst mit Stempeln werben, die die Tour nicht anläuft.
+      await openSettings(page, 'daten');
+      for (let i = 0; i < 4; i++) {
+        const del = page.locator('#stamp-list li .item-delete').first();
+        if (await del.count() === 0) break;
+        await del.click();
+        await page.waitForTimeout(250);
+      }
+      await page.keyboard.press('Escape');
+      await page.click('#btn-reverse');
+      await waitForRoute(page);
+      await page.waitForTimeout(600);
+      check.equal(await page.inputValue('#tour-name'), '',
+        'Ohne Stempel an der Route wird der Vorschlag wieder geleert');
+
       // Ein selbst getippter Name wird nicht überschrieben.
       await page.fill('#tour-name', 'Meine Runde');
       await page.click('#btn-reverse');

@@ -2010,7 +2010,12 @@
     if (!state.tourNameAuto && el.tourNameInput.value.trim()) return;
     const numbers = PointNames.stampNumbers(stamps);
     const start = state.points[0];
-    if (numbers.length === 0 || !start) return;
+    if (numbers.length === 0 || !start) {
+      // Liegt kein Stempel mehr an der Route, darf ein früherer Vorschlag
+      // nicht weiter mit Stempeln werben, die die Tour gar nicht anläuft.
+      if (state.tourNameAuto && /^HWN /.test(el.tourNameInput.value)) setAutoTourName('');
+      return;
+    }
     const town = PointNames.cached(start, 'town');
     if (town === undefined) {
       PointNames.request(start, () => suggestTourName(lastAlongStamps), 'town');

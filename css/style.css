@@ -429,8 +429,37 @@ body {
   line-height: 1.4;
 }
 
-.point-list,
-.point-list li,
+.point-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.point-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  font-size: 0.82rem;
+}
+
+/* Lange Namen kürzen statt die Knöpfe in eine zweite Zeile zu drängen. */
+.point-list .item-label {
+  min-width: 0;
+  cursor: pointer;
+}
+
+/* Name noch nicht ermittelt – Koordinate als Platzhalter, etwas zurückgenommen. */
+.point-list .item-label.is-coords {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Nur die Zeile, die gerade gezogen wird, wird durchscheinend. */
 .point-list li.dragging {
   opacity: 0.4;
 }
@@ -2457,6 +2486,16 @@ body {
   }
 }
 
+.library-scrim { display: none; }
+.hint-touch { display: none; }
+
+@media (pointer: coarse) {
+  .hint-touch { display: block; }
+  .hint-mouse { display: none; }
+  /* Ziehen zum Sortieren geht am Touchgerät nicht – dort sortieren ▲▼. */
+  .point-list .drag-handle { display: none; }
+}
+
 /* ---------- Handy und Homescreen-App ----------
    Statt alles untereinander zu stapeln (Karte, Profil, endlos lange
    Seitenleiste) bekommt das Handy die Karte formatfüllend und die Planung
@@ -2610,6 +2649,35 @@ body {
     box-shadow: 2px 0 12px rgba(0, 0, 0, 0.25);
   }
 
+  /* Neben der offenen Tourenliste wird die Karte abgedunkelt; Antippen
+     schließt die Liste. */
+  .layout:not(.library-collapsed) .library-scrim {
+    display: block;
+    position: absolute;
+    inset: 0;
+    bottom: var(--sheet-peek);
+    z-index: 1150;
+    background: rgba(20, 30, 20, 0.35);
+  }
+
+  /* Kleinere Marken: Auf der schmalen Karte stehen sie sonst Schulter an
+     Schulter und verdecken die Wege. */
+  .poi-marker {
+    width: 24px;
+    height: 24px;
+    /* Mittig im 28er-Feld, damit die Spitze am selben Fleck bleibt. */
+    margin: 2px 2px 0;
+  }
+
+  .poi-marker span { font-size: 0.75rem; }
+
+  /* In der schmalen Liste nicht abschneiden: Datum und Länge dürfen in eine
+     zweite Zeile, die Knöpfe bleiben rechts. */
+  .tour-date {
+    white-space: normal;
+    line-height: 1.3;
+  }
+
   /* Die Planung als Blende am unteren Rand. */
   .sidebar {
     position: fixed;
@@ -2639,7 +2707,9 @@ body {
     display: flex;
     position: sticky;
     top: 0;
-    z-index: 2;
+    /* Über der Zahlenreihe, deren Abdeckstreifen sonst die Beschriftung
+       verdeckt. */
+    z-index: 3;
     flex-direction: column;
     align-items: center;
     gap: 0.2rem;
@@ -2673,10 +2743,19 @@ body {
      Wichtigste an der ganzen Planung. */
   .stats {
     position: sticky;
-    top: 44px;
+    /* Gemessene Höhe des Griffs (app.js); 44px nur als Startwert. */
+    top: var(--sheet-handle-h, 44px);
     z-index: 2;
     background: var(--panel);
     padding-bottom: 0.35rem;
+    /* Deckt den Abstand zwischen Griff und Zahlen ab – sonst scheint dort
+       beim Scrollen die Liste durch. */
+    box-shadow: 0 -0.8rem 0 0 var(--panel);
+  }
+
+  /* Darunter durchrollende Inhalte enden sauber an einer Linie. */
+  .layout.sheet-open .stats {
+    border-bottom: 1px solid var(--border);
   }
 
   /* Ohne Route ist das Diagramm leer – dann lieber ganz weg. */

@@ -455,12 +455,55 @@ const MapView = (function () {
    * einzelne Punkte überhaupt unterscheidbar sind.
    */
   function visiblePois() {
-    if (allPois.length <= POI_VIEWPORT_LIMIT) return allPois;
-    if (map.getZoom() < POI_MIN_ZOOM) return [];
-    // Etwas über den Rand hinaus, damit beim Schwenken nichts nachploppt.
-    const bounds = map.getBounds().pad(0.25);
-    const inside = allPois.filter((p) => bounds.contains([p.lat, p.lng]));
-    return inside.length > POI_MAX_VISIBLE ? inside.slice(0, POI_MAX_VISIBLE) : inside;
+    let shown;
+    if (allPois.length <= POI_VIEWPORT_LIMIT) {
+      shown = allPois;
+    } else if (map.getZoom() < POI_MIN_ZOOM) {
+      return [];
+    } else {
+      // Etwas über den Rand hinaus, damit beim Schwenken nichts nachploppt.
+      const bounds = map.getBounds().pad(0.25);
+      shown = allPois.filter((p) => bounds.contains([p.lat, p.lng]));
+    }
+    if (PHONE.matches) {
+      // Selbst gesetzte POIs nie ausdünnen und vorn einsortieren: Ein eben
+      // gesetzter POI muss sichtbar sein, sonst öffnet sich sein Popup zum
+      // Benennen nicht. Ausgedünnt werden nur importierte Sammlungen.
+      const own = shown.filter((p) => isOwnPoi(p));
+      const imported = shown.filter((p) => !isOwnPoi(p));
+      shown = own.concat(thinOut(imported, POI_CELL_PX_PHONE, own));
+    }
+    return shown.length > POI_MAX_VISIBLE ? shown.slice(0, POI_MAX_VISIBLE) : shown;
+  }
+
+  // Am Handy liegen die Marken sonst dicht an dicht übereinander: Die Karte
+  // ist schmal, die Finger sind breit. Je Rasterfeld dieser Größe bleibt
+  // eine Marke; beim Heranzoomen werden die Felder kleiner im Gelände und
+  // die übrigen tauchen auf.
+  const PHONE = window.matchMedia('(max-width: 900px)');
+  const POI_CELL_PX_PHONE = 60;
+
+  /** Ein selbst gesetzter POI trägt keine Merkmale aus einer Quelle. */
+  function isOwnPoi(poi) {
+    return Object.keys(PoiTypes.tagsOf(poi)).length === 0;
+  }
+
+  /**
+   * Behält je Rasterfeld (in Bildschirmpixeln) höchstens einen Eintrag.
+   * Felder, in denen schon ein Eintrag aus `occupied` liegt, bleiben frei.
+   */
+  function thinOut(list, cellPx, occupied = []) {
+    const cell = (p) => {
+      const pt = map.latLngToLayerPoint([p.lat, p.lng]);
+      return `${Math.floor(pt.x / cellPx)}:${Math.floor(pt.y / cellPx)}`;
+    };
+    const taken = new Set(occupied.map(cell));
+    return list.filter((p) => {
+      const key = cell(p);
+      if (taken.has(key)) return false;
+      taken.add(key);
+      return true;
+    });
   }
 
   function refreshPois() {
@@ -471,6 +514,7 @@ const MapView = (function () {
         total: allPois.length,
         shown: shown.length,
         zoomedOut: allPois.length > POI_VIEWPORT_LIMIT && map.getZoom() < POI_MIN_ZOOM,
+        thinned: PHONE.matches,
       });
     }
   }
@@ -482,7 +526,7 @@ const MapView = (function () {
       seen.add(poi.id);
       // Importierte Stellen sitzen dort, wo die Quelle sie verortet hat –
       // ein versehentliches Verschieben wäre nur ein stiller Datenverlust.
-      const draggable = Object.keys(PoiTypes.tagsOf(poi)).length === 0;
+      const draggable = isOwnPoi(poi);
       const iconKey = PoiTypes.typeOf(poi).key;
       let marker = poiMarkers.get(poi.id);
 
@@ -774,7 +818,10 @@ const MapView = (function () {
     div.className = 'qr-popup';
 
     const title = document.createElement('strong');
-    title.textContent = place.name;
+    // Importierte Parkplätze heißen oft nur „way/123…“ – das ist kein Name.
+    title.textContent = PointNames.isUsable(place.name)
+      ? place.name
+      : (kind === 'parking' ? 'Parkplatz' : 'Startpunkt');
     div.appendChild(title);
 
     // Schon importierte Einträge tragen die Merkmalsliste noch im Text –
@@ -895,7 +942,8 @@ const MapView = (function () {
       }
       if (!marker.isPopupOpen()) {
         marker.unbindTooltip();
-        marker.bindTooltip(place.name, { direction: 'top', offset: [0, -12] });
+        marker.bindTooltip(PointNames.isUsable(place.name) ? place.name : 'Parkplatz',
+          { direction: 'top', offset: [0, -12] });
         marker.unbindPopup();
         marker.bindPopup(() => qrPopupContent(place, 'parking'), { maxWidth: 260 });
       }

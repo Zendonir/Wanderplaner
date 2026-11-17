@@ -137,6 +137,7 @@
     profilePanel: document.querySelector('.profile-panel'),
     library: document.getElementById('library'),
     libraryToggle: document.getElementById('btn-library'),
+    libraryScrim: document.getElementById('library-scrim'),
     syncBadge: document.getElementById('sync-badge'),
     syncStatus: document.getElementById('sync-status'),
     syncBtn: document.getElementById('btn-sync'),
@@ -795,28 +796,23 @@
 
   /* ---------- Listen in der Seitenleiste ---------- */
 
-  /** Entfernung, bis zu der ein Routenpunkt als „an der Stempelstelle“ gilt. */
-  const POINT_NAME_RADIUS_M = 30;
-
   /**
-   * Name eines Routenpunkts für die Liste. Ein gezielt gesetzter Stempel
-   * oder Parkplatz trägt seinen Namen mit; ein Punkt, der nur zufällig genau
-   * auf einer Stempelstelle oder einem Parkplatz liegt (etwa aus einer
-   * älteren gespeicherten Tour), bekommt deren Namen ebenfalls. Erst wenn
-   * nichts passt, bleiben die Koordinaten.
+   * Name eines Routenpunkts für die Liste – siehe PointNames. Ohne Treffer
+   * in den eigenen Sammlungen wird im Hintergrund eine Ortsangabe erfragt;
+   * bis sie da ist, steht die Koordinate.
    */
   function pointName(p) {
-    if (p.name) return p.name;
-    let best = null;
-    let bestDist = POINT_NAME_RADIUS_M;
-    [...items('stamps'), ...items('parking')].forEach((place) => {
-      const d = Utils.haversine(p, place);
-      if (d <= bestDist) {
-        best = place;
-        bestDist = d;
-      }
-    });
-    return best ? best.name : null;
+    if (PointNames.isUsable(p.name)) return p.name;
+    const local = PointNames.fromCollections(p, [
+      { list: items('stamps'), generic: 'Stempelstelle' },
+      { list: items('parking'), generic: 'Parkplatz' },
+      { list: items('pois'), generic: null },
+    ]);
+    if (local) return local;
+    const remote = PointNames.cached(p);
+    if (remote) return remote;
+    if (remote === undefined) PointNames.request(p, () => renderPointList());
+    return null;
   }
 
   function pointLabel(p) {
@@ -825,9 +821,13 @@
 
   function pointTitle(p) {
     const coords = `${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}`;
-    return pointName(p)
-      ? `${pointName(p)} (${coords}) – auf der Karte zeigen`
-      : 'Auf der Karte zeigen';
+    const name = pointName(p);
+    return name ? `${name} (${coords}) – auf der Karte zeigen` : 'Auf der Karte zeigen';
+  }
+
+  /** Anzeigename eines Parkplatzes – OSM-Kennungen ersetzt durch „Parkplatz“. */
+  function parkingName(place) {
+    return PointNames.isUsable(place.name) ? place.name : 'Parkplatz';
   }
 
   function renderPointList() {
@@ -850,7 +850,7 @@
       li.innerHTML =
         '<span class="drag-handle" title="Zum Sortieren ziehen">≡</span>' +
         `<span class="point-num">${i + 1}</span>` +
-        `<span class="item-label" title="${Utils.escapeHtml(pointTitle(p))}">${Utils.escapeHtml(pointLabel(p))}</span>` +
+        `<span class="item-label${pointName(p) ? '' : ' is-coords'}" title="${Utils.escapeHtml(pointTitle(p))}">${Utils.escapeHtml(pointLabel(p))}</span>` +
         `<button class="item-action point-up" title="Nach oben"${i === 0 ? ' disabled' : ''}>▲</button>` +
         `<button class="item-action point-down" title="Nach unten"${i === state.points.length - 1 ? ' disabled' : ''}>▼</button>` +
         '<button class="item-delete" title="Punkt löschen">✕</button>';
@@ -1251,7 +1251,7 @@
 
         const label = document.createElement('span');
         label.className = 'item-label';
-        label.textContent = place.name;
+        label.textContent = parkingName(place);
         label.title = 'Auf der Karte zeigen und QR-Code öffnen';
         label.addEventListener('click', () => {
           MapView.setView(place.lat, place.lng, 15);
@@ -1281,15 +1281,17 @@
     if (!place) return;
     pushUndo();
     state.points.unshift({
-      id: Utils.uid(), lat: place.lat, lng: place.lng, name: place.name,
+      id: Utils.uid(), lat: place.lat, lng: place.lng,
+      // Eine OSM-Kennung als Name bleibt weg – dann sucht die Liste selbst.
+      ...(PointNames.isUsable(place.name) ? { name: place.name } : {}),
     });
     if (!state.tourName) {
-      el.tourNameInput.value = `Tour ab ${place.name}`;
+      el.tourNameInput.value = `Tour ab ${parkingName(place)}`;
       state.tourName = el.tourNameInput.value;
     }
     renderAll();
     scheduleRecalc();
-    showStatus('info', `„${place.name}“ ist jetzt Startpunkt der Route.`, 5000);
+    showStatus('info', `„${parkingName(place)}“ ist jetzt Startpunkt der Route.`, 5000);
   }
 
   function deleteParking(id) {
@@ -1502,7 +1504,8 @@
       const { head, meta, date } = tourRow();
       const day = Tours.formatSavedAt(tour.savedAt);
       date.textContent = [day ? `Erstellt ${day}` : 'Erstellt',
-        tour.distance ? Utils.formatDistance(tour.distance) : null]
+        // Geschütztes Leerzeichen: „12,3“ und „km“ nie auf zwei Zeilen.
+        tour.distance ? Utils.formatDistance(tour.distance).replace(' ', '\u00a0') : null]
         .filter(Boolean).join(' · ');
 
       const doneBtn = document.createElement('button');
@@ -1887,8 +1890,11 @@
     note.textContent = info.zoomedOut
       ? `${info.total} POIs vorhanden – sie erscheinen, sobald die Karte ` +
         'näher herangezoomt ist.'
-      : `${info.shown} von ${info.total} POIs im Bild – die übrigen liegen ` +
-        'außerhalb des Ausschnitts.';
+      : info.thinned
+        ? `${info.shown} von ${info.total} POIs im Bild – dicht beieinander ` +
+          'liegende sind ausgeblendet, Heranzoomen zeigt mehr.'
+        : `${info.shown} von ${info.total} POIs im Bild – die übrigen liegen ` +
+          'außerhalb des Ausschnitts.';
   }
 
   function movePoi(id, latlng) {
@@ -1960,12 +1966,23 @@
     scheduleRecalc();
   }
 
-  const MODE_HINTS = {
-    menu: 'Doppelklick oder Rechtsklick auf die Karte öffnet das Menü. Ein ' +
-      'einfacher Klick tut nichts – versehentliche Punkte gibt es damit nicht.',
-    route: 'Jeder Klick setzt sofort einen Routenpunkt. Esc führt zurück ins Menü.',
-    poi: 'Jeder Klick setzt sofort einen POI. Esc führt zurück ins Menü.',
-  };
+  // Am Touchgerät gibt es weder Rechtsklick noch Esc – die Hinweise reden
+  // dort von Tippen und lange Drücken.
+  const TOUCH = window.matchMedia('(pointer: coarse)').matches;
+
+  const MODE_HINTS = TOUCH
+    ? {
+      menu: 'Lange drücken oder doppelt tippen auf die Karte öffnet das Menü. ' +
+        'Einfaches Tippen tut nichts – versehentliche Punkte gibt es damit nicht.',
+      route: 'Jedes Tippen setzt sofort einen Routenpunkt. „Menü“ führt zurück.',
+      poi: 'Jedes Tippen setzt sofort einen POI. „Menü“ führt zurück.',
+    }
+    : {
+      menu: 'Doppelklick oder Rechtsklick auf die Karte öffnet das Menü. Ein ' +
+        'einfacher Klick tut nichts – versehentliche Punkte gibt es damit nicht.',
+      route: 'Jeder Klick setzt sofort einen Routenpunkt. Esc führt zurück ins Menü.',
+      poi: 'Jeder Klick setzt sofort einen POI. Esc führt zurück ins Menü.',
+    };
 
   /** Noch nichts gesammelt und nichts geplant – vermutlich der erste Start. */
   function isFreshInstall() {
@@ -2642,7 +2659,7 @@
 
       const where = document.createElement('span');
       where.className = 'cluster-start';
-      where.textContent = cluster.start ? `ab ${cluster.start.name}` : 'ohne Parkplatz';
+      where.textContent = cluster.start ? `ab ${parkingName(cluster.start)}` : 'ohne Parkplatz';
 
       const useBtn = document.createElement('button');
       useBtn.className = 'item-action';
@@ -2679,7 +2696,7 @@
     state.points = points.map((p) => withName({ id: Utils.uid(), lat: p.lat, lng: p.lng }, p));
     state.tourSelection = cluster.stamps.map((s) => s.id);
     if (!el.tourNameInput.value.trim() && cluster.start) {
-      el.tourNameInput.value = `Stempelrunde ab ${cluster.start.name}`;
+      el.tourNameInput.value = `Stempelrunde ab ${parkingName(cluster.start)}`;
       state.tourName = el.tourNameInput.value;
     }
 
@@ -3195,6 +3212,11 @@
   /* ---------- Linke Seitenleiste ---------- */
 
   function setLibraryOpen(open) {
+    // Am Handy entweder Tourenliste oder Planungsblende – beide zugleich
+    // verdecken die Karte vollständig und überlagern sich gegenseitig.
+    if (open && PHONE.matches && el.layout.classList.contains('sheet-open')) {
+      setSheetOpen(false);
+    }
     el.layout.classList.toggle('library-collapsed', !open);
     el.libraryToggle.setAttribute('aria-expanded', String(open));
     localStorage.setItem('wanderplaner.library', open ? 'open' : 'closed');
@@ -3212,6 +3234,9 @@
   const PHONE = window.matchMedia('(max-width: 900px)');
 
   function setSheetOpen(open) {
+    if (open && PHONE.matches && !el.layout.classList.contains('library-collapsed')) {
+      setLibraryOpen(false);
+    }
     el.layout.classList.toggle('sheet-open', open);
     el.sheetHandle.setAttribute('aria-expanded', String(open));
     localStorage.setItem('wanderplaner.sheet', open ? 'open' : 'closed');
@@ -3814,6 +3839,17 @@
     el.sheetHandle.addEventListener('click', () => {
       setSheetOpen(!el.layout.classList.contains('sheet-open'));
     });
+    // Abgedunkelte Karte neben der offenen Tourenliste: Antippen schließt sie,
+    // statt versehentlich etwas auf der Karte auszulösen.
+    el.libraryScrim.addEventListener('click', () => setLibraryOpen(false));
+    // Die Zahlenreihe klebt unter dem Griff. Wie hoch der ist, hängt von der
+    // Schriftgröße des Geräts ab – also messen statt schätzen, sonst scheint
+    // zwischen Griff und Zahlen die Liste durch.
+    if ('ResizeObserver' in window) {
+      new ResizeObserver(() => {
+        el.sidebar.style.setProperty('--sheet-handle-h', `${el.sheetHandle.offsetHeight}px`);
+      }).observe(el.sheetHandle);
+    }
     placeProfile();
     PHONE.addEventListener('change', placeProfile);
     setSheetOpen(localStorage.getItem('wanderplaner.sheet') === 'open');

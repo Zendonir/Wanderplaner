@@ -123,6 +123,102 @@ module.exports = {
         'Die Sammlung schiebt sich über die Karte statt sie zu quetschen',
         `${Math.round(lib.width)} px breit`);
 
+      /* ---- Tourenliste und Blende schließen sich gegenseitig aus ---- */
+      check.ok(await page.locator('#library-scrim').isVisible(),
+        'Neben der Tourenliste wird die Karte abgedunkelt');
+      const layoutHas = (cls) => page.evaluate(
+        (c) => document.getElementById('layout').classList.contains(c), cls);
+      await page.tap('.sheet-handle');
+      await page.waitForTimeout(400);
+      check.ok(await layoutHas('sheet-open') && await layoutHas('library-collapsed'),
+        'Die Blende hochziehen schließt die Tourenliste');
+
+      // Zwischen Griff und Zahlenreihe darf beim Scrollen nichts durchscheinen.
+      await page.evaluate(() => { document.getElementById('sidebar').scrollTop = 300; });
+      await page.waitForTimeout(200);
+      const luecke = await page.evaluate(() => {
+        const griff = document.querySelector('.sheet-handle').getBoundingClientRect();
+        const zahlen = document.querySelector('.stats').getBoundingClientRect();
+        return zahlen.top - griff.bottom;
+      });
+      check.ok(Math.abs(luecke) <= 1,
+        'Die Zahlenreihe schließt beim Scrollen direkt an den Griff an',
+        `${luecke.toFixed(1)} px Abstand`);
+
+      await page.tap('#btn-library');
+      await page.waitForTimeout(400);
+      check.ok(!await layoutHas('sheet-open') && !await layoutHas('library-collapsed'),
+        'Die Tourenliste öffnen klappt die Blende zu');
+      await page.tap('#library-scrim', { position: { x: 360, y: 300 } });
+      await page.waitForTimeout(400);
+      check.ok(await layoutHas('library-collapsed'),
+        'Ein Tipp auf die abgedunkelte Karte schließt die Tourenliste');
+
+      /* ---- Viele POIs: am Handy ausgedünnt ---- */
+      await page.evaluate(() => {
+        const pois = [];
+        for (let i = 0; i < 2000; i++) {
+          pois.push({ id: `dicht-${i}`, name: `Gipfel ${i}`, note: 'natural=peak',
+            lat: 51.70 + (i % 50) * 0.002, lng: 10.55 + Math.floor(i / 50) * 0.002,
+            updatedAt: Date.now() });
+        }
+        localStorage.setItem('wanderplaner.pois', JSON.stringify({ items: pois }));
+      });
+      await page.reload();
+      await page.waitForSelector('#map.leaflet-container');
+      await page.waitForTimeout(800);
+      await page.evaluate(() => MapView.setView(51.74, 10.59, 13));
+      await page.waitForTimeout(800);
+      const marken = await page.evaluate(() => {
+        const pts = [...document.querySelectorAll('.poi-marker')]
+          .map((m) => m.getBoundingClientRect());
+        let eng = 0;
+        for (let i = 0; i < pts.length; i++) {
+          for (let j = i + 1; j < pts.length; j++) {
+            if (Math.abs(pts[i].x - pts[j].x) < 20 && Math.abs(pts[i].y - pts[j].y) < 20) eng++;
+          }
+        }
+        return { anzahl: pts.length, eng };
+      });
+      check.ok(marken.anzahl > 0 && marken.anzahl < 400,
+        'Dichte POIs werden am Handy ausgedünnt', `${marken.anzahl} Marken`);
+      check.equal(marken.eng, 0, 'Keine zwei Marken liegen aufeinander');
+
+      // Ein eben gesetzter POI darf dem Ausdünnen nicht zum Opfer fallen –
+      // sonst öffnet sich sein Popup zum Benennen nicht.
+      // Eine Kartenstelle mit Abstand zu allen sichtbaren Marken – ein
+      // Fingertipp direkt daneben landet sonst auf der Marke. Weil die
+      // Testdaten jedes Rasterfeld füllen, liegt die Stelle trotzdem in einem
+      // Feld, das schon von einem importierten POI belegt ist.
+      const ziel = await page.evaluate(() => {
+        const box = document.getElementById('map').getBoundingClientRect();
+        const rects = [...document.querySelectorAll('.leaflet-marker-icon')]
+          .map((m) => m.getBoundingClientRect());
+        for (let y = box.y + 80; y < box.bottom - 80; y += 4) {
+          for (let x = box.x + 60; x < box.right - 60; x += 4) {
+            const frei = rects.every((r) => x < r.left - 14 || x > r.right + 14
+              || y < r.top - 14 || y > r.bottom + 14);
+            const hit = document.elementFromPoint(x, y);
+            if (frei && hit && hit.closest('#map') && !hit.closest('.leaflet-control')) {
+              return { x, y };
+            }
+          }
+        }
+        return null;
+      });
+      check.ok(ziel, 'Mitten im POI-Gebiet findet sich eine freie Kartenstelle');
+      // Der Moduswechsel liegt in der zugeklappten Blende – direkt auslösen.
+      await page.evaluate(() => document.getElementById('mode-poi').click());
+      await page.waitForTimeout(200);
+      await page.touchscreen.tap(ziel.x, ziel.y);
+      await page.waitForTimeout(700);
+      // Das Formular mit Namensfeld gehört zum neuen POI; importierte zeigen
+      // eine reine Ansicht (.poi-view) ohne Eingabefeld.
+      check.ok(await page.locator('.leaflet-popup .poi-popup:not(.poi-view) input').isVisible(),
+        'Ein neuer POI neben einem vorhandenen öffnet sein Popup zum Benennen');
+      await page.evaluate(() => document.getElementById('mode-menu').click());
+      await page.waitForTimeout(200);
+
       /* ---- Einstellungsdialog passt auf den Bildschirm ---- */
       // Der YAML-Block in der Update-Anleitung hatte den Dialog über den
       // rechten Rand hinausgeschoben; Text war dann abgeschnitten.

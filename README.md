@@ -176,6 +176,11 @@ denselben Datenstand sehen.
   bleibt im Homescreen-Betrieb Platz für Statusleiste und Home-Indikator
   (`viewport-fit=cover` plus `safe-area-inset`), und alle Eingabefelder sind
   mindestens 16 px groß – darunter zoomt iOS beim Antippen ungefragt hinein.
+  Tourenliste und Planungsblende schließen sich gegenseitig aus; neben der
+  offenen Tourenliste ist die Karte abgedunkelt, ein Tipp darauf schließt
+  sie. Dicht beieinander liegende POIs werden am Handy ausgedünnt (je
+  Fingerbreite eine Marke, Heranzoomen zeigt mehr), und die Hinweise
+  sprechen von Tippen und lange Drücken statt von Rechtsklick und Esc.
 - **Geräteübergreifender Abgleich** – die Sammlung liegt im Container und ist
   auf Laptop, Handy und Tablet gleich. Zusätzlich lässt sich alles als Datei
   sichern und wieder einlesen (siehe unten).

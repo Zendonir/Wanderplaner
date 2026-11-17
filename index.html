@@ -32,6 +32,7 @@
   <main class="layout" id="layout">
     <!-- Linke Seitenleiste: die Sammlung. Was man nur selten braucht –
          Import, Abgleich, Routing-Einstellungen – liegt im Einstellungsdialog. -->
+    <div class="library-scrim" id="library-scrim" aria-hidden="true"></div>
     <aside class="library" id="library">
       <section class="list-section" id="section-tours">
         <h2>Geplante Touren</h2>
@@ -169,9 +170,11 @@
 
       <section class="list-section">
         <h2>Routenpunkte</h2>
-        <p class="hint">Marker ziehen verschiebt · Marker anklicken öffnet sein Menü ·
+        <p class="hint hint-mouse">Marker ziehen verschiebt · Marker anklicken öffnet sein Menü ·
           Liste per Drag&nbsp;&amp;&nbsp;Drop oder mit ▲▼ sortieren · die Route selbst
           lässt sich anfassen und ziehen</p>
+        <p class="hint hint-touch">Marker ziehen verschiebt · antippen öffnet sein Menü ·
+          mit ▲▼ sortieren · die Route selbst lässt sich anfassen und ziehen</p>
         <ul id="point-list" class="point-list"></ul>
       </section>
 
@@ -591,6 +594,7 @@
   <script src="js/poitypes.js"></script>
   <script src="js/tracks.js"></script>
   <script src="js/tours.js"></script>
+  <script src="js/pointnames.js"></script>
   <script src="js/mapview.js"></script>
   <script src="js/app.js"></script>
 </body>

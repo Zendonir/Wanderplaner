@@ -104,6 +104,12 @@ denselben Datenstand sehen.
   Tour ist einzeln ein- und ausblendbar. Mit ➜ wird eine abgeschlossene Spur
   zur neuen Planung: Sie wird auf höchstens 25 charakteristische Stützpunkte
   eingedampft und neu berechnet.
+- **Namensvorschlag aus den Stempeln** – sobald die Route steht, schlägt
+  die App einen Namen aus den Stempelstellen an der Route vor, etwa
+  „HWN 10 12 110 (Braunlage)“: die HWN-Nummern aufsteigend, dahinter die
+  nächstgelegene Stadt am Startpunkt (über OpenStreetMap, ohne Netz entfällt
+  die Klammer). Ein selbst getippter oder geladener Name wird nie
+  überschrieben.
 - **Touren benennen und speichern** – die aktuelle Planung lässt sich unter
   einem Namen sichern (inklusive POIs, Routing-Einstellungen und dem
   berechneten Verlauf) und später wieder laden.

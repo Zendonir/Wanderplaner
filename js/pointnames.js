@@ -40,8 +40,9 @@ const PointNames = {
   },
 
   /** Schlüssel für den Zwischenspeicher: auf etwa 10 m gerundet. */
-  key(p) {
-    return `${p.lat.toFixed(4)},${p.lng.toFixed(4)}`;
+  key(p, kind = 'spot') {
+    const base = `${p.lat.toFixed(4)},${p.lng.toFixed(4)}`;
+    return kind === 'spot' ? base : `${kind}:${base}`;
   },
 
   _load() {
@@ -66,8 +67,35 @@ const PointNames = {
   },
 
   /** Bereits bekannte Ortsangabe (oder undefined, wenn noch nie gefragt). */
-  cached(p) {
-    return this._load()[this.key(p)];
+  cached(p, kind = 'spot') {
+    return this._load()[this.key(p, kind)];
+  },
+
+  /** Nächstgelegene Stadt bzw. Ort aus einer Nominatim-Antwort auf Ortsebene. */
+  describeTown(result) {
+    if (!result || typeof result !== 'object' || result.error) return '';
+    const a = result.address || {};
+    return a.town || a.city || a.village || a.municipality || a.hamlet || '';
+  },
+
+  /**
+   * Zahlen der HWN-Stempel („HWN043 Hohe Tür“ → 43), aufsteigend und ohne
+   * Doppelte. Stellen ohne erkennbare Nummer werden übergangen.
+   */
+  stampNumbers(stamps) {
+    const numbers = new Set();
+    stamps.forEach((s) => {
+      const match = String(s.name || '').match(/HWN\s*0*(\d+)/i);
+      if (match) numbers.add(Number(match[1]));
+    });
+    return [...numbers].sort((a, b) => a - b);
+  },
+
+  /** Tourname aus Stempelnummern und Ort: „HWN 10 12 110 (Braunlage)“. */
+  tourName(numbers, town) {
+    if (!numbers || numbers.length === 0) return '';
+    const base = `HWN ${numbers.join(' ')}`;
+    return town ? `${base} (${town})` : base;
   },
 
   /**
@@ -131,11 +159,11 @@ const PointNames = {
    * Fragt die Ortsangabe im Hintergrund nach. `onName` wird aufgerufen,
    * sobald für eine Stelle etwas gefunden ist.
    */
-  request(p, onName) {
-    const key = this.key(p);
-    if (this.cached(p) !== undefined || this._pending.has(key)) return;
+  request(p, onName, kind = 'spot') {
+    const key = this.key(p, kind);
+    if (this.cached(p, kind) !== undefined || this._pending.has(key)) return;
     this._pending.add(key);
-    this._queue.push({ lat: p.lat, lng: p.lng, key, onName });
+    this._queue.push({ lat: p.lat, lng: p.lng, key, kind, onName });
     this._pump();
   },
 
@@ -145,11 +173,15 @@ const PointNames = {
     while (this._queue.length > 0) {
       const job = this._queue.shift();
       try {
-        const url = `${this.REVERSE_URL}?format=jsonv2&addressdetails=1&zoom=17` +
+        // Ortsebene (zoom 10) für die Stadt, Straßenebene für einen Punkt.
+        const town = job.kind === 'town';
+        const url = `${this.REVERSE_URL}?format=jsonv2&addressdetails=1` +
+          `&zoom=${town ? 10 : 17}` +
           `&accept-language=de&lat=${job.lat.toFixed(5)}&lon=${job.lng.toFixed(5)}`;
         const response = await Utils.fetchWithTimeout(url, {}, 10000);
         if (response.ok) {
-          const name = this.describe(await response.json());
+          const data = await response.json();
+          const name = town ? this.describeTown(data) : this.describe(data);
           this._load()[job.key] = name;
           this._save();
           if (name) job.onName(name);

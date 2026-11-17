@@ -3522,6 +3522,15 @@
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       info = await response.json();
     } catch (err) {
+      // Zu langsam ist nicht „nicht vorhanden“: Ein bereits erkannter
+      // Container bleibt eingestellt, sonst schaltete eine träge Antwort
+      // das Offline-Routing bis zum nächsten Neuladen ab.
+      if (err.name === 'AbortError' && Routing.isLocal()) {
+        el.offlineStatus.className = 'about-note update';
+        el.offlineStatus.textContent =
+          'Der Server antwortet gerade langsam – Offline-Routing bleibt eingeschaltet.';
+        return;
+      }
       // Ohne Wanderplaner-Server (Datei direkt geöffnet) gibt es keinen
       // Container – das ist kein Fehler.
       Routing.setLocal(null);

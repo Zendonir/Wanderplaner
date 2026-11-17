@@ -96,15 +96,34 @@ function probe(tile) {
   });
 }
 
+// Ergebnis der letzten Probestrecke. Die Probe kann dauern – ein BRouter,
+// der gerade startet, lädt erst die Kacheln. Darauf darf die Statusabfrage
+// nicht warten, sonst bricht der Browser sie ab und hält den Container für
+// nicht vorhanden. Also im Hintergrund prüfen und das Ergebnis merken.
+const PROBE_MAX_AGE_MS = Number(process.env.BROUTER_PROBE_MAX_AGE_MS ?? 60 * 1000);
+const lastProbe = { tile: null, problem: null, at: 0, running: false };
+
+function refreshProbe(tile) {
+  if (lastProbe.running) return;
+  if (lastProbe.tile === tile && Date.now() - lastProbe.at < PROBE_MAX_AGE_MS) return;
+  lastProbe.running = true;
+  probe(tile).then((problem) => {
+    Object.assign(lastProbe, { tile, problem, at: Date.now(), running: false });
+  });
+}
+
 async function status() {
   const tiles = await listTiles();
   const reachable = await ping();
+  if (reachable && tiles.length > 0) refreshProbe(tiles[0].tile);
   return {
     configured: configured(),
     reachable,
     manageable: Boolean(SEGMENTS_DIR),
     tiles,
-    problem: reachable && tiles.length > 0 ? await probe(tiles[0].tile) : null,
+    // Zuletzt bekanntes Ergebnis – beim allerersten Aufruf noch keins.
+    problem: reachable && tiles.length > 0 && lastProbe.tile === tiles[0].tile
+      ? lastProbe.problem : null,
     downloads: [...downloads.entries()].map(([tile, d]) => ({ tile, ...d })),
   };
 }

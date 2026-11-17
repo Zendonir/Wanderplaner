@@ -644,18 +644,27 @@
 
     const samples = state.samples;
     const scale = context.chart.scales.x;
-    const gradient = context.chart.ctx.createLinearGradient(area.left, 0, area.right, 0);
     const span = area.right - area.left;
+    // Am Handy steckt das Profil in der zugeklappten Blende und hat dann
+    // keine Breite. Ein Verlauf über 0 px ergäbe 0/0 – Safari bricht dann
+    // mit „The provided value is non-finite“ ab, mitten in der Berechnung.
+    if (!(span > 0) || !scale) return RouteStyle.fade(PROFILE_GREEN, 0.18);
+    const gradient = context.chart.ctx.createLinearGradient(area.left, 0, area.right, 0);
 
     // Über die x-Achse rechnen statt über den reinen Streckenanteil: nur so
     // liegt der Farbwechsel der Fläche genau unter dem der Linie.
-    const at = (dist) => Math.min(1, Math.max(0,
-      (scale.getPixelForValue(dist / 1000) - area.left) / span));
+    const at = (dist) => {
+      const pos = (scale.getPixelForValue(dist / 1000) - area.left) / span;
+      return Number.isFinite(pos) ? Math.min(1, Math.max(0, pos)) : null;
+    };
 
     for (let i = 1; i < samples.length; i++) {
+      const from = at(samples[i - 1].dist);
+      const to = at(samples[i].dist);
+      if (from === null || to === null || !profileColors[i]) continue;
       const color = RouteStyle.fade(profileColors[i], 0.35);
-      gradient.addColorStop(at(samples[i - 1].dist), color);
-      gradient.addColorStop(at(samples[i].dist), color);
+      gradient.addColorStop(from, color);
+      gradient.addColorStop(to, color);
     }
     return gradient;
   }
@@ -741,7 +750,13 @@
         state.routeStyle, state.samples, state.geometry, state.segments
       )
       : null;
-    chart.update('none');
+    // Das Diagramm ist Beiwerk: Scheitert das Zeichnen, darf das nie die
+    // Routenberechnung mitreißen (Anstieg, Abstieg und Gehzeit fehlten sonst).
+    try {
+      chart.update('none');
+    } catch (err) {
+      console.warn('Höhenprofil konnte nicht gezeichnet werden:', err);
+    }
     el.chartEmpty.classList.toggle('hidden', Boolean(hasData));
     // Am Handy nimmt ein leeres Diagramm nur Platz weg; dort verschwindet
     // es, bis eine Route berechnet ist.

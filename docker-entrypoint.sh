@@ -22,6 +22,12 @@ if [ "$(id -u)" = "0" ]; then
   mkdir -p "$DATA_DIR"
   chown -R node:node "$DATA_DIR" || true
 
+  # Kartendaten für das Offline-Routing (gemeinsames Volume mit BRouter).
+  if [ -n "$BROUTER_SEGMENTS_DIR" ]; then
+    mkdir -p "$BROUTER_SEGMENTS_DIR"
+    chown node:node "$BROUTER_SEGMENTS_DIR" || true
+  fi
+
   if [ -S "$DOCKER_SOCKET" ]; then
     SOCKET_GID="$(stat -c %g "$DOCKER_SOCKET" 2>/dev/null || echo '')"
     if [ -n "$SOCKET_GID" ]; then

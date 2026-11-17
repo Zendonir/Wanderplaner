@@ -12,6 +12,7 @@ const fs = require('fs');
 const fsp = require('fs/promises');
 const path = require('path');
 const Update = require('./update');
+const BRouter = require('./brouter');
 
 const PORT = Number(process.env.PORT) || 8080;
 const PUBLIC_DIR = process.env.PUBLIC_DIR || path.join(__dirname, '..', 'public');
@@ -195,7 +196,34 @@ async function handleApi(req, res, url) {
       status: storage.writable ? 'ok' : 'readonly',
       version: APP_VERSION,
       storage,
+      brouter: BRouter.configured(),
     });
+  }
+
+  // Offline-Routing: Zustand des BRouter-Containers und seiner Kacheln.
+  if (url.pathname === '/api/brouter') {
+    if (req.method === 'GET') return sendJson(res, 200, await BRouter.status());
+    res.writeHead(405, { Allow: 'GET' });
+    return res.end();
+  }
+
+  const tileMatch = url.pathname.match(/^\/api\/brouter\/tiles\/([^/]+)$/);
+  if (tileMatch) {
+    const tile = decodeURIComponent(tileMatch[1]);
+    try {
+      if (req.method === 'POST') {
+        await BRouter.startDownload(tile);
+        return sendJson(res, 202, await BRouter.status());
+      }
+      if (req.method === 'DELETE') {
+        await BRouter.deleteTile(tile);
+        return sendJson(res, 200, await BRouter.status());
+      }
+    } catch (err) {
+      return sendJson(res, err.status || 500, { error: err.message });
+    }
+    res.writeHead(405, { Allow: 'POST, DELETE' });
+    return res.end();
   }
 
   if (url.pathname === '/api/version') {
@@ -338,6 +366,12 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Routing über den eigenen BRouter-Container (Offline-Routing).
+  if (url.pathname === '/brouter' || url.pathname.startsWith('/brouter/')) {
+    BRouter.proxy(req, res, url);
+    return;
+  }
+
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     res.writeHead(405, { Allow: 'GET, HEAD' });
     return res.end();
@@ -355,4 +389,5 @@ server.listen(PORT, () => {
   console.log(`Wanderplaner ${APP_VERSION} läuft auf Port ${PORT}`);
   console.log(`  Dateien: ${PUBLIC_DIR}`);
   console.log(`  Daten:   ${DATA_FILE}`);
+  if (BRouter.configured()) console.log(`  BRouter: ${process.env.BROUTER_URL}`);
 });

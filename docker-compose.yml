@@ -7,16 +7,26 @@ services:
     container_name: wanderplaner
     ports:
       - "${WANDERPLANER_PORT:-8080}:8080"
+    environment:
+      # Offline-Routing: Der Wanderplaner reicht /brouter an diesen Dienst
+      # durch. Ohne die Zeile (oder ohne den brouter-Dienst unten) rechnet
+      # die App wie bisher bei brouter.de.
+      BROUTER_URL: http://brouter:17777
+      # Hier legt "Einstellungen → Routing → Daten laden" die Kartendaten ab.
+      BROUTER_SEGMENTS_DIR: /segments
+    #   ALLOW_SELF_UPDATE: "1"
+    #   CONTAINER_NAME: wanderplaner
     volumes:
       # Stempelstellen, Parkplätze und Touren – geräteübergreifend.
       - wanderplaner-data:/data
+      # Kartendaten (.rd5) für das Offline-Routing, geteilt mit BRouter.
+      - brouter-segments:/segments
       # Nur für "Jetzt aktualisieren" in der Oberfläche nötig – bewusst
       # auskommentiert. Wer den Socket freigibt, gibt der App faktisch
       # Rootrechte auf dem Host. Siehe README, Abschnitt "Aktualisieren".
       # - /var/run/docker.sock:/var/run/docker.sock
-    # environment:
-    #   ALLOW_SELF_UPDATE: "1"
-    #   CONTAINER_NAME: wanderplaner
+    depends_on:
+      - brouter
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/api/health"]
@@ -25,5 +35,21 @@ services:
       start_period: 5s
       retries: 3
 
+  # Eigener BRouter für das Offline-Routing – dieselbe Rechenmaschine wie
+  # brouter.de, nur im eigenen Netz. Er ist nur für den Wanderplaner
+  # erreichbar (kein Port nach außen nötig).
+  brouter:
+    image: ghcr.io/abrensch/brouter:latest
+    container_name: wanderplaner-brouter
+    environment:
+      MAXTHREADS: "4"
+      # Hochgeladene Profile und mehrere Kacheln brauchen etwas mehr Speicher
+      # als die 128 MB der Voreinstellung.
+      JAVA_OPTS: "-Xmx768M -Xms256M -Xmn32M -DmaxRunningTime=300 -DuseRFCMimeType=false"
+    volumes:
+      - brouter-segments:/segments4
+    restart: unless-stopped
+
 volumes:
   wanderplaner-data:
+  brouter-segments:

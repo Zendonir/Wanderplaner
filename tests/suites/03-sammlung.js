@@ -344,17 +344,20 @@ module.exports = {
       await page.locator('#stamp-list li .item-label').first().click();
       await page.waitForSelector('.stamp-popup', { timeout: 5000 });
       const popupButtons = await page.locator('.stamp-popup button').allTextContents();
-      check.equal(popupButtons.length, 2,
-        'Das Stempel-Popup zeigt genau zwei Knöpfe', popupButtons.join(' | '));
+      check.equal(popupButtons.length, 3,
+        'Das Stempel-Popup zeigt genau drei Knöpfe', popupButtons.join(' | '));
+      check.ok(popupButtons.some((b) => b.includes('Zur Route')),
+        'Einer davon hängt die Stelle an die Route');
       check.ok(!popupButtons.join(' ').includes('Löschen'),
         'Löschen wird dort nicht angeboten');
 
       const gestapelt = await page.evaluate(() => {
         const rects = [...document.querySelectorAll('.stamp-popup .poi-popup-buttons button')]
           .map((b) => b.getBoundingClientRect());
-        return rects.length === 2 && rects[1].top >= rects[0].bottom - 1;
+        return rects.length === 3
+          && rects.every((r, i) => i === 0 || r.top >= rects[i - 1].bottom - 1);
       });
-      check.ok(gestapelt, 'Die beiden Knöpfe stehen untereinander');
+      check.ok(gestapelt, 'Die Knöpfe stehen untereinander');
 
       // In der Liste bleibt das Löschen erreichbar.
       check.equal(await page.locator('#stamp-list li .item-delete').count(), 3,

@@ -26,18 +26,31 @@ const Routing = {
   // ist. Leer heißt: der öffentliche Dienst.
   _base: null,
 
+  // Offline-Routing: Läuft neben dem Wanderplaner ein BRouter-Container,
+  // reicht der Wanderplaner-Server ihn unter `brouter` durch. Diese Adresse
+  // wird beim Start gesetzt, wenn der Server das meldet. Eine von Hand
+  // eingetragene Adresse hat Vorrang.
+  _local: null,
+
   /** Adresse des BRouter-Dienstes, ohne abschließenden Schrägstrich. */
   base() {
-    return (this._base || this.PUBLIC_BROUTER).replace(/\/+$/, '');
+    return (this._base || this._local || this.PUBLIC_BROUTER).replace(/\/+$/, '');
   },
 
   /** Setzt die Adresse; leer stellt auf den öffentlichen Dienst zurück. */
   setBase(url) {
     const trimmed = String(url || '').trim();
     this._base = trimmed || null;
-    // Die Profil-ID gilt nur auf dem Server, der sie vergeben hat.
-    this._profileCache = { text: null, id: null };
-    this._uploadUnsupported = false;
+  },
+
+  /** Meldet den BRouter-Container des eigenen Servers an (oder ab). */
+  setLocal(url) {
+    this._local = url ? String(url).replace(/\/+$/, '') : null;
+  },
+
+  /** Rechnet die Planung über den Container des eigenen Servers? */
+  isLocal() {
+    return !this._base && Boolean(this._local);
   },
 
   /** Läuft die Planung über einen eigenen Dienst? */
@@ -45,29 +58,35 @@ const Routing = {
     return this.base() !== this.PUBLIC_BROUTER;
   },
 
-  profileUrl() {
-    return `${this.base()}/profile`;
+  profileUrl(base = this.base()) {
+    return `${base}/profile`;
   },
 
-  /** Zuletzt hochgeladenes Profil, damit nicht bei jeder Änderung neu geladen wird. */
-  _profileCache: { text: null, id: null },
-
-  // Manche eigenen Aufsetzungen nehmen keine Profile entgegen. Dann wird
-  // einmal darauf hingewiesen und fortan das mitgelieferte Wanderprofil
-  // benutzt, statt es bei jeder Berechnung erneut zu versuchen.
-  _uploadUnsupported: false,
+  // Je Dienst: zuletzt hochgeladenes Profil (die Profil-ID gilt nur auf dem
+  // Server, der sie vergeben hat) und ob er überhaupt Profile annimmt.
+  // Manche eigenen Aufsetzungen tun das nicht – dann wird fortan das
+  // mitgelieferte Wanderprofil benutzt, statt es jedes Mal neu zu versuchen.
+  _servers: new Map(),
   FALLBACK_PROFILE: 'hiking-beta',
+
+  _server(base) {
+    if (!this._servers.has(base)) {
+      this._servers.set(base, { text: null, id: null, uploadUnsupported: false });
+    }
+    return this._servers.get(base);
+  },
 
   /**
    * Lädt den Profiltext zu BRouter hoch und liefert die Profil-ID.
    * Ergebnis wird gecacht, solange sich der Text nicht ändert.
    */
-  async _uploadProfile(profileText) {
-    if (this._profileCache.text === profileText && this._profileCache.id) {
-      return this._profileCache.id;
+  async _uploadProfile(profileText, base = this.base()) {
+    const cache = this._server(base);
+    if (cache.text === profileText && cache.id) {
+      return cache.id;
     }
     const response = await Utils.fetchWithTimeout(
-      this.profileUrl(),
+      this.profileUrl(base),
       {
         method: 'POST',
         // text/plain vermeidet einen CORS-Preflight.
@@ -81,7 +100,8 @@ const Routing = {
     if (data.error) throw new Error(`BRouter lehnt das Profil ab: ${data.error}`);
     if (!data.profileid) throw new Error('BRouter hat keine Profil-ID zurückgegeben.');
 
-    this._profileCache = { text: profileText, id: data.profileid };
+    cache.text = profileText;
+    cache.id = data.profileid;
     return data.profileid;
   },
 
@@ -93,15 +113,47 @@ const Routing = {
    * ausgewichen. Das ist deutlich besser als gar keine Route; dass die
    * eigenen Gewichtungen dann nicht wirken, meldet die App.
    */
-  async _profileFor(profileText) {
-    if (this._uploadUnsupported) return this.FALLBACK_PROFILE;
+  async _profileFor(profileText, base = this.base()) {
+    const cache = this._server(base);
+    if (cache.uploadUnsupported) return this.FALLBACK_PROFILE;
     try {
-      return await this._uploadProfile(profileText);
+      return await this._uploadProfile(profileText, base);
     } catch (err) {
-      if (!this.isCustom()) throw err;
+      if (base === this.PUBLIC_BROUTER) throw err;
+      // Nicht erreichbar ist etwas anderes als „nimmt keine Profile an“ –
+      // dann soll die Berechnung scheitern und ausweichen dürfen.
+      if (/nicht erreichbar|Failed to fetch|NetworkError|abort|HTTP 5\d\d/i.test(err.message)) throw err;
       console.warn('Eigener BRouter nimmt keine Profile an:', err);
-      this._uploadUnsupported = true;
+      cache.uploadUnsupported = true;
       return this.FALLBACK_PROFILE;
+    }
+  },
+
+  /**
+   * Führt eine BRouter-Berechnung aus – zuerst beim eingestellten Dienst.
+   * Scheitert ein eigener Dienst (aus, oder für dieses Gebiet fehlen ihm die
+   * Kartendaten), wird es beim öffentlichen BRouter versucht, bevor die App
+   * auf das straßenlastige OSRM zurückfällt.
+   */
+  async _withFallback(run) {
+    const primary = this.base();
+    try {
+      return await run(primary);
+    } catch (err) {
+      if (primary === this.PUBLIC_BROUTER) throw err;
+      console.warn('Eigener BRouter fehlgeschlagen, versuche brouter.de:', err);
+      const result = await run(this.PUBLIC_BROUTER);
+      const missingData = /datafile|rd5|not found|segment/i.test(err.message);
+      result.warning = [
+        missingData
+          ? 'Für dieses Gebiet liegen dem Offline-Routing keine Kartendaten vor – ' +
+            'die Route kommt vom öffentlichen BRouter. Unter Einstellungen → Routing ' +
+            'lassen sich die Daten für den Kartenausschnitt laden.'
+          : `Der eigene BRouter antwortet nicht (${err.message}) – die Route kommt ` +
+            'vom öffentlichen BRouter.',
+        result.warning,
+      ].filter(Boolean).join(' ');
+      return result;
     }
   },
 
@@ -158,9 +210,10 @@ const Routing = {
   async fetchRoute(points, settings) {
     try {
       if (settings && settings.roundTrip && points.length >= 2) {
-        return await this._roundTrip(points, settings);
+        return await this._withFallback((base) => this._roundTrip(points, settings, base));
       }
-      return await this._viaBRouter(points, settings);
+      return await this._withFallback(
+        (base) => this._viaBRouter(points, settings, null, 0, base));
     } catch (brouterError) {
       console.warn('BRouter fehlgeschlagen, weiche auf OSRM aus:', brouterError);
       try {
@@ -185,8 +238,8 @@ const Routing = {
    * Findet sich keiner, wird der Rückweg ohne Sperren berechnet – lieber ein
    * Rundkurs auf gleichem Weg als gar keine Route.
    */
-  async _roundTrip(points, settings) {
-    const outbound = await this._viaBRouter(points, settings);
+  async _roundTrip(points, settings, base = this.base()) {
+    const outbound = await this._viaBRouter(points, settings, null, 0, base);
 
     const back = [points[points.length - 1], points[0]];
     const nogos = this._nogosAlong(outbound.coordinates);
@@ -194,10 +247,10 @@ const Routing = {
     let inbound;
     let sameWayBack = false;
     try {
-      inbound = await this._viaBRouter(back, settings, nogos);
+      inbound = await this._viaBRouter(back, settings, nogos, 0, base);
     } catch (err) {
       console.warn('Kein Parallelweg gefunden, Rückweg ohne Sperren:', err);
-      inbound = await this._viaBRouter(back, settings);
+      inbound = await this._viaBRouter(back, settings, null, 0, base);
       sameWayBack = true;
     }
 
@@ -282,11 +335,19 @@ const Routing = {
    * @returns {Promise<Array>} Routen, beginnend mit der Hauptroute
    */
   async fetchAlternatives(points, settings, count = 3) {
-    const results = await Promise.allSettled(
+    let results = await Promise.allSettled(
       Array.from({ length: count }, (_, i) =>
         this._viaBRouter(points, settings, null, i)
       )
     );
+    // Hat der eigene Dienst gar nichts geliefert, beim öffentlichen fragen.
+    if (this.isCustom() && results.every((r) => r.status !== 'fulfilled')) {
+      results = await Promise.allSettled(
+        Array.from({ length: count }, (_, i) =>
+          this._viaBRouter(points, settings, null, i, this.PUBLIC_BROUTER)
+        )
+      );
+    }
 
     const routes = [];
     results.forEach((r, i) => {
@@ -302,15 +363,15 @@ const Routing = {
     return routes;
   },
 
-  async _viaBRouter(points, settings, nogos = null, alternativeIdx = 0) {
+  async _viaBRouter(points, settings, nogos = null, alternativeIdx = 0, base = this.base()) {
     const profileText = Profiles.build(settings);
-    const profileId = await this._profileFor(profileText);
+    const profileId = await this._profileFor(profileText, base);
 
     const lonlats = points
       .map((p) => `${p.lng.toFixed(6)},${p.lat.toFixed(6)}`)
       .join('|');
     let url =
-      `${this.base()}?lonlats=${lonlats}` +
+      `${base}?lonlats=${lonlats}` +
       `&profile=${encodeURIComponent(profileId)}` +
       `&alternativeidx=${alternativeIdx}&format=geojson`;
 
@@ -330,7 +391,11 @@ const Routing = {
       throw new Error('BRouter nicht erreichbar.');
     }
     if (!response.ok) {
-      throw new Error(`BRouter antwortet mit HTTP ${response.status}.`);
+      // BRouter begründet Fehler im Klartext (etwa „datafile E10_N50.rd5
+      // not found“) – die Begründung entscheidet über den Hinweis.
+      const reason = (await response.text().catch(() => '')).trim().slice(0, 200);
+      throw new Error(`BRouter antwortet mit HTTP ${response.status}` +
+        (reason && !/^</.test(reason) ? `: ${reason}` : '.'));
     }
 
     const text = await response.text();
@@ -363,6 +428,7 @@ const Routing = {
       // sie als Tabelle mit Kopfzeile mit.
       segments: this._parseMessages(props.messages),
       engine: 'brouter',
+      offline: base !== this.PUBLIC_BROUTER,
     };
   },
 

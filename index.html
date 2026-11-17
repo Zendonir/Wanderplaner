@@ -120,6 +120,10 @@
             <option value="surface">Nach Wegbedingungen</option>
           </select>
         </label>
+        <label class="checkbox route-see-through" title="Zeichnet die geplante Route durchsichtig, damit die Wanderkarte darunter lesbar bleibt.">
+          <input type="checkbox" id="opt-route-transparent">
+          <span>Route durchsichtig</span>
+        </label>
         <!-- Steht hier und nicht nur in den Einstellungen: Welcher Router
              die Route berechnet hat, entscheidet darüber, ob es überhaupt
              Wegedaten zum Einfärben gibt. -->
@@ -436,12 +440,32 @@
         <div class="engine-note" id="engine-note"></div>
         </section>
 
+        <section class="settings-block" id="offline-routing">
+          <h3>Offline-Routing</h3>
+          <p class="hint">Läuft neben dem Wanderplaner ein eigener
+            BRouter-Container (siehe README), rechnet die Planung dort – mit
+            denselben Gewichtungen, aber ohne den öffentlichen Dienst und ohne
+            Internet. Er braucht dafür die Kartendaten der Region: je eine
+            Datei pro 5°×5°-Kachel. Fehlen sie für ein Gebiet, springt
+            brouter.de ein.</p>
+          <p class="about-note" id="offline-status">Wird geprüft …</p>
+          <ul class="offline-tiles" id="offline-tiles"></ul>
+          <div class="cleanup-row">
+            <button id="btn-offline-load" hidden
+                    title="Lädt die Kartendaten für den aktuell sichtbaren Kartenausschnitt in den BRouter-Container">
+              ⬇ Daten für den Kartenausschnitt laden
+            </button>
+            <button id="btn-offline-refresh">⟳ Aktualisieren</button>
+          </div>
+        </section>
+
         <section class="settings-block">
           <h3>Routing-Dienst</h3>
-          <p class="hint">Die Routen werden vom Browser direkt bei BRouter
-            geholt. Wer BRouter selbst betreibt – etwa als Container auf
-            demselben Server –, trägt hier dessen Adresse ein und ist damit
-            unabhängig vom öffentlichen Dienst.</p>
+          <p class="hint">Nur nötig, wenn ein BRouter unter einer
+            <em>anderen</em> Adresse laufen soll. Der BRouter-Container aus der
+            mitgelieferten docker-compose.yml wird automatisch genutzt (siehe
+            „Offline-Routing“ oben) – dafür hier nichts eintragen. Leer
+            bedeutet: Container, falls vorhanden, sonst brouter.de.</p>
 
           <label class="field">
             <span>Adresse</span>

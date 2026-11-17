@@ -455,12 +455,37 @@ const MapView = (function () {
    * einzelne Punkte überhaupt unterscheidbar sind.
    */
   function visiblePois() {
-    if (allPois.length <= POI_VIEWPORT_LIMIT) return allPois;
-    if (map.getZoom() < POI_MIN_ZOOM) return [];
-    // Etwas über den Rand hinaus, damit beim Schwenken nichts nachploppt.
-    const bounds = map.getBounds().pad(0.25);
-    const inside = allPois.filter((p) => bounds.contains([p.lat, p.lng]));
-    return inside.length > POI_MAX_VISIBLE ? inside.slice(0, POI_MAX_VISIBLE) : inside;
+    let shown;
+    if (allPois.length <= POI_VIEWPORT_LIMIT) {
+      shown = allPois;
+    } else if (map.getZoom() < POI_MIN_ZOOM) {
+      return [];
+    } else {
+      // Etwas über den Rand hinaus, damit beim Schwenken nichts nachploppt.
+      const bounds = map.getBounds().pad(0.25);
+      shown = allPois.filter((p) => bounds.contains([p.lat, p.lng]));
+    }
+    if (PHONE.matches) shown = thinOut(shown, POI_CELL_PX_PHONE);
+    return shown.length > POI_MAX_VISIBLE ? shown.slice(0, POI_MAX_VISIBLE) : shown;
+  }
+
+  // Am Handy liegen die Marken sonst dicht an dicht übereinander: Die Karte
+  // ist schmal, die Finger sind breit. Je Rasterfeld dieser Größe bleibt
+  // eine Marke; beim Heranzoomen werden die Felder kleiner im Gelände und
+  // die übrigen tauchen auf.
+  const PHONE = window.matchMedia('(max-width: 900px)');
+  const POI_CELL_PX_PHONE = 60;
+
+  /** Behält je Rasterfeld (in Bildschirmpixeln) höchstens einen Eintrag. */
+  function thinOut(list, cellPx) {
+    const taken = new Set();
+    return list.filter((p) => {
+      const pt = map.latLngToLayerPoint([p.lat, p.lng]);
+      const key = `${Math.floor(pt.x / cellPx)}:${Math.floor(pt.y / cellPx)}`;
+      if (taken.has(key)) return false;
+      taken.add(key);
+      return true;
+    });
   }
 
   function refreshPois() {
@@ -471,6 +496,7 @@ const MapView = (function () {
         total: allPois.length,
         shown: shown.length,
         zoomedOut: allPois.length > POI_VIEWPORT_LIMIT && map.getZoom() < POI_MIN_ZOOM,
+        thinned: PHONE.matches,
       });
     }
   }

@@ -137,6 +137,7 @@
     profilePanel: document.querySelector('.profile-panel'),
     library: document.getElementById('library'),
     libraryToggle: document.getElementById('btn-library'),
+    libraryScrim: document.getElementById('library-scrim'),
     syncBadge: document.getElementById('sync-badge'),
     syncStatus: document.getElementById('sync-status'),
     syncBtn: document.getElementById('btn-sync'),
@@ -1502,7 +1503,8 @@
       const { head, meta, date } = tourRow();
       const day = Tours.formatSavedAt(tour.savedAt);
       date.textContent = [day ? `Erstellt ${day}` : 'Erstellt',
-        tour.distance ? Utils.formatDistance(tour.distance) : null]
+        // Geschütztes Leerzeichen: „12,3“ und „km“ nie auf zwei Zeilen.
+        tour.distance ? Utils.formatDistance(tour.distance).replace(' ', '\u00a0') : null]
         .filter(Boolean).join(' · ');
 
       const doneBtn = document.createElement('button');
@@ -1887,8 +1889,11 @@
     note.textContent = info.zoomedOut
       ? `${info.total} POIs vorhanden – sie erscheinen, sobald die Karte ` +
         'näher herangezoomt ist.'
-      : `${info.shown} von ${info.total} POIs im Bild – die übrigen liegen ` +
-        'außerhalb des Ausschnitts.';
+      : info.thinned
+        ? `${info.shown} von ${info.total} POIs im Bild – dicht beieinander ` +
+          'liegende sind ausgeblendet, Heranzoomen zeigt mehr.'
+        : `${info.shown} von ${info.total} POIs im Bild – die übrigen liegen ` +
+          'außerhalb des Ausschnitts.';
   }
 
   function movePoi(id, latlng) {
@@ -1960,12 +1965,23 @@
     scheduleRecalc();
   }
 
-  const MODE_HINTS = {
-    menu: 'Doppelklick oder Rechtsklick auf die Karte öffnet das Menü. Ein ' +
-      'einfacher Klick tut nichts – versehentliche Punkte gibt es damit nicht.',
-    route: 'Jeder Klick setzt sofort einen Routenpunkt. Esc führt zurück ins Menü.',
-    poi: 'Jeder Klick setzt sofort einen POI. Esc führt zurück ins Menü.',
-  };
+  // Am Touchgerät gibt es weder Rechtsklick noch Esc – die Hinweise reden
+  // dort von Tippen und lange Drücken.
+  const TOUCH = window.matchMedia('(pointer: coarse)').matches;
+
+  const MODE_HINTS = TOUCH
+    ? {
+      menu: 'Lange drücken oder doppelt tippen auf die Karte öffnet das Menü. ' +
+        'Einfaches Tippen tut nichts – versehentliche Punkte gibt es damit nicht.',
+      route: 'Jedes Tippen setzt sofort einen Routenpunkt. „Menü“ führt zurück.',
+      poi: 'Jedes Tippen setzt sofort einen POI. „Menü“ führt zurück.',
+    }
+    : {
+      menu: 'Doppelklick oder Rechtsklick auf die Karte öffnet das Menü. Ein ' +
+        'einfacher Klick tut nichts – versehentliche Punkte gibt es damit nicht.',
+      route: 'Jeder Klick setzt sofort einen Routenpunkt. Esc führt zurück ins Menü.',
+      poi: 'Jeder Klick setzt sofort einen POI. Esc führt zurück ins Menü.',
+    };
 
   /** Noch nichts gesammelt und nichts geplant – vermutlich der erste Start. */
   function isFreshInstall() {
@@ -3195,6 +3211,11 @@
   /* ---------- Linke Seitenleiste ---------- */
 
   function setLibraryOpen(open) {
+    // Am Handy entweder Tourenliste oder Planungsblende – beide zugleich
+    // verdecken die Karte vollständig und überlagern sich gegenseitig.
+    if (open && PHONE.matches && el.layout.classList.contains('sheet-open')) {
+      setSheetOpen(false);
+    }
     el.layout.classList.toggle('library-collapsed', !open);
     el.libraryToggle.setAttribute('aria-expanded', String(open));
     localStorage.setItem('wanderplaner.library', open ? 'open' : 'closed');
@@ -3212,6 +3233,9 @@
   const PHONE = window.matchMedia('(max-width: 900px)');
 
   function setSheetOpen(open) {
+    if (open && PHONE.matches && !el.layout.classList.contains('library-collapsed')) {
+      setLibraryOpen(false);
+    }
     el.layout.classList.toggle('sheet-open', open);
     el.sheetHandle.setAttribute('aria-expanded', String(open));
     localStorage.setItem('wanderplaner.sheet', open ? 'open' : 'closed');
@@ -3814,6 +3838,17 @@
     el.sheetHandle.addEventListener('click', () => {
       setSheetOpen(!el.layout.classList.contains('sheet-open'));
     });
+    // Abgedunkelte Karte neben der offenen Tourenliste: Antippen schließt sie,
+    // statt versehentlich etwas auf der Karte auszulösen.
+    el.libraryScrim.addEventListener('click', () => setLibraryOpen(false));
+    // Die Zahlenreihe klebt unter dem Griff. Wie hoch der ist, hängt von der
+    // Schriftgröße des Geräts ab – also messen statt schätzen, sonst scheint
+    // zwischen Griff und Zahlen die Liste durch.
+    if ('ResizeObserver' in window) {
+      new ResizeObserver(() => {
+        el.sidebar.style.setProperty('--sheet-handle-h', `${el.sheetHandle.offsetHeight}px`);
+      }).observe(el.sheetHandle);
+    }
     placeProfile();
     PHONE.addEventListener('change', placeProfile);
     setSheetOpen(localStorage.getItem('wanderplaner.sheet') === 'open');

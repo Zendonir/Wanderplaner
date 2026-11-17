@@ -429,8 +429,37 @@ body {
   line-height: 1.4;
 }
 
-.point-list,
-.point-list li,
+.point-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.point-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  font-size: 0.82rem;
+}
+
+/* Lange Namen kürzen statt die Knöpfe in eine zweite Zeile zu drängen. */
+.point-list .item-label {
+  min-width: 0;
+  cursor: pointer;
+}
+
+/* Name noch nicht ermittelt – Koordinate als Platzhalter, etwas zurückgenommen. */
+.point-list .item-label.is-coords {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Nur die Zeile, die gerade gezogen wird, wird durchscheinend. */
 .point-list li.dragging {
   opacity: 0.4;
 }
@@ -2463,6 +2492,8 @@ body {
 @media (pointer: coarse) {
   .hint-touch { display: block; }
   .hint-mouse { display: none; }
+  /* Ziehen zum Sortieren geht am Touchgerät nicht – dort sortieren ▲▼. */
+  .point-list .drag-handle { display: none; }
 }
 
 /* ---------- Handy und Homescreen-App ----------

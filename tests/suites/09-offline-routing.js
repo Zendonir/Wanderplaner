@@ -199,6 +199,68 @@ module.exports = {
       check.ok(reloaded.includes('Brockenhaus'),
         'Nach dem Laden der Tour steht der Name weiterhin da', reloaded.join(' | '));
 
+      /* ---- Bessere Namen statt Koordinaten ---- */
+      // Parkplatz mit OSM-Kennung als Name, ein Gipfel aus der POI-Sammlung
+      // knapp 100 m neben einem Punkt und eine Ortsangabe von Nominatim.
+      let reverseCalls = 0;
+      await page.route('**/nominatim.openstreetmap.org/reverse**', (route) => {
+        reverseCalls++;
+        route.fulfill({ json: {
+          category: 'highway', name: '',
+          address: { road: 'Kaiserweg', village: 'Schierke' },
+        } });
+      });
+      await page.evaluate(() => {
+        localStorage.setItem('wanderplaner.parkplaetze', JSON.stringify({
+          items: [{ id: 'pk-1', name: 'way/667108954', lat: 51.7000, lng: 10.7000,
+                    updatedAt: Date.now() }],
+        }));
+        localStorage.setItem('wanderplaner.pois', JSON.stringify({
+          items: [{ id: 'g-1', name: 'Zieglerskopf', note: 'natural=peak',
+                    lat: 51.7509, lng: 10.7000, updatedAt: Date.now() }],
+        }));
+        localStorage.removeItem('wanderplaner.ortsnamen');
+        const tour = (id, name, points) => ({
+          id, name, points, savedAt: new Date().toISOString(), updatedAt: Date.now(),
+          distance: 0, color: '#2a6fdb', visible: false, line: [],
+        });
+        localStorage.setItem('wanderplaner.touren', JSON.stringify({ items: [
+          tour('nt-1', 'Namen', [
+            { lat: 51.7000, lng: 10.7000 },
+            { lat: 51.7500, lng: 10.7000 },
+            { lat: 51.6000, lng: 10.6000 },
+          ]),
+          tour('nt-2', 'Wieder', [{ lat: 51.6000, lng: 10.6000 }]),
+        ] }));
+      });
+      await page.reload();
+      await page.waitForSelector('#map.leaflet-container');
+      await page.waitForTimeout(900);
+      await page.locator('#tour-list .item-label', { hasText: 'Namen' }).click();
+      await page.waitForFunction(() =>
+        [...document.querySelectorAll('#point-list .item-label')]
+          .some((l) => l.textContent.includes('Kaiserweg')), null, { timeout: 8000 });
+      const names = await page.locator('#point-list .item-label').allTextContents();
+      check.equal(names[0], 'Parkplatz',
+        'Eine OSM-Kennung als Parkplatzname wird durch „Parkplatz“ ersetzt');
+      check.equal(names[1], 'bei Zieglerskopf',
+        'Ein POI aus der Sammlung in der Nähe benennt den Punkt');
+      check.equal(names[2], 'Kaiserweg, Schierke',
+        'Sonst kommt die Ortsangabe von OpenStreetMap');
+      const callsBefore = reverseCalls;
+      await page.reload();
+      await page.waitForSelector('#map.leaflet-container');
+      await page.waitForTimeout(900);
+      await page.locator('#tour-list .item-label', { hasText: 'Wieder' }).click();
+      await page.waitForTimeout(500);
+      check.equal(reverseCalls, callsBefore,
+        'Dieselbe Stelle wird kein zweites Mal abgefragt');
+      check.equal((await page.locator('#point-list .item-label').allTextContents())[0],
+        'Kaiserweg, Schierke', 'Der gemerkte Name steht sofort da');
+      const faded = await page.evaluate(() =>
+        getComputedStyle(document.querySelector('#point-list li')).opacity);
+      check.equal(faded, '1', 'Die Punktliste ist nicht mehr ausgegraut');
+
       check.equal(errors.length, 0, 'Keine Skriptfehler', errors.join(' | '));
     } finally {
       await browser.close();

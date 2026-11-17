@@ -796,28 +796,23 @@
 
   /* ---------- Listen in der Seitenleiste ---------- */
 
-  /** Entfernung, bis zu der ein Routenpunkt als „an der Stempelstelle“ gilt. */
-  const POINT_NAME_RADIUS_M = 30;
-
   /**
-   * Name eines Routenpunkts für die Liste. Ein gezielt gesetzter Stempel
-   * oder Parkplatz trägt seinen Namen mit; ein Punkt, der nur zufällig genau
-   * auf einer Stempelstelle oder einem Parkplatz liegt (etwa aus einer
-   * älteren gespeicherten Tour), bekommt deren Namen ebenfalls. Erst wenn
-   * nichts passt, bleiben die Koordinaten.
+   * Name eines Routenpunkts für die Liste – siehe PointNames. Ohne Treffer
+   * in den eigenen Sammlungen wird im Hintergrund eine Ortsangabe erfragt;
+   * bis sie da ist, steht die Koordinate.
    */
   function pointName(p) {
-    if (p.name) return p.name;
-    let best = null;
-    let bestDist = POINT_NAME_RADIUS_M;
-    [...items('stamps'), ...items('parking')].forEach((place) => {
-      const d = Utils.haversine(p, place);
-      if (d <= bestDist) {
-        best = place;
-        bestDist = d;
-      }
-    });
-    return best ? best.name : null;
+    if (PointNames.isUsable(p.name)) return p.name;
+    const local = PointNames.fromCollections(p, [
+      { list: items('stamps'), generic: 'Stempelstelle' },
+      { list: items('parking'), generic: 'Parkplatz' },
+      { list: items('pois'), generic: null },
+    ]);
+    if (local) return local;
+    const remote = PointNames.cached(p);
+    if (remote) return remote;
+    if (remote === undefined) PointNames.request(p, () => renderPointList());
+    return null;
   }
 
   function pointLabel(p) {
@@ -826,9 +821,13 @@
 
   function pointTitle(p) {
     const coords = `${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}`;
-    return pointName(p)
-      ? `${pointName(p)} (${coords}) – auf der Karte zeigen`
-      : 'Auf der Karte zeigen';
+    const name = pointName(p);
+    return name ? `${name} (${coords}) – auf der Karte zeigen` : 'Auf der Karte zeigen';
+  }
+
+  /** Anzeigename eines Parkplatzes – OSM-Kennungen ersetzt durch „Parkplatz“. */
+  function parkingName(place) {
+    return PointNames.isUsable(place.name) ? place.name : 'Parkplatz';
   }
 
   function renderPointList() {
@@ -851,7 +850,7 @@
       li.innerHTML =
         '<span class="drag-handle" title="Zum Sortieren ziehen">≡</span>' +
         `<span class="point-num">${i + 1}</span>` +
-        `<span class="item-label" title="${Utils.escapeHtml(pointTitle(p))}">${Utils.escapeHtml(pointLabel(p))}</span>` +
+        `<span class="item-label${pointName(p) ? '' : ' is-coords'}" title="${Utils.escapeHtml(pointTitle(p))}">${Utils.escapeHtml(pointLabel(p))}</span>` +
         `<button class="item-action point-up" title="Nach oben"${i === 0 ? ' disabled' : ''}>▲</button>` +
         `<button class="item-action point-down" title="Nach unten"${i === state.points.length - 1 ? ' disabled' : ''}>▼</button>` +
         '<button class="item-delete" title="Punkt löschen">✕</button>';
@@ -1252,7 +1251,7 @@
 
         const label = document.createElement('span');
         label.className = 'item-label';
-        label.textContent = place.name;
+        label.textContent = parkingName(place);
         label.title = 'Auf der Karte zeigen und QR-Code öffnen';
         label.addEventListener('click', () => {
           MapView.setView(place.lat, place.lng, 15);
@@ -1282,15 +1281,17 @@
     if (!place) return;
     pushUndo();
     state.points.unshift({
-      id: Utils.uid(), lat: place.lat, lng: place.lng, name: place.name,
+      id: Utils.uid(), lat: place.lat, lng: place.lng,
+      // Eine OSM-Kennung als Name bleibt weg – dann sucht die Liste selbst.
+      ...(PointNames.isUsable(place.name) ? { name: place.name } : {}),
     });
     if (!state.tourName) {
-      el.tourNameInput.value = `Tour ab ${place.name}`;
+      el.tourNameInput.value = `Tour ab ${parkingName(place)}`;
       state.tourName = el.tourNameInput.value;
     }
     renderAll();
     scheduleRecalc();
-    showStatus('info', `„${place.name}“ ist jetzt Startpunkt der Route.`, 5000);
+    showStatus('info', `„${parkingName(place)}“ ist jetzt Startpunkt der Route.`, 5000);
   }
 
   function deleteParking(id) {
@@ -2658,7 +2659,7 @@
 
       const where = document.createElement('span');
       where.className = 'cluster-start';
-      where.textContent = cluster.start ? `ab ${cluster.start.name}` : 'ohne Parkplatz';
+      where.textContent = cluster.start ? `ab ${parkingName(cluster.start)}` : 'ohne Parkplatz';
 
       const useBtn = document.createElement('button');
       useBtn.className = 'item-action';
@@ -2695,7 +2696,7 @@
     state.points = points.map((p) => withName({ id: Utils.uid(), lat: p.lat, lng: p.lng }, p));
     state.tourSelection = cluster.stamps.map((s) => s.id);
     if (!el.tourNameInput.value.trim() && cluster.start) {
-      el.tourNameInput.value = `Stempelrunde ab ${cluster.start.name}`;
+      el.tourNameInput.value = `Stempelrunde ab ${parkingName(cluster.start)}`;
       state.tourName = el.tourNameInput.value;
     }
 

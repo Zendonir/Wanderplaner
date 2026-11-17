@@ -800,7 +800,10 @@ const MapView = (function () {
     div.className = 'qr-popup';
 
     const title = document.createElement('strong');
-    title.textContent = place.name;
+    // Importierte Parkplätze heißen oft nur „way/123…“ – das ist kein Name.
+    title.textContent = PointNames.isUsable(place.name)
+      ? place.name
+      : (kind === 'parking' ? 'Parkplatz' : 'Startpunkt');
     div.appendChild(title);
 
     // Schon importierte Einträge tragen die Merkmalsliste noch im Text –
@@ -921,7 +924,8 @@ const MapView = (function () {
       }
       if (!marker.isPopupOpen()) {
         marker.unbindTooltip();
-        marker.bindTooltip(place.name, { direction: 'top', offset: [0, -12] });
+        marker.bindTooltip(PointNames.isUsable(place.name) ? place.name : 'Parkplatz',
+          { direction: 'top', offset: [0, -12] });
         marker.unbindPopup();
         marker.bindPopup(() => qrPopupContent(place, 'parking'), { maxWidth: 260 });
       }

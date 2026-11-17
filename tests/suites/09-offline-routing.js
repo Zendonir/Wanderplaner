@@ -27,7 +27,7 @@ module.exports = {
   name: 'Offline-Routing und Routenpunkte',
 
   async run(check) {
-    const fake = { requests: [], profiles: 0, missingData: false };
+    const fake = { requests: [], profiles: 0, missingData: false, mismatch: false };
     const brouter = await listen((req, res) => {
       if (req.method === 'POST' && req.url === '/brouter/profile') {
         req.resume();
@@ -40,6 +40,10 @@ module.exports = {
         if (!/lonlats=\d/.test(req.url)) {
           res.writeHead(400, { 'Content-Type': 'text/plain' });
           return res.end('lonlats parameter not set');
+        }
+        if (fake.mismatch) {
+          res.writeHead(400, { 'Content-Type': 'text/plain' });
+          return res.end('lookup version mismatch (old rd5?) lookups.dat=10 E10_N50.rd5=11');
         }
         if (fake.missingData) {
           res.writeHead(400, { 'Content-Type': 'text/plain' });
@@ -156,6 +160,28 @@ module.exports = {
       check.contains(await page.textContent('#status'), 'keine Kartendaten',
         'Und die App sagt, warum');
       fake.missingData = false;
+
+      /* ---- Kartendaten passen nicht zum Container ---- */
+      // So meldet es BRouter, wenn das Image älter ist als die Kartendaten.
+      fake.mismatch = true;
+      const probeStatus = await (await fetch(`${server.url}/api/brouter`)).json();
+      check.contains(probeStatus.problem || '', 'lookup version mismatch',
+        'Die Statusabfrage erkennt, dass Kartendaten und BRouter nicht zusammenpassen');
+      await page.click('#btn-reverse');
+      await waitForRoute(page);
+      await page.waitForFunction(() =>
+        document.getElementById('status').textContent.includes('nightly'),
+        null, { timeout: 8000 }).catch(() => {});
+      check.contains(await page.textContent('#status'), 'brouter:nightly',
+        'Die App nennt die Ursache und wie sie sich beheben lässt');
+      await openSettings(page, 'routing');
+      await page.waitForFunction(() =>
+        document.getElementById('offline-status').textContent.includes('nightly'),
+        null, { timeout: 8000 }).catch(() => {});
+      check.contains(await page.textContent('#offline-status'), 'passen nicht',
+        'Auch die Offline-Einstellungen zeigen das Problem');
+      await page.keyboard.press('Escape');
+      fake.mismatch = false;
 
       /* ---- Durchsichtige Route ---- */
       const opacityOf = () => page.evaluate(() =>

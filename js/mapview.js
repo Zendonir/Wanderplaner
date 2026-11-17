@@ -465,7 +465,14 @@ const MapView = (function () {
       const bounds = map.getBounds().pad(0.25);
       shown = allPois.filter((p) => bounds.contains([p.lat, p.lng]));
     }
-    if (PHONE.matches) shown = thinOut(shown, POI_CELL_PX_PHONE);
+    if (PHONE.matches) {
+      // Selbst gesetzte POIs nie ausdünnen und vorn einsortieren: Ein eben
+      // gesetzter POI muss sichtbar sein, sonst öffnet sich sein Popup zum
+      // Benennen nicht. Ausgedünnt werden nur importierte Sammlungen.
+      const own = shown.filter((p) => isOwnPoi(p));
+      const imported = shown.filter((p) => !isOwnPoi(p));
+      shown = own.concat(thinOut(imported, POI_CELL_PX_PHONE, own));
+    }
     return shown.length > POI_MAX_VISIBLE ? shown.slice(0, POI_MAX_VISIBLE) : shown;
   }
 
@@ -476,12 +483,23 @@ const MapView = (function () {
   const PHONE = window.matchMedia('(max-width: 900px)');
   const POI_CELL_PX_PHONE = 60;
 
-  /** Behält je Rasterfeld (in Bildschirmpixeln) höchstens einen Eintrag. */
-  function thinOut(list, cellPx) {
-    const taken = new Set();
-    return list.filter((p) => {
+  /** Ein selbst gesetzter POI trägt keine Merkmale aus einer Quelle. */
+  function isOwnPoi(poi) {
+    return Object.keys(PoiTypes.tagsOf(poi)).length === 0;
+  }
+
+  /**
+   * Behält je Rasterfeld (in Bildschirmpixeln) höchstens einen Eintrag.
+   * Felder, in denen schon ein Eintrag aus `occupied` liegt, bleiben frei.
+   */
+  function thinOut(list, cellPx, occupied = []) {
+    const cell = (p) => {
       const pt = map.latLngToLayerPoint([p.lat, p.lng]);
-      const key = `${Math.floor(pt.x / cellPx)}:${Math.floor(pt.y / cellPx)}`;
+      return `${Math.floor(pt.x / cellPx)}:${Math.floor(pt.y / cellPx)}`;
+    };
+    const taken = new Set(occupied.map(cell));
+    return list.filter((p) => {
+      const key = cell(p);
       if (taken.has(key)) return false;
       taken.add(key);
       return true;
@@ -508,7 +526,7 @@ const MapView = (function () {
       seen.add(poi.id);
       // Importierte Stellen sitzen dort, wo die Quelle sie verortet hat –
       // ein versehentliches Verschieben wäre nur ein stiller Datenverlust.
-      const draggable = Object.keys(PoiTypes.tagsOf(poi)).length === 0;
+      const draggable = isOwnPoi(poi);
       const iconKey = PoiTypes.typeOf(poi).key;
       let marker = poiMarkers.get(poi.id);
 

@@ -184,6 +184,41 @@ module.exports = {
         'Dichte POIs werden am Handy ausgedünnt', `${marken.anzahl} Marken`);
       check.equal(marken.eng, 0, 'Keine zwei Marken liegen aufeinander');
 
+      // Ein eben gesetzter POI darf dem Ausdünnen nicht zum Opfer fallen –
+      // sonst öffnet sich sein Popup zum Benennen nicht.
+      // Eine Kartenstelle mit Abstand zu allen sichtbaren Marken – ein
+      // Fingertipp direkt daneben landet sonst auf der Marke. Weil die
+      // Testdaten jedes Rasterfeld füllen, liegt die Stelle trotzdem in einem
+      // Feld, das schon von einem importierten POI belegt ist.
+      const ziel = await page.evaluate(() => {
+        const box = document.getElementById('map').getBoundingClientRect();
+        const rects = [...document.querySelectorAll('.leaflet-marker-icon')]
+          .map((m) => m.getBoundingClientRect());
+        for (let y = box.y + 80; y < box.bottom - 80; y += 4) {
+          for (let x = box.x + 60; x < box.right - 60; x += 4) {
+            const frei = rects.every((r) => x < r.left - 14 || x > r.right + 14
+              || y < r.top - 14 || y > r.bottom + 14);
+            const hit = document.elementFromPoint(x, y);
+            if (frei && hit && hit.closest('#map') && !hit.closest('.leaflet-control')) {
+              return { x, y };
+            }
+          }
+        }
+        return null;
+      });
+      check.ok(ziel, 'Mitten im POI-Gebiet findet sich eine freie Kartenstelle');
+      // Der Moduswechsel liegt in der zugeklappten Blende – direkt auslösen.
+      await page.evaluate(() => document.getElementById('mode-poi').click());
+      await page.waitForTimeout(200);
+      await page.touchscreen.tap(ziel.x, ziel.y);
+      await page.waitForTimeout(700);
+      // Das Formular mit Namensfeld gehört zum neuen POI; importierte zeigen
+      // eine reine Ansicht (.poi-view) ohne Eingabefeld.
+      check.ok(await page.locator('.leaflet-popup .poi-popup:not(.poi-view) input').isVisible(),
+        'Ein neuer POI neben einem vorhandenen öffnet sein Popup zum Benennen');
+      await page.evaluate(() => document.getElementById('mode-menu').click());
+      await page.waitForTimeout(200);
+
       /* ---- Einstellungsdialog passt auf den Bildschirm ---- */
       // Der YAML-Block in der Update-Anleitung hatte den Dialog über den
       // rechten Rand hinausgeschoben; Text war dann abgeschnitten.
